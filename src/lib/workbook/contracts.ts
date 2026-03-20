@@ -1,6 +1,16 @@
-export const WORKBOOK_TEMPLATE_KEY = "IT_EXEC_TEMPLATE_V2";
-export const WORKBOOK_TEMPLATE_VERSION = 2;
+export const WORKBOOK_TEMPLATE_KEY = "IT_EXEC_TEMPLATE_V3";
+export const WORKBOOK_TEMPLATE_VERSION = 3;
 export const OFFICE_NETWORK_SHEET_NAME = "INPUT_Office_Network_Avail";
+export const PORTFOLIO_GANTT_WORKSTREAMS_SHEET_NAME = "INPUT_Gantt_Workstreams";
+export const PORTFOLIO_GANTT_MILESTONES_SHEET_NAME = "INPUT_Gantt_Milestones";
+export const PORTFOLIO_GANTT_DOMAINS = [
+  "Infrastructure",
+  "End-user computing",
+  "Security & compliance",
+  "Applications & data",
+  "Product / development",
+  "Business transformation",
+] as const;
 
 export interface SheetContract {
   sheetName: string;
@@ -11,7 +21,7 @@ export interface SheetContract {
 export const SHEET_CONTRACTS: SheetContract[] = [
   {
     sheetName: "Periods",
-    headers: ["Reporting Month", "Month End Date", "Quarter", "Financial Year", "Is Current Period"],
+    headers: ["Reporting Month", "Month End Date", "Quarter", "Financial Year", "Is Current Period", "Report Cut-Off Date"],
   },
   {
     sheetName: "Entities",
@@ -180,6 +190,28 @@ export const SHEET_CONTRACTS: SheetContract[] = [
     sheetName: "INPUT_Rolling_Roadmap",
     headers: ["Roadmap Quarter", "Lane", "Initiative", "Status RAG", "Outcome / Goal", "Owner", "Dependency", "Decision Required", "Notes"],
     tableName: "TRollingRoadmap",
+  },
+  {
+    sheetName: PORTFOLIO_GANTT_WORKSTREAMS_SHEET_NAME,
+    headers: [
+      "Reporting Month",
+      "Workstream Name",
+      "Sponsor / Owner",
+      "Domain",
+      "Status RAG",
+      "Start Date",
+      "End Date",
+      "Progress Date",
+      "Detail / Commentary",
+      "Display Order",
+      "In Scope",
+    ],
+    tableName: "TPortfolioGanttWorkstreams",
+  },
+  {
+    sheetName: PORTFOLIO_GANTT_MILESTONES_SHEET_NAME,
+    headers: ["Reporting Month", "Workstream Name", "Milestone Label", "Milestone Date", "Display Order"],
+    tableName: "TPortfolioGanttMilestones",
   },
   {
     sheetName: "INPUT_Budget_Commercials",

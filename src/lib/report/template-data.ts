@@ -1,5 +1,6 @@
 import { format, parseISO } from "date-fns";
 
+import type { ExecSummaryMode, ExecSummaryState } from "@/lib/reports/exec-summary";
 import type { NormalizedReportSnapshot } from "@/lib/workbook/types";
 
 export interface TemplateData {
@@ -10,6 +11,17 @@ export interface TemplateData {
     monthLabels: Record<string, string>;
     monthRangeLabel: string;
     roadmapHorizonLabel: string;
+    reportCutOffDates: Record<string, string>;
+    templateKey: string;
+    templateVersion: number;
+    sourceFilename: string;
+  };
+  execSummary: {
+    mode: ExecSummaryMode;
+    contentHtml: string;
+    excerpt: string;
+    updatedAt: string | null;
+    sourceReportId: string | null;
   };
   support: Array<Record<string, number | string>>;
   service: Array<Record<string, number | string>>;
@@ -19,6 +31,8 @@ export interface TemplateData {
   dev: Array<Record<string, number | string>>;
   projects: Array<Record<string, number | string>>;
   roadmap: Array<Record<string, number | string>>;
+  ganttWorkstreams: Array<Record<string, number | string | boolean | null>>;
+  ganttMilestones: Array<Record<string, number | string>>;
   budget: Array<Record<string, number | string>>;
   budgetMonthlyTotals: Array<Record<string, number | string>>;
   risks: Array<Record<string, number | string>>;
@@ -89,8 +103,17 @@ function buildRoadmapHorizon(snapshot: NormalizedReportSnapshot): string {
   return `${quarters[0]} – ${quarters[quarters.length - 1]}`;
 }
 
-export function buildTemplateData(snapshot: NormalizedReportSnapshot, month: string): TemplateData {
+export function buildTemplateData(snapshot: NormalizedReportSnapshot, month: string, execSummary?: ExecSummaryState): TemplateData {
   const monthLabels = Object.fromEntries(snapshot.availableMonths.map((entry) => [entry, formatMonthShort(entry)]));
+  const portfolioGanttWorkstreams = snapshot.portfolioGanttWorkstreams ?? [];
+  const portfolioGanttMilestones = snapshot.portfolioGanttMilestones ?? [];
+  const summaryState: ExecSummaryState = execSummary ?? {
+    mode: "loading",
+    contentHtml: "",
+    excerpt: "",
+    updatedAt: null,
+    sourceReportId: null,
+  };
 
   return {
     meta: {
@@ -100,6 +123,17 @@ export function buildTemplateData(snapshot: NormalizedReportSnapshot, month: str
       monthLabels,
       monthRangeLabel: `${formatMonthShort(snapshot.availableMonths[0])} – ${formatMonthLabel(month)}`,
       roadmapHorizonLabel: buildRoadmapHorizon(snapshot),
+      reportCutOffDates: Object.fromEntries(snapshot.periods.map((period) => [period.reportingMonth, period.reportCutOffDate ?? period.monthEndDate])),
+      templateKey: snapshot.metadata.templateKey,
+      templateVersion: snapshot.metadata.templateVersion,
+      sourceFilename: snapshot.metadata.sourceFilename,
+    },
+    execSummary: {
+      mode: summaryState.mode,
+      contentHtml: summaryState.contentHtml,
+      excerpt: summaryState.excerpt,
+      updatedAt: summaryState.updatedAt,
+      sourceReportId: summaryState.sourceReportId,
     },
     support: snapshot.supportOperations.map((row) => ({
       Month: row.reportingMonth,
@@ -208,6 +242,26 @@ export function buildTemplateData(snapshot: NormalizedReportSnapshot, month: str
       Dependency: row.dependency,
       DecisionRequired: yesNo(row.decisionRequired),
       Notes: row.notes,
+    })),
+    ganttWorkstreams: portfolioGanttWorkstreams.map((row) => ({
+      Month: row.reportingMonth,
+      WorkstreamName: row.workstreamName,
+      SponsorOwner: row.sponsorOwner,
+      Domain: row.domain,
+      StatusRAG: row.statusRag,
+      StartDate: row.startDate,
+      EndDate: row.endDate,
+      ProgressDate: row.progressDate,
+      Detail: row.detailCommentary,
+      DisplayOrder: row.displayOrder,
+      InScope: row.inScope,
+    })),
+    ganttMilestones: portfolioGanttMilestones.map((row) => ({
+      Month: row.reportingMonth,
+      WorkstreamName: row.workstreamName,
+      MilestoneLabel: row.milestoneLabel,
+      MilestoneDate: row.milestoneDate,
+      DisplayOrder: row.displayOrder,
     })),
     budget: snapshot.budgetCommercials.map((row) => ({
       Month: row.reportingMonth,

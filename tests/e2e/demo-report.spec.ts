@@ -1,4 +1,60 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import { expect, test } from "@playwright/test";
+
+import { createLocalReport } from "../../src/lib/reports/local-report-store";
+import type { NormalizedReportSnapshot } from "../../src/lib/workbook/types";
+
+const DEMO_SNAPSHOT_PATH = path.resolve(process.cwd(), "fixtures", "demo-snapshot.json");
+
+async function seedLegacyV2Report() {
+  const snapshot = JSON.parse(readFileSync(DEMO_SNAPSHOT_PATH, "utf8")) as NormalizedReportSnapshot;
+  const legacySnapshot = {
+    ...snapshot,
+    metadata: {
+      ...snapshot.metadata,
+      templateKey: "IT_EXEC_TEMPLATE_V2",
+      templateVersion: 2,
+      sourceFilename: "IT_Exec_Reporting_Ingestion_Template_v2_dummy_data.xlsx",
+    },
+    periods: snapshot.periods.map((period) => ({
+      ...period,
+      reportCutOffDate: period.monthEndDate,
+    })),
+    portfolioGanttWorkstreams: [],
+    portfolioGanttMilestones: [],
+  };
+
+  const report = await createLocalReport({
+    title: "IT_Exec_Reporting_Ingestion_Template_v2_dummy_data · 2026-06",
+    originalFilename: "IT_Exec_Reporting_Ingestion_Template_v2_dummy_data.xlsx",
+    templateKey: "IT_EXEC_TEMPLATE_V2",
+    templateVersion: 2,
+    currentMonth: legacySnapshot.currentMonth,
+    availableMonths: legacySnapshot.availableMonths,
+    snapshot: legacySnapshot,
+    workbookObjectKey: "workbooks/legacy-v2-dummy.xlsx",
+  });
+
+  return report.id;
+}
+
+async function seedV3Report(originalFilename = "IT_Exec_Reporting_Ingestion_Template_v3_dummy_data.xlsx") {
+  const snapshot = JSON.parse(readFileSync(DEMO_SNAPSHOT_PATH, "utf8")) as NormalizedReportSnapshot;
+  const report = await createLocalReport({
+    title: `${originalFilename.replace(/\.xlsx$/, "")} · ${snapshot.currentMonth}`,
+    originalFilename,
+    templateKey: snapshot.metadata.templateKey,
+    templateVersion: snapshot.metadata.templateVersion,
+    currentMonth: snapshot.currentMonth,
+    availableMonths: snapshot.availableMonths,
+    snapshot,
+    workbookObjectKey: `workbooks/${originalFilename}`,
+  });
+
+  return report.id;
+}
 
 test("bundled demo report renders directly in the app shell", async ({ page }) => {
   await page.goto("/?report=demo&month=2026-06&page=p-exec");
@@ -9,12 +65,85 @@ test("bundled demo report renders directly in the app shell", async ({ page }) =
   await expect(page.locator(".nav-link.active")).toContainText("Executive Scorecard");
   await expect(page.locator(".report-page.active .ph-title")).toHaveText("Executive IT Scorecard");
   await expect(page.locator("#exec-svc-grid .svc-tile")).toHaveCount(6);
+  await expect(page.locator("#exec-kpis .kc-spark")).toHaveCount(5);
 
   const sidebarWidth = await page.locator(".sidebar").evaluate((element) => Math.round(element.getBoundingClientRect().width));
   expect(sidebarWidth).toBeGreaterThanOrEqual(372);
 
   const boxShadow = await page.locator(".report-page.active").evaluate((element) => getComputedStyle(element).boxShadow);
   expect(boxShadow).toBe("none");
+});
+
+test("major KPI strips render sparkline trends derived from workbook history", async ({ page }) => {
+  await page.goto("/?report=demo&month=2026-06&page=p-support");
+
+  await expect(page.locator("#support-kpis .kc-spark")).toHaveCount(4);
+  expect(await page.locator("#support-kpi-backlog .kc-spark line").count()).toBeGreaterThan(0);
+
+  await page.goto("/?report=demo&month=2026-06&page=p-security");
+  await expect(page.locator("#sec-kpis .kc-spark")).toHaveCount(4);
+});
+
+test("root route prefers demo or newer reports over a legacy v2 saved upload", async ({ page }) => {
+  const legacyReportId = await seedLegacyV2Report();
+
+  await page.goto("/");
+  await expect(page).not.toHaveURL(new RegExp(`report=${legacyReportId}$`));
+  await expect(page).not.toHaveURL(new RegExp(`report=${legacyReportId}&`));
+  await expect(page.locator(".report-page.active .ph-title")).toHaveText("Exec Summary");
+  await expect(page.locator(".nav-link.active")).toContainText("Exec Summary");
+});
+
+test("bundled demo renders a read-only exec summary as the first page", async ({ page }) => {
+  await page.goto("/?report=demo&month=2026-06&page=p-summary");
+
+  await expect(page.locator(".report-page.active .ph-title")).toHaveText("Exec Summary");
+  await expect(page.locator("#summary-state-badge")).toContainText("Bundled example");
+  await expect(page.locator("#summary-content")).toContainText("executive narrative");
+  await expect(page.locator(".summary-readonly-pill")).toContainText("read only");
+});
+
+test("saved reports can add and persist an exec summary through the UI", async ({ page }) => {
+  const reportId = await seedV3Report(`exec-summary-ui-seed-${Date.now()}.xlsx`);
+
+  await page.goto(`/?report=${reportId}&month=2026-06&page=p-summary`);
+
+  const actionButton = page
+    .getByRole("button", { name: /Add exec summary|Review inherited draft|Edit summary/ })
+    .first();
+  await actionButton.click();
+  await page.locator(".summary-editor").click();
+  await page.keyboard.press("Meta+A");
+  await page.keyboard.press("Backspace");
+  await page.keyboard.type("Executive summary drafted in the app.");
+  await page.getByRole("button", { name: "Save" }).click();
+
+  await expect(page.locator("#summary-content")).toContainText("Executive summary drafted in the app.");
+  await expect(page.locator("#summary-state-badge")).toContainText("Saved summary");
+
+  await page.reload();
+  await expect(page.locator("#summary-content")).toContainText("Executive summary drafted in the app.");
+});
+
+test("exec summaries carry forward for refreshed uploads in the same report family", async ({ request }) => {
+  const originalFilename = "carry-forward-pack.xlsx";
+  const reportId = await seedV3Report(originalFilename);
+
+  const saveResponse = await request.put(`/api/reports/${reportId}/exec-summary?month=2026-06`, {
+    data: {
+      contentHtml: "<p><strong>Carry-forward</strong> candidate narrative.</p>",
+    },
+  });
+
+  expect(saveResponse.ok()).toBeTruthy();
+
+  const refreshedReportId = await seedV3Report(originalFilename);
+  const summaryResponse = await request.get(`/api/reports/${refreshedReportId}/exec-summary?month=2026-06`);
+
+  expect(summaryResponse.ok()).toBeTruthy();
+  const payload = (await summaryResponse.json()) as { summary: { mode: string; contentHtml: string } };
+  expect(payload.summary.mode).toBe("carried-forward");
+  expect(payload.summary.contentHtml).toContain("Carry-forward");
 });
 
 test("sidebar collapses into an icon rail and persists across refresh", async ({ page }) => {
@@ -30,13 +159,28 @@ test("sidebar collapses into an icon rail and persists across refresh", async ({
 
   await expect(page.locator(".nav-link.active")).toHaveAttribute("title", "Network & Offices");
   await expect(page.locator(".nav-text").first()).toBeHidden();
+  await expect(page.locator(".shell")).toHaveClass(/sidebar-use-icons/);
+  await expect(page.locator(".nav-link.active .nav-icon-glyph")).toBeVisible();
+  await expect(page.locator(".nav-link.active .nav-icon-label")).toBeHidden();
+  await page.locator(".nav-link.active").hover();
+  await expect(page.locator(".nav-link.active .nav-tooltip")).toBeVisible();
+  await expect(page.locator(".nav-link.active .nav-tooltip")).toHaveText("Network & Offices");
+
+  await page.getByRole("button", { name: "Expand sidebar" }).click();
+  await page.getByRole("button", { name: "Initials" }).click();
+  await page.getByRole("button", { name: "Collapse sidebar" }).click();
+  await expect(page.locator(".shell")).toHaveClass(/sidebar-use-initials/);
+  await expect(page.locator(".nav-link.active .nav-icon-label")).toBeVisible();
+  await expect(page.locator(".nav-link.active .nav-icon-glyph")).toBeHidden();
 
   await page.reload();
   await expect(page.locator(".shell")).toHaveClass(/sidebar-collapsed/);
+  await expect(page.locator(".shell")).toHaveClass(/sidebar-use-initials/);
   await page.waitForTimeout(350);
 
   const persistedWidth = await page.locator(".sidebar").evaluate((element) => Math.round(element.getBoundingClientRect().width));
   expect(persistedWidth).toBeLessThan(expandedWidthBeforeCollapse / 2);
+  await expect(page.locator(".nav-link.active .nav-icon-label")).toBeVisible();
 
   await page.getByRole("button", { name: "Expand sidebar" }).click();
   await page.waitForTimeout(350);
@@ -49,6 +193,45 @@ test("legacy report route redirects into the canonical root route", async ({ pag
 
   await expect(page).toHaveURL(/\/\?report=demo&month=2026-06&page=p-network$/);
   await expect(page.locator(".report-page.active .ph-title")).toHaveText("Network & Office Availability");
+});
+
+test("portfolio gantt renders as a first-class report page with summary cards", async ({ page }) => {
+  await page.goto("/?report=demo&month=2026-06&page=p-gantt");
+
+  await expect(page.locator(".nav-link.active")).toContainText("Portfolio Gantt");
+  await expect(page.locator(".report-page.active .ph-title")).toHaveText("Portfolio Gantt");
+  await expect(page.locator("#gantt-svg")).toBeVisible();
+  await expect(page.locator("#gantt-summary .kc")).toHaveCount(4);
+  await expect(page.locator("#gantt-sub")).toContainText("active workstreams");
+  await expect(page.locator("#gantt-period-label")).toContainText("2026");
+});
+
+test("portfolio gantt exposes hover details for workstreams and milestones", async ({ page }) => {
+  await page.goto("/?report=demo&month=2026-06&page=p-gantt");
+
+  const workstreamTarget = page.locator('#gantt-svg .gantt-hover-target[data-hover-id^="gantt-workstream-"]').first();
+  await workstreamTarget.hover();
+
+  await expect(page.locator("#gantt-tooltip")).toHaveClass(/active/);
+  await expect(page.locator("#gantt-tooltip")).toContainText("WAN Resilience Uplift");
+  await expect(page.locator("#gantt-tooltip")).toContainText("Head of IT");
+
+  const milestoneTarget = page.locator('#gantt-svg .gantt-hover-target[data-hover-id*="-milestone-"]').first();
+  await milestoneTarget.hover();
+
+  await expect(page.locator("#gantt-tooltip")).toContainText("Milestone");
+});
+
+test("legacy v2 reports show a compatibility empty state on portfolio gantt", async ({ page }) => {
+  const legacyReportId = await seedLegacyV2Report();
+
+  await page.goto(`/?report=${legacyReportId}&month=2026-06&page=p-gantt`);
+
+  await expect(page.locator("#gantt-empty-state")).toHaveClass(/active/);
+  await expect(page.locator("#gantt-empty-copy")).toContainText("legacy workbook");
+  await expect(page.locator("#gantt-open-demo-link")).toHaveAttribute("href", /report=demo/);
+  await expect(page.getByRole("button", { name: "Upload v3 workbook" })).toBeVisible();
+  await expect(page.locator("#gantt-summary .kc")).toHaveCount(0);
 });
 
 test("prototype export mode is integrated into the report shell and clears selection on page change", async ({ page }) => {

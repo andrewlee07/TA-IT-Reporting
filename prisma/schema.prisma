@@ -27,8 +27,25 @@ model Report {
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
   exports           ReportExport[]
+  execSummaries     ReportExecSummary[]
 
   @@index([createdAt(sort: Desc)])
+}
+
+model ReportExecSummary {
+  id              String   @id @default(cuid())
+  reportId        String
+  reportSeriesKey String
+  reportingMonth  String
+  contentHtml     String   @db.Text
+  excerpt         String   @db.Text
+  sourceReportId  String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  report          Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@unique([reportId, reportingMonth])
+  @@index([reportSeriesKey, reportingMonth, updatedAt(sort: Desc)])
 }
 
 model ReportExport {

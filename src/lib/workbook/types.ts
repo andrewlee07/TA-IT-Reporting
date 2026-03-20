@@ -4,6 +4,7 @@ export interface PeriodRow {
   quarter: string;
   financialYear: string;
   isCurrentPeriod: boolean;
+  reportCutOffDate: string;
 }
 
 export interface EntityRow {
@@ -169,6 +170,28 @@ export interface RollingRoadmapRow {
   notes: string;
 }
 
+export interface PortfolioGanttWorkstreamRow {
+  reportingMonth: string;
+  workstreamName: string;
+  sponsorOwner: string;
+  domain: string;
+  statusRag: string;
+  startDate: string;
+  endDate: string;
+  progressDate: string | null;
+  detailCommentary: string;
+  displayOrder: number;
+  inScope: boolean;
+}
+
+export interface PortfolioGanttMilestoneRow {
+  reportingMonth: string;
+  workstreamName: string;
+  milestoneLabel: string;
+  milestoneDate: string;
+  displayOrder: number;
+}
+
 export interface BudgetCommercialRow {
   reportingMonth: string;
   budgetLine: string;
@@ -246,6 +269,8 @@ export interface NormalizedReportSnapshot {
   devDelivery: DevDeliveryRow[];
   projectPortfolio: ProjectPortfolioRow[];
   rollingRoadmap: RollingRoadmapRow[];
+  portfolioGanttWorkstreams: PortfolioGanttWorkstreamRow[];
+  portfolioGanttMilestones: PortfolioGanttMilestoneRow[];
   budgetCommercials: BudgetCommercialRow[];
   topRisks: TopRiskRow[];
   narrativeNotes: NarrativeNoteRow[];

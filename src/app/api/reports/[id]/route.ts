@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { deriveReportSeriesKey } from "@/lib/reports/exec-summary";
 import { getBundledDemoSnapshot, getStoredReport } from "@/lib/reports/service";
 
 export const runtime = "nodejs";
@@ -19,6 +20,7 @@ export async function GET(_request: Request, { params }: RouteProps) {
         id: "demo",
         title: "Bundled Demo Report",
         originalFilename: snapshot.metadata.sourceFilename,
+        reportSeriesKey: deriveReportSeriesKey(snapshot.metadata.sourceFilename),
         templateKey: snapshot.metadata.templateKey,
         templateVersion: snapshot.metadata.templateVersion,
         currentMonth: snapshot.currentMonth,

@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { isValidBlockId, isValidPageId } from "@/lib/report/blocks";
 import { exportReportArtifact } from "@/lib/reports/export-service";
-import { getBundledDemoSnapshot, getStoredReport } from "@/lib/reports/service";
+import { getBundledDemoSnapshot, getExecSummaryState, getStoredReport } from "@/lib/reports/service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,6 +57,7 @@ export async function POST(request: Request, { params }: RouteProps) {
       pageId: payload.pageId,
       blockId: payload.blockId,
       persist: id !== "demo",
+      execSummary: await getExecSummaryState(id, payload.month),
     });
 
     return new NextResponse(new Uint8Array(artifact.buffer), {

@@ -1,6 +1,6 @@
 # TeacherActive Exec Reporting App v1
 
-Internal Next.js app for workbook-driven executive IT reporting. The app ingests a locked Excel template, validates it against the `v2` contract, stores the uploaded workbook and normalized snapshot, renders the 12-page exec pack, and exports report assets as PNG or PDF.
+Internal Next.js app for workbook-driven executive IT reporting. The app ingests a locked Excel template, validates it against the `v3` contract, stores the uploaded workbook and normalized snapshot, renders the 13-page exec pack, and exports report assets as PNG or PDF.
 
 ## Stack
 
@@ -12,10 +12,10 @@ Internal Next.js app for workbook-driven executive IT reporting. The app ingests
 
 ## Workbook Contract
 
-The app only accepts the locked `v2` template.
+The app only accepts the locked `v3` template.
 
-- `Template Key = IT_EXEC_TEMPLATE_V2`
-- `Template Version = 2`
+- `Template Key = IT_EXEC_TEMPLATE_V3`
+- `Template Version = 3`
 
 ### Required parsed sheets
 
@@ -32,6 +32,8 @@ The app only accepts the locked `v2` template.
 - `INPUT_Dev_Delivery`
 - `INPUT_Project_Portfolio`
 - `INPUT_Rolling_Roadmap`
+- `INPUT_Gantt_Workstreams`
+- `INPUT_Gantt_Milestones`
 - `INPUT_Budget_Commercials`
 - `INPUT_Top_Risks`
 - `INPUT_Narrative_Notes`
@@ -48,6 +50,23 @@ Overall Network performance is derived from office rows per reporting month:
 - `Outage Minutes` = sum of office outage minutes
 - `Major Incidents` = sum of office major incidents
 - Derived office metrics also include `perfectOffices`, `below99_9Offices`, `below99Offices`, and `worstOffice`
+
+### Portfolio Gantt additions in v3
+
+- `Periods` must include `Report Cut-Off Date`
+- `INPUT_Gantt_Workstreams` must contain table `TPortfolioGanttWorkstreams`
+- `INPUT_Gantt_Milestones` must contain table `TPortfolioGanttMilestones`
+- `INPUT_Gantt_Workstreams.Domain` must be one of:
+  - `Infrastructure`
+  - `End-user computing`
+  - `Security & compliance`
+  - `Applications & data`
+  - `Product / development`
+  - `Business transformation`
+- `Portfolio Gantt` renders a 12-week window starting from the first Monday on or after the selected reporting month
+- The orange vertical line uses the stored `Periods.Report Cut-Off Date`
+
+Note: the original long-form Gantt sheet names exceeded Excel's 31-character worksheet limit, so the workbook uses the Excel-safe sheet names `INPUT_Gantt_Workstreams` and `INPUT_Gantt_Milestones`.
 
 ## Getting Started
 
@@ -82,8 +101,8 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## Template Files
 
-- Bundled v2 fixture: [fixtures/IT_Exec_Reporting_Ingestion_Template_v2_dummy_data.xlsx](/Users/andrewlee/GitHub/TA-IT Reporting Claude/fixtures/IT_Exec_Reporting_Ingestion_Template_v2_dummy_data.xlsx)
-- Downloadable template: [public/templates/IT_Exec_Reporting_Ingestion_Template_v2_dummy_data.xlsx](/Users/andrewlee/GitHub/TA-IT Reporting Claude/public/templates/IT_Exec_Reporting_Ingestion_Template_v2_dummy_data.xlsx)
+- Bundled v3 fixture: [fixtures/IT_Exec_Reporting_Ingestion_Template_v3_dummy_data.xlsx](/Users/andrewlee/GitHub/TA-IT Reporting Claude/fixtures/IT_Exec_Reporting_Ingestion_Template_v3_dummy_data.xlsx)
+- Downloadable template: [public/templates/IT_Exec_Reporting_Ingestion_Template_v3_dummy_data.xlsx](/Users/andrewlee/GitHub/TA-IT Reporting Claude/public/templates/IT_Exec_Reporting_Ingestion_Template_v3_dummy_data.xlsx)
 
 To regenerate the workbook after changing the upgrade script:
 

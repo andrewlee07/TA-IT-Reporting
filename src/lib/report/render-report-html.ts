@@ -1,6 +1,7 @@
 import path from "node:path";
 
 import { buildTemplateData, formatMonthLabel } from "@/lib/report/template-data";
+import type { ExecSummaryState } from "@/lib/reports/exec-summary";
 import { loadTemplateSource } from "@/lib/report/template-source";
 import type { NormalizedReportSnapshot } from "@/lib/workbook/types";
 
@@ -9,6 +10,7 @@ interface RenderReportHtmlOptions {
   initialPageId?: string;
   showAllPages?: boolean;
   hideChrome?: boolean;
+  execSummary?: ExecSummaryState;
 }
 const runtimePath = path.resolve(process.cwd(), "src/lib/report/runtime.js");
 const officeMapPath = path.resolve(process.cwd(), "src/lib/report/office-map.js");
@@ -44,7 +46,7 @@ async function loadOfficeMapSource(): Promise<string> {
 
 export async function renderReportHtml(snapshot: NormalizedReportSnapshot, options: RenderReportHtmlOptions = {}): Promise<string> {
   const month = options.month && snapshot.availableMonths.includes(options.month) ? options.month : snapshot.currentMonth;
-  const templateData = buildTemplateData(snapshot, month);
+  const templateData = buildTemplateData(snapshot, month, options.execSummary);
   const template = await loadTemplateSource();
   const runtime = await loadRuntimeSource();
   const officeMap = await loadOfficeMapSource();
@@ -66,10 +68,10 @@ body { background: #ffffff !important; }
   const safeData = JSON.stringify(templateData).replace(/</g, "\\u003c");
   const inlineOfficeMap = officeMap.replace(/^export\s+/gm, "");
   const inlineRuntime = runtime.replace(/^import\s+\{[^}]+\}\s+from\s+"\.\/office-map";\s*$/m, "");
-  const runtimeBootstrap = `<script type="module">
+const runtimeBootstrap = `<script type="module">
 const D = ${safeData};
 const ACTIVE_MONTH = '${month}';
-const INITIAL_PAGE_ID = '${options.initialPageId ?? "p-exec"}';
+const INITIAL_PAGE_ID = '${options.initialPageId ?? "p-summary"}';
 const SHOW_ALL_PAGES = ${options.showAllPages ? "true" : "false"};
 ${inlineOfficeMap}
 ${inlineRuntime}

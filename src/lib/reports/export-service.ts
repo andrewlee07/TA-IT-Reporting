@@ -2,6 +2,7 @@ import { chromium } from "playwright";
 
 import { getEnv } from "@/lib/env";
 import { renderReportHtml } from "@/lib/report/render-report-html";
+import type { ExecSummaryState } from "@/lib/reports/exec-summary";
 import { saveGeneratedExport } from "@/lib/reports/service";
 import type { NormalizedReportSnapshot } from "@/lib/workbook/types";
 
@@ -16,6 +17,7 @@ interface ExportArtifactInput {
   pageId?: string;
   blockId?: string;
   persist?: boolean;
+  execSummary?: ExecSummaryState;
 }
 
 export interface ExportArtifactResult {
@@ -36,9 +38,10 @@ export async function exportReportArtifact(input: ExportArtifactInput): Promise<
   const env = getEnv();
   const html = await renderReportHtml(input.snapshot, {
     month: input.month,
-    initialPageId: input.pageId ?? "p-exec",
+    initialPageId: input.pageId ?? "p-summary",
     showAllPages: input.exportType === "full-pdf",
     hideChrome: true,
+    execSummary: input.execSummary,
   });
 
   const browser = await chromium.launch({

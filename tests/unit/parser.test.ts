@@ -4,11 +4,11 @@ import path from "node:path";
 import * as XLSX from "xlsx";
 import { describe, expect, it } from "vitest";
 
-import { OFFICE_NETWORK_SHEET_NAME } from "@/lib/workbook/contracts";
+import { OFFICE_NETWORK_SHEET_NAME, PORTFOLIO_GANTT_MILESTONES_SHEET_NAME, PORTFOLIO_GANTT_WORKSTREAMS_SHEET_NAME } from "@/lib/workbook/contracts";
 import { parseWorkbookBuffer } from "@/lib/workbook/parser";
 import { WorkbookValidationError } from "@/lib/workbook/types";
 
-const FIXTURE_PATH = path.resolve(process.cwd(), "fixtures", "IT_Exec_Reporting_Ingestion_Template_v2_dummy_data.xlsx");
+const FIXTURE_PATH = path.resolve(process.cwd(), "fixtures", "IT_Exec_Reporting_Ingestion_Template_v3_dummy_data.xlsx");
 
 async function loadFixtureBuffer(): Promise<Buffer> {
   return readFile(FIXTURE_PATH);
@@ -37,15 +37,15 @@ async function createMutatedWorkbook(
 }
 
 describe("parseWorkbookBuffer", () => {
-  it("parses the bundled v2 workbook and derives office network metrics", async () => {
+  it("parses the bundled v3 workbook and derives office network metrics", async () => {
     const result = await parseWorkbookBuffer(await loadFixtureBuffer(), "fixture.xlsx");
     const juneMetric = result.snapshot.derivedNetworkMetrics.find((row) => row.reportingMonth === "2026-06");
     const networkServiceJune = result.snapshot.serviceAvailability.find(
       (row) => row.reportingMonth === "2026-06" && row.serviceName === "Network",
     );
 
-    expect(result.snapshot.metadata.templateKey).toBe("IT_EXEC_TEMPLATE_V2");
-    expect(result.snapshot.metadata.templateVersion).toBe(2);
+    expect(result.snapshot.metadata.templateKey).toBe("IT_EXEC_TEMPLATE_V3");
+    expect(result.snapshot.metadata.templateVersion).toBe(3);
     expect(result.snapshot.currentMonth).toBe("2026-06");
     expect(result.snapshot.availableMonths).toEqual([
       "2026-01",
@@ -55,6 +55,9 @@ describe("parseWorkbookBuffer", () => {
       "2026-05",
       "2026-06",
     ]);
+    expect(result.snapshot.periods.find((row) => row.reportingMonth === "2026-06")?.reportCutOffDate).toBe("2026-06-19");
+    expect(result.snapshot.portfolioGanttWorkstreams).toHaveLength(78);
+    expect(result.snapshot.portfolioGanttMilestones).toHaveLength(48);
     expect(juneMetric).toMatchObject({
       availabilityPct: 99.97,
       outageMinutes: 303,
@@ -82,7 +85,7 @@ describe("parseWorkbookBuffer", () => {
 
     await expect(parseWorkbookBuffer(buffer, "bad-version.xlsx", { skipTableValidation: true })).rejects.toMatchObject({
       name: "WorkbookValidationError",
-      issues: expect.arrayContaining(["README Template Version must equal 2."]),
+      issues: expect.arrayContaining(["README Template Version must equal 3."]),
     } satisfies Partial<WorkbookValidationError>);
   });
 
@@ -119,7 +122,7 @@ describe("parseWorkbookBuffer", () => {
     await expect(parseWorkbookBuffer(buffer, "manual-network.xlsx", { skipTableValidation: true })).rejects.toMatchObject({
       name: "WorkbookValidationError",
       issues: expect.arrayContaining([
-        'INPUT_Service_Availability must not contain manual "Network" rows in template v2.',
+        'INPUT_Service_Availability must not contain manual "Network" rows in template v3.',
       ]),
     } satisfies Partial<WorkbookValidationError>);
   });
@@ -172,6 +175,58 @@ describe("parseWorkbookBuffer", () => {
 
     await expect(parseWorkbookBuffer(buffer, "invalid-pct.xlsx", { skipTableValidation: true })).rejects.toThrow(
       `${OFFICE_NETWORK_SHEET_NAME}.Availability % must be a percentage.`,
+    );
+  });
+
+  it("rejects an invalid portfolio gantt domain", async () => {
+    const buffer = await createMutatedWorkbook((workbook) => {
+      const rows = getSheetRows(workbook, PORTFOLIO_GANTT_WORKSTREAMS_SHEET_NAME);
+      rows[3][3] = "Unknown domain";
+      setSheetRows(workbook, PORTFOLIO_GANTT_WORKSTREAMS_SHEET_NAME, rows);
+    });
+
+    await expect(parseWorkbookBuffer(buffer, "invalid-gantt-domain.xlsx", { skipTableValidation: true })).rejects.toThrow(
+      `${PORTFOLIO_GANTT_WORKSTREAMS_SHEET_NAME}.Domain must be one of:`,
+    );
+  });
+
+  it("rejects a gantt milestone without a matching workstream in the same month", async () => {
+    const buffer = await createMutatedWorkbook((workbook) => {
+      const rows = getSheetRows(workbook, PORTFOLIO_GANTT_MILESTONES_SHEET_NAME);
+      rows[3][1] = "Nonexistent Workstream";
+      setSheetRows(workbook, PORTFOLIO_GANTT_MILESTONES_SHEET_NAME, rows);
+    });
+
+    await expect(parseWorkbookBuffer(buffer, "orphan-milestone.xlsx", { skipTableValidation: true })).rejects.toMatchObject({
+      name: "WorkbookValidationError",
+      issues: expect.arrayContaining([
+        'Portfolio Gantt milestone "Secondary path live" does not match a workstream named "Nonexistent Workstream" in 2026-01.',
+      ]),
+    } satisfies Partial<WorkbookValidationError>);
+  });
+
+  it("rejects a gantt workstream with an invalid date range", async () => {
+    const buffer = await createMutatedWorkbook((workbook) => {
+      const rows = getSheetRows(workbook, PORTFOLIO_GANTT_WORKSTREAMS_SHEET_NAME);
+      rows[3][5] = "2026-03-01";
+      rows[3][6] = "2026-02-01";
+      setSheetRows(workbook, PORTFOLIO_GANTT_WORKSTREAMS_SHEET_NAME, rows);
+    });
+
+    await expect(parseWorkbookBuffer(buffer, "bad-gantt-dates.xlsx", { skipTableValidation: true })).rejects.toThrow(
+      `${PORTFOLIO_GANTT_WORKSTREAMS_SHEET_NAME}.Start Date must be on or before End Date.`,
+    );
+  });
+
+  it("rejects a missing report cut-off date", async () => {
+    const buffer = await createMutatedWorkbook((workbook) => {
+      const rows = getSheetRows(workbook, "Periods");
+      rows[3][5] = "";
+      setSheetRows(workbook, "Periods", rows);
+    });
+
+    await expect(parseWorkbookBuffer(buffer, "missing-cutoff.xlsx", { skipTableValidation: true })).rejects.toThrow(
+      "Periods.Report Cut-Off Date is required.",
     );
   });
 });

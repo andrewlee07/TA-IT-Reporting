@@ -7,12 +7,14 @@ import Chart from "chart.js/auto";
 import { REPORT_PAGES, isValidPageId } from "@/lib/report/blocks";
 import { buildTemplateData, formatMonthLabel } from "@/lib/report/template-data";
 import { initReportApp } from "@/lib/report/runtime";
+import type { ExecSummaryState } from "@/lib/reports/exec-summary";
 import type { NormalizedReportSnapshot } from "@/lib/workbook/types";
 
 interface ReportListEntry {
   id: string;
   title: string;
   originalFilename: string;
+  reportSeriesKey: string;
   templateKey: string;
   templateVersion: number;
   currentMonth: string;
@@ -28,6 +30,7 @@ export interface AppReportRecord extends ReportListEntry {
 interface ReportAppShellProps {
   initialReport: AppReportRecord;
   initialReports: ReportListEntry[];
+  initialExecSummary: ExecSummaryState;
   initialMonth: string;
   initialPageId: string;
   templateBody: string;
@@ -38,9 +41,12 @@ interface PortalTargets {
   period: Element | null;
   utilities: Element | null;
   reports: Element | null;
+  summaryControls: Element | null;
+  summaryEditor: Element | null;
 }
 
 type ClientExportFormat = "png" | "jpeg";
+type CollapsedNavStyle = "icons" | "initials";
 
 interface ClientExportTarget {
   id: string;
@@ -52,6 +58,11 @@ interface ReportApiPayload {
   report?: AppReportRecord;
   error?: string;
   issues?: string[];
+}
+
+interface ExecSummaryApiPayload {
+  summary?: ExecSummaryState;
+  error?: string;
 }
 
 function buildCanonicalUrl(reportId: string, month: string, pageId: string): string {
@@ -80,6 +91,7 @@ function toReportListEntry(report: AppReportRecord): ReportListEntry {
     id: report.id,
     title: report.title,
     originalFilename: report.originalFilename,
+    reportSeriesKey: report.reportSeriesKey,
     templateKey: report.templateKey,
     templateVersion: report.templateVersion,
     currentMonth: report.currentMonth,
@@ -112,9 +124,85 @@ async function fetchJson<T>(input: RequestInfo | URL, init?: RequestInit): Promi
   return payload;
 }
 
+interface ExecSummaryEditorProps {
+  initialHtml: string;
+  isSaving: boolean;
+  onCancel: () => void;
+  onSave: (contentHtml: string) => Promise<void>;
+}
+
+function ExecSummaryEditor({ initialHtml, isSaving, onCancel, onSave }: ExecSummaryEditorProps) {
+  const editorRef = useRef<HTMLDivElement | null>(null);
+  const [value, setValue] = useState(initialHtml);
+
+  useEffect(() => {
+    setValue(initialHtml);
+  }, [initialHtml]);
+
+  useEffect(() => {
+    if (editorRef.current && editorRef.current.innerHTML !== value) {
+      editorRef.current.innerHTML = value;
+    }
+  }, [value]);
+
+  const runCommand = useCallback((command: string, commandValue?: string) => {
+    editorRef.current?.focus();
+    document.execCommand(command, false, commandValue);
+    setValue(editorRef.current?.innerHTML ?? "");
+  }, []);
+
+  const handleLink = useCallback(() => {
+    const nextUrl = window.prompt("Enter a full URL", "https://");
+    if (!nextUrl) {
+      return;
+    }
+    runCommand("createLink", nextUrl);
+  }, [runCommand]);
+
+  return (
+    <div className="summary-editor-shell">
+      <div className="summary-editor-toolbar">
+        <button className="summary-editor-btn" onClick={() => runCommand("formatBlock", "H2")} type="button">
+          Heading
+        </button>
+        <button className="summary-editor-btn" onClick={() => runCommand("formatBlock", "P")} type="button">
+          Paragraph
+        </button>
+        <button className="summary-editor-btn" onClick={() => runCommand("bold")} type="button">
+          Bold
+        </button>
+        <button className="summary-editor-btn" onClick={() => runCommand("insertUnorderedList")} type="button">
+          Bullets
+        </button>
+        <button className="summary-editor-btn" onClick={handleLink} type="button">
+          Link
+        </button>
+      </div>
+
+      <div
+        className="summary-editor"
+        contentEditable
+        onInput={() => setValue(editorRef.current?.innerHTML ?? "")}
+        ref={editorRef}
+        suppressContentEditableWarning
+      />
+
+      <div className="summary-editor-actions">
+        <button className="summary-action-btn secondary" disabled={isSaving} onClick={onCancel} type="button">
+          Cancel
+        </button>
+        <button className="summary-action-btn primary" disabled={isSaving} onClick={() => void onSave(value)} type="button">
+          {isSaving ? "Saving..." : "Save"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function ReportAppShell({
   initialReport,
   initialReports,
+  initialExecSummary,
   initialMonth,
   initialPageId,
   templateBody,
@@ -123,6 +211,7 @@ export function ReportAppShell({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const controllerRef = useRef<ReturnType<typeof initReportApp> | null>(null);
   const reportCacheRef = useRef(new Map<string, AppReportRecord>([[initialReport.id, initialReport]]));
+  const execSummaryCacheRef = useRef(new Map<string, ExecSummaryState>([[`${initialReport.id}:${initialMonth}`, initialExecSummary]]));
   const activeReportRef = useRef(initialReport);
   const selectedMonthRef = useRef(initialMonth);
   const selectedPageRef = useRef(initialPageId);
@@ -132,7 +221,14 @@ export function ReportAppShell({
   const [activeReport, setActiveReport] = useState<AppReportRecord>(initialReport);
   const [selectedMonth, setSelectedMonth] = useState(initialMonth);
   const [selectedPageId, setSelectedPageId] = useState(initialPageId);
-  const [targets, setTargets] = useState<PortalTargets>({ toggle: null, period: null, utilities: null, reports: null });
+  const [targets, setTargets] = useState<PortalTargets>({
+    toggle: null,
+    period: null,
+    utilities: null,
+    reports: null,
+    summaryControls: null,
+    summaryEditor: null,
+  });
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadIssues, setUploadIssues] = useState<string[]>([]);
@@ -146,8 +242,17 @@ export function ReportAppShell({
   const [selectedExportIds, setSelectedExportIds] = useState<string[]>([]);
   const [activeExportTargets, setActiveExportTargets] = useState<ClientExportTarget[]>([]);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [collapsedNavStyle, setCollapsedNavStyle] = useState<CollapsedNavStyle>("icons");
+  const [execSummary, setExecSummary] = useState<ExecSummaryState>(initialExecSummary);
+  const [isSummaryLoading, setIsSummaryLoading] = useState(false);
+  const [isSummarySaving, setIsSummarySaving] = useState(false);
+  const [isSummaryEditing, setIsSummaryEditing] = useState(false);
+  const [summaryEditorHtml, setSummaryEditorHtml] = useState(initialExecSummary.contentHtml);
 
-  const templateData = useMemo(() => buildTemplateData(activeReport.snapshot, selectedMonth), [activeReport.snapshot, selectedMonth]);
+  const templateData = useMemo(
+    () => buildTemplateData(activeReport.snapshot, selectedMonth, execSummary),
+    [activeReport.snapshot, execSummary, selectedMonth],
+  );
   const reportOptions = useMemo(() => {
     const saved = reports.map((report) => ({
       id: report.id,
@@ -175,11 +280,73 @@ export function ReportAppShell({
     selectedPageRef.current = selectedPageId;
   }, [selectedPageId]);
 
+  const loadExecSummary = useCallback(async (reportId: string, month: string) => {
+    const cacheKey = `${reportId}:${month}`;
+    const cached = execSummaryCacheRef.current.get(cacheKey);
+
+    if (cached) {
+      setExecSummary(cached);
+      setSummaryEditorHtml(cached.contentHtml);
+      setIsSummaryLoading(false);
+      return;
+    }
+
+    setIsSummaryLoading(true);
+    setExecSummary({
+      mode: "loading",
+      contentHtml: "",
+      excerpt: "",
+      updatedAt: null,
+      sourceReportId: null,
+    });
+
+    try {
+      const payload = await fetchJson<ExecSummaryApiPayload>(`/api/reports/${reportId}/exec-summary?month=${encodeURIComponent(month)}`);
+      const nextSummary = payload.summary ?? {
+        mode: "empty" as const,
+        contentHtml: "",
+        excerpt: "",
+        updatedAt: null,
+        sourceReportId: null,
+      };
+
+      execSummaryCacheRef.current.set(cacheKey, nextSummary);
+      setExecSummary(nextSummary);
+      setSummaryEditorHtml(nextSummary.contentHtml);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Failed to load exec summary.");
+      setExecSummary({
+        mode: "empty",
+        contentHtml: "",
+        excerpt: "",
+        updatedAt: null,
+        sourceReportId: null,
+      });
+      setSummaryEditorHtml("");
+    } finally {
+      setIsSummaryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    setIsSummaryEditing(false);
+    void loadExecSummary(activeReport.id, selectedMonth);
+  }, [activeReport.id, loadExecSummary, selectedMonth]);
+
+  useEffect(() => {
+    setIsSummaryEditing(false);
+  }, [selectedPageId]);
+
   useEffect(() => {
     try {
       const storedValue = window.localStorage.getItem("ta-it-reporting-sidebar-collapsed");
       if (storedValue === "true") {
         setIsSidebarCollapsed(true);
+      }
+
+      const storedNavStyle = window.localStorage.getItem("ta-it-reporting-collapsed-nav-style");
+      if (storedNavStyle === "icons" || storedNavStyle === "initials") {
+        setCollapsedNavStyle(storedNavStyle);
       }
     } catch {
       // localStorage access is optional
@@ -193,6 +360,26 @@ export function ReportAppShell({
       // localStorage access is optional
     }
   }, [isSidebarCollapsed]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("ta-it-reporting-collapsed-nav-style", collapsedNavStyle);
+    } catch {
+      // localStorage access is optional
+    }
+  }, [collapsedNavStyle]);
+
+  useEffect(() => {
+    const handleUploadRequest = () => {
+      setIsSidebarCollapsed(false);
+      window.requestAnimationFrame(() => {
+        fileInputRef.current?.click();
+      });
+    };
+
+    window.addEventListener("ta:request-upload", handleUploadRequest);
+    return () => window.removeEventListener("ta:request-upload", handleUploadRequest);
+  }, []);
 
   const syncUrl = useCallback((reportId: string, month: string, pageId: string, historyMode: "push" | "replace" = "push") => {
     const url = buildCanonicalUrl(reportId, month, pageId);
@@ -347,6 +534,8 @@ export function ReportAppShell({
       period: mountNode.querySelector("#sidebar-period-slot"),
       utilities: mountNode.querySelector("#sidebar-app-utilities-slot"),
       reports: mountNode.querySelector("#sidebar-report-list-slot"),
+      summaryControls: mountNode.querySelector("#summary-controls-slot"),
+      summaryEditor: mountNode.querySelector("#summary-editor-slot"),
     });
 
     controllerRef.current = initReportApp(shellRoot, {
@@ -363,7 +552,14 @@ export function ReportAppShell({
       controllerRef.current?.destroy();
       controllerRef.current = null;
       mountNode.innerHTML = "";
-      setTargets({ toggle: null, period: null, utilities: null, reports: null });
+      setTargets({
+        toggle: null,
+        period: null,
+        utilities: null,
+        reports: null,
+        summaryControls: null,
+        summaryEditor: null,
+      });
     };
   }, [handlePageChange, selectedMonth, templateBody, templateData]);
 
@@ -374,7 +570,18 @@ export function ReportAppShell({
     }
 
     shellRoot.classList.toggle("sidebar-collapsed", isSidebarCollapsed);
-  }, [isSidebarCollapsed]);
+    shellRoot.classList.toggle("sidebar-use-icons", collapsedNavStyle === "icons");
+    shellRoot.classList.toggle("sidebar-use-initials", collapsedNavStyle === "initials");
+  }, [collapsedNavStyle, isSidebarCollapsed]);
+
+  useEffect(() => {
+    const summaryBlock = mountRef.current?.querySelector("#summary-content-block");
+    if (!(summaryBlock instanceof HTMLElement)) {
+      return;
+    }
+
+    summaryBlock.classList.toggle("summary-is-editing", isSummaryEditing);
+  }, [isSummaryEditing, selectedPageId]);
 
   useEffect(() => {
     controllerRef.current?.showPage(selectedPageId);
@@ -793,6 +1000,51 @@ export function ReportAppShell({
     setExportError(null);
   }, []);
 
+  const openSummaryEditor = useCallback(() => {
+    setSummaryEditorHtml(execSummary.contentHtml);
+    setIsSummaryEditing(true);
+  }, [execSummary.contentHtml]);
+
+  const cancelSummaryEditor = useCallback(() => {
+    setSummaryEditorHtml(execSummary.contentHtml);
+    setIsSummaryEditing(false);
+  }, [execSummary.contentHtml]);
+
+  const saveSummaryEditor = useCallback(
+    async (contentHtml: string) => {
+      setIsSummarySaving(true);
+      setUploadError(null);
+      setStatusMessage(null);
+
+      try {
+        const payload = await fetchJson<ExecSummaryApiPayload>(
+          `/api/reports/${activeReportRef.current.id}/exec-summary?month=${encodeURIComponent(selectedMonthRef.current)}`,
+          {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ contentHtml }),
+          },
+        );
+
+        if (!payload.summary) {
+          throw new Error("Failed to save exec summary.");
+        }
+
+        const cacheKey = `${activeReportRef.current.id}:${selectedMonthRef.current}`;
+        execSummaryCacheRef.current.set(cacheKey, payload.summary);
+        setExecSummary(payload.summary);
+        setSummaryEditorHtml(payload.summary.contentHtml);
+        setIsSummaryEditing(false);
+        setStatusMessage("Exec summary saved.");
+      } catch (error) {
+        setUploadError(error instanceof Error ? error.message : "Failed to save exec summary.");
+      } finally {
+        setIsSummarySaving(false);
+      }
+    },
+    [],
+  );
+
   const periodPortal =
     targets.period &&
     createPortal(
@@ -861,6 +1113,27 @@ export function ReportAppShell({
         </div>
 
         <div className="sidebar-stack-tight">
+          <span className="sidebar-field-label">Navigation</span>
+          <div className="sidebar-inline">
+            <button
+              className={`sidebar-button secondary ${collapsedNavStyle === "icons" ? "is-active" : ""}`}
+              onClick={() => setCollapsedNavStyle("icons")}
+              type="button"
+            >
+              Icons
+            </button>
+            <button
+              className={`sidebar-button secondary ${collapsedNavStyle === "initials" ? "is-active" : ""}`}
+              onClick={() => setCollapsedNavStyle("initials")}
+              type="button"
+            >
+              Initials
+            </button>
+          </div>
+          <div className="sidebar-meta">Collapsed rail style</div>
+        </div>
+
+        <div className="sidebar-stack-tight">
           <span className="sidebar-field-label">Workbook Upload</span>
           <input
             accept=".xlsx"
@@ -877,7 +1150,7 @@ export function ReportAppShell({
           >
             {isUploading ? "Uploading workbook..." : "Upload workbook"}
           </button>
-          <a className="sidebar-link" href="/templates/IT_Exec_Reporting_Ingestion_Template_v2_dummy_data.xlsx">
+          <a className="sidebar-link" href="/templates/IT_Exec_Reporting_Ingestion_Template_v3_dummy_data.xlsx">
             Download template
           </a>
         </div>
@@ -1007,6 +1280,45 @@ export function ReportAppShell({
       targets.reports,
     );
 
+  const summaryIsReadOnly = activeReport.id === "demo" || execSummary.mode === "demo-readonly";
+  const summaryControlsPortal =
+    targets.summaryControls &&
+    createPortal(
+      <div className="summary-controls">
+        {summaryIsReadOnly ? (
+          <span className="summary-readonly-pill">Bundled example · read only</span>
+        ) : isSummaryEditing ? null : (
+          <button
+            className="summary-action-btn primary"
+            disabled={isSummaryLoading || isSummarySaving || isSwitchingReport}
+            onClick={openSummaryEditor}
+            type="button"
+          >
+            {execSummary.mode === "empty"
+              ? "Add exec summary"
+              : execSummary.mode === "carried-forward"
+                ? "Review inherited draft"
+                : "Edit summary"}
+          </button>
+        )}
+      </div>,
+      targets.summaryControls,
+    );
+
+  const summaryEditorPortal =
+    targets.summaryEditor &&
+    createPortal(
+      isSummaryEditing ? (
+        <ExecSummaryEditor
+          initialHtml={summaryEditorHtml}
+          isSaving={isSummarySaving}
+          onCancel={cancelSummaryEditor}
+          onSave={saveSummaryEditor}
+        />
+      ) : null,
+      targets.summaryEditor,
+    );
+
   return (
     <>
       <div ref={mountRef} />
@@ -1014,6 +1326,8 @@ export function ReportAppShell({
       {periodPortal}
       {utilitiesPortal}
       {reportsPortal}
+      {summaryControlsPortal}
+      {summaryEditorPortal}
     </>
   );
 }
