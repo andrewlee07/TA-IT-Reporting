@@ -11,6 +11,9 @@ export interface TemplateData {
     monthRangeLabel: string;
     roadmapHorizonLabel: string;
     reportCutOffDates: Record<string, string>;
+    templateKey: string;
+    templateVersion: number;
+    sourceFilename: string;
   };
   support: Array<Record<string, number | string>>;
   service: Array<Record<string, number | string>>;
@@ -106,6 +109,9 @@ export function buildTemplateData(snapshot: NormalizedReportSnapshot, month: str
       monthRangeLabel: `${formatMonthShort(snapshot.availableMonths[0])} – ${formatMonthLabel(month)}`,
       roadmapHorizonLabel: buildRoadmapHorizon(snapshot),
       reportCutOffDates: Object.fromEntries(snapshot.periods.map((period) => [period.reportingMonth, period.reportCutOffDate ?? period.monthEndDate])),
+      templateKey: snapshot.metadata.templateKey,
+      templateVersion: snapshot.metadata.templateVersion,
+      sourceFilename: snapshot.metadata.sourceFilename,
     },
     support: snapshot.supportOperations.map((row) => ({
       Month: row.reportingMonth,

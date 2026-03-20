@@ -194,6 +194,18 @@ export function ReportAppShell({
     }
   }, [isSidebarCollapsed]);
 
+  useEffect(() => {
+    const handleUploadRequest = () => {
+      setIsSidebarCollapsed(false);
+      window.requestAnimationFrame(() => {
+        fileInputRef.current?.click();
+      });
+    };
+
+    window.addEventListener("ta:request-upload", handleUploadRequest);
+    return () => window.removeEventListener("ta:request-upload", handleUploadRequest);
+  }, []);
+
   const syncUrl = useCallback((reportId: string, month: string, pageId: string, historyMode: "push" | "replace" = "push") => {
     const url = buildCanonicalUrl(reportId, month, pageId);
     const method = historyMode === "replace" ? "replaceState" : "pushState";

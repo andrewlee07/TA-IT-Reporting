@@ -1,4 +1,44 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import { expect, test } from "@playwright/test";
+
+import { createLocalReport } from "../../src/lib/reports/local-report-store";
+import type { NormalizedReportSnapshot } from "../../src/lib/workbook/types";
+
+const DEMO_SNAPSHOT_PATH = path.resolve(process.cwd(), "fixtures", "demo-snapshot.json");
+
+async function seedLegacyV2Report() {
+  const snapshot = JSON.parse(readFileSync(DEMO_SNAPSHOT_PATH, "utf8")) as NormalizedReportSnapshot;
+  const legacySnapshot = {
+    ...snapshot,
+    metadata: {
+      ...snapshot.metadata,
+      templateKey: "IT_EXEC_TEMPLATE_V2",
+      templateVersion: 2,
+      sourceFilename: "IT_Exec_Reporting_Ingestion_Template_v2_dummy_data.xlsx",
+    },
+    periods: snapshot.periods.map((period) => ({
+      ...period,
+      reportCutOffDate: period.monthEndDate,
+    })),
+    portfolioGanttWorkstreams: [],
+    portfolioGanttMilestones: [],
+  };
+
+  const report = await createLocalReport({
+    title: "IT_Exec_Reporting_Ingestion_Template_v2_dummy_data · 2026-06",
+    originalFilename: "IT_Exec_Reporting_Ingestion_Template_v2_dummy_data.xlsx",
+    templateKey: "IT_EXEC_TEMPLATE_V2",
+    templateVersion: 2,
+    currentMonth: legacySnapshot.currentMonth,
+    availableMonths: legacySnapshot.availableMonths,
+    snapshot: legacySnapshot,
+    workbookObjectKey: "workbooks/legacy-v2-dummy.xlsx",
+  });
+
+  return report.id;
+}
 
 test("bundled demo report renders directly in the app shell", async ({ page }) => {
   await page.goto("/?report=demo&month=2026-06&page=p-exec");
@@ -15,6 +55,15 @@ test("bundled demo report renders directly in the app shell", async ({ page }) =
 
   const boxShadow = await page.locator(".report-page.active").evaluate((element) => getComputedStyle(element).boxShadow);
   expect(boxShadow).toBe("none");
+});
+
+test("root route prefers demo or newer reports over a legacy v2 saved upload", async ({ page }) => {
+  const legacyReportId = await seedLegacyV2Report();
+
+  await page.goto("/");
+  await expect(page).not.toHaveURL(new RegExp(`report=${legacyReportId}$`));
+  await expect(page).not.toHaveURL(new RegExp(`report=${legacyReportId}&`));
+  await expect(page.locator(".report-page.active .ph-title")).toHaveText("Executive IT Scorecard");
 });
 
 test("sidebar collapses into an icon rail and persists across refresh", async ({ page }) => {
@@ -60,6 +109,18 @@ test("portfolio gantt renders as a first-class report page with summary cards", 
   await expect(page.locator("#gantt-summary .kc")).toHaveCount(4);
   await expect(page.locator("#gantt-sub")).toContainText("active workstreams");
   await expect(page.locator("#gantt-period-label")).toContainText("2026");
+});
+
+test("legacy v2 reports show a compatibility empty state on portfolio gantt", async ({ page }) => {
+  const legacyReportId = await seedLegacyV2Report();
+
+  await page.goto(`/?report=${legacyReportId}&month=2026-06&page=p-gantt`);
+
+  await expect(page.locator("#gantt-empty-state")).toHaveClass(/active/);
+  await expect(page.locator("#gantt-empty-copy")).toContainText("legacy workbook");
+  await expect(page.locator("#gantt-open-demo-link")).toHaveAttribute("href", /report=demo/);
+  await expect(page.getByRole("button", { name: "Upload v3 workbook" })).toBeVisible();
+  await expect(page.locator("#gantt-summary .kc")).toHaveCount(0);
 });
 
 test("prototype export mode is integrated into the report shell and clears selection on page change", async ({ page }) => {

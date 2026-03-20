@@ -1512,12 +1512,19 @@ export function initReportApp(root, options) {
   }
 
   function buildGanttPage() {
+    var chartBlock = document.getElementById("gantt-chart-block");
+    var legend = chartBlock ? chartBlock.querySelector(".gantt-legend") : null;
+    var wrap = chartBlock ? chartBlock.querySelector(".gantt-wrap") : null;
     var svg = document.getElementById("gantt-svg");
     var summary = document.getElementById("gantt-summary");
     var periodLabel = document.getElementById("gantt-period-label");
     var subtitle = document.getElementById("gantt-sub");
+    var emptyState = document.getElementById("gantt-empty-state");
+    var emptyCopy = document.getElementById("gantt-empty-copy");
+    var openDemoLink = document.getElementById("gantt-open-demo-link");
+    var uploadButton = document.getElementById("gantt-upload-btn");
 
-    if (!svg || !summary || !periodLabel || !subtitle) {
+    if (!svg || !summary || !periodLabel || !subtitle || !chartBlock) {
       return;
     }
 
@@ -1532,7 +1539,6 @@ export function initReportApp(root, options) {
     var milestones = byMonth(D.ganttMilestones, activeMonth).slice().sort(function sortMilestones(left, right) {
       return left.DisplayOrder - right.DisplayOrder || String(left.MilestoneDate).localeCompare(String(right.MilestoneDate));
     });
-
     var milestonesByWorkstream = milestones.reduce(function reduceMilestones(map, milestone) {
       var key = String(milestone.WorkstreamName);
       var values = map[key] || [];
@@ -1542,7 +1548,7 @@ export function initReportApp(root, options) {
     }, Object.create(null));
 
     var WEEKS = 12;
-    var LEFT_W = 240;
+    var LEFT_W = 210;
     var ROW_H = 46;
     var ROW_PAD = 8;
     var BAR_H = ROW_H - ROW_PAD * 2;
@@ -1557,6 +1563,8 @@ export function initReportApp(root, options) {
     var windowEnd = addDays(baseDate, WEEKS * 7);
     var cutOffDate = parseIsoDate((D.meta.reportCutOffDates && D.meta.reportCutOffDates[activeMonth]) || "");
     var cutOffOffsetW = cutOffDate ? dayDiff(baseDate, cutOffDate) / 7 : null;
+    var templateVersion = Number((D.meta && D.meta.templateVersion) || 0);
+    var hasAnyGanttSourceData = Array.isArray(D.ganttWorkstreams) && D.ganttWorkstreams.length > 0;
 
     function clamp(value, min, max) {
       return Math.max(min, Math.min(max, value));
@@ -1579,6 +1587,85 @@ export function initReportApp(root, options) {
       monthGroups[label].count += 1;
     });
 
+    var visibleWorkstreams = workstreams.filter(function filterVisibleWorkstream(item) {
+      var startDate = parseIsoDate(item.StartDate);
+      var endDateExclusive = addDays(parseIsoDate(item.EndDate), 1);
+      return startDate < windowEnd && endDateExclusive > baseDate;
+    });
+    var visibleMilestones = milestones.filter(function filterVisibleMilestone(milestone) {
+      var milestoneDate = parseIsoDate(milestone.MilestoneDate);
+      var milestoneOffset = dayDiff(baseDate, milestoneDate) / 7;
+      return milestoneOffset >= 0 && milestoneOffset <= WEEKS;
+    });
+    var completing = visibleWorkstreams.filter(function filterCompleting(item) {
+      var endDate = parseIsoDate(item.EndDate);
+      return endDate >= baseDate && endDate <= windowEnd;
+    }).length;
+    var onTrack = visibleWorkstreams.filter(function filterOnTrack(item) {
+      return item.StatusRAG === "Green";
+    }).length;
+    var atRisk = visibleWorkstreams.filter(function filterAtRisk(item) {
+      return item.StatusRAG === "Amber";
+    }).length;
+
+    periodLabel.textContent =
+      baseDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" }) +
+      " – " +
+      windowEnd.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+    if (openDemoLink) {
+      openDemoLink.setAttribute("href", "/?report=demo&month=" + activeMonth + "&page=p-gantt");
+    }
+    if (uploadButton) {
+      uploadButton.onclick = function requestUpload() {
+        if (window && typeof window.dispatchEvent === "function" && typeof window.CustomEvent === "function") {
+          window.dispatchEvent(new window.CustomEvent("ta:request-upload"));
+        }
+      };
+    }
+
+    if (!workstreams.length && !milestones.length) {
+      subtitle.textContent =
+        templateVersion >= 3
+          ? "No in-scope workstreams were provided for this reporting period."
+          : "This workbook version does not include Portfolio Gantt inputs.";
+
+      if (emptyCopy) {
+        emptyCopy.textContent =
+          templateVersion >= 3 && hasAnyGanttSourceData
+            ? "This v3 workbook does not include any in-scope Gantt workstreams for the selected month. Open the bundled demo for a populated example, or upload a refreshed v3 workbook with Gantt inputs."
+            : "The active report was created from a legacy workbook that predates the Portfolio Gantt sheets. Open the bundled demo to see the page populated, or upload a v3 workbook to render this view from your own data.";
+      }
+
+      if (legend) {
+        legend.style.display = "none";
+      }
+      if (wrap) {
+        wrap.style.display = "none";
+      }
+      if (summary) {
+        summary.style.display = "none";
+        summary.innerHTML = "";
+      }
+      if (emptyState) {
+        emptyState.classList.add("active");
+      }
+      svg.innerHTML = "";
+      return;
+    }
+
+    if (legend) {
+      legend.style.display = "";
+    }
+    if (wrap) {
+      wrap.style.display = "";
+    }
+    if (summary) {
+      summary.style.display = "";
+    }
+    if (emptyState) {
+      emptyState.classList.remove("active");
+    }
+
     svg.setAttribute("width", String(CHART_W));
     svg.setAttribute("height", String(CHART_H));
     svg.setAttribute("viewBox", "0 0 " + CHART_W + " " + CHART_H);
@@ -1591,7 +1678,7 @@ export function initReportApp(root, options) {
       WEEKS * WEEK_W +
       '" height="' +
       CHART_H +
-      '"/></clipPath></defs>';
+      '"/></clipPath><filter id="gantt-shadow" x="-5%" y="-10%" width="110%" height="130%"><feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="rgba(0,0,0,0.10)"/></filter></defs>';
     html += '<rect width="' + CHART_W + '" height="' + CHART_H + '" fill="#FFFFFF"/>';
 
     workstreams.forEach(function renderRowBand(_, index) {
@@ -1699,10 +1786,11 @@ export function initReportApp(root, options) {
       var fullX = xForWeek(visibleStart);
       var fullX2 = xForWeek(visibleEnd);
       var fullW = fullX2 - fullX;
+      var nameY = item.SponsorOwner ? centerY - 5 : centerY + 4;
 
       html += '<rect x="0" y="' + y + '" width="4" height="' + ROW_H + '" fill="' + domainColor + '"/>';
       html += '<circle cx="16" cy="' + centerY + '" r="4" fill="' + ragColorValue + '"/>';
-      html += '<text x="28" y="' + (item.SponsorOwner ? centerY - 4 : centerY + 4) + '" class="gantt-lane-label">' + item.WorkstreamName + "</text>";
+      html += '<text x="28" y="' + (nameY + 1) + '" class="gantt-lane-label" style="font-size:10.5px;">' + item.WorkstreamName + "</text>";
       if (item.SponsorOwner) {
         html += '<text x="28" y="' + (centerY + 10) + '" class="gantt-lane-sub">' + item.SponsorOwner + "</text>";
       }
@@ -1750,7 +1838,34 @@ export function initReportApp(root, options) {
                 '" fill="' +
                 domainColor +
                 '" opacity="0.85"/>';
+
+              if (completeWidth < durationW) {
+                var completionPct = Math.round((completeWidth / durationW) * 100);
+                var labelX = xForWeek(clamp(startW + completeWidth / 2, 0, WEEKS));
+                if (labelX > LEFT_W + 4 && labelX < xForWeek(WEEKS) - 4) {
+                  html +=
+                    '<text x="' +
+                    labelX +
+                    '" y="' +
+                    (centerY + 1) +
+                    '" text-anchor="middle" dominant-baseline="middle" style="font-size:8.5px;font-weight:700;fill:white;font-family:Arial;pointer-events:none;">' +
+                    completionPct +
+                    "%</text>";
+                }
+              }
             }
+          }
+        }
+
+        if (progressDate && dayDiff(startDate, progressDate) / 7 >= durationW) {
+          var completionX = xForWeek(clamp(startW + durationW / 2, 0, WEEKS));
+          if (completionX > LEFT_W + 4) {
+            html +=
+              '<text x="' +
+              completionX +
+              '" y="' +
+              (centerY + 1) +
+              '" text-anchor="middle" dominant-baseline="middle" style="font-size:8.5px;font-weight:700;fill:white;font-family:Arial;pointer-events:none;">✓ Complete</text>';
           }
         }
 
@@ -1862,33 +1977,19 @@ export function initReportApp(root, options) {
     html += '<line x1="' + LEFT_W + '" y1="' + (HEADER_H - 1) + '" x2="' + CHART_W + '" y2="' + (HEADER_H - 1) + '" stroke="#E5E7EB" stroke-width="1"/>';
     svg.innerHTML = html;
 
-    var visibleMilestones = milestones.filter(function filterMilestone(milestone) {
-      var milestoneDate = parseIsoDate(milestone.MilestoneDate);
-      var milestoneW = dayDiff(baseDate, milestoneDate) / 7;
-      return milestoneW >= 0 && milestoneW <= WEEKS;
-    }).length;
-    var completing = workstreams.filter(function filterCompleting(item) {
-      var endDate = parseIsoDate(item.EndDate);
-      return endDate >= baseDate && endDate <= windowEnd;
-    }).length;
-    var onTrack = workstreams.filter(function filterOnTrack(item) {
-      return item.StatusRAG === "Green";
-    }).length;
-    var atRisk = workstreams.filter(function filterAtRisk(item) {
-      return item.StatusRAG === "Amber";
-    }).length;
-
     summary.innerHTML =
-      renderKpiCard("gantt-kpi-active-workstreams", "blue", "Active Workstreams", workstreams.length, "in this 12-week window") +
+      renderKpiCard("gantt-kpi-active-workstreams", "blue", "Active Workstreams", visibleWorkstreams.length, "in this 12-week window") +
       renderKpiCard("gantt-kpi-on-track", "teal", "On Track", onTrack, "Green RAG", "up") +
       renderKpiCard("gantt-kpi-at-risk", "orange", "At Risk", atRisk, "Amber RAG · monitoring") +
-      renderKpiCard("gantt-kpi-milestones-due", "blue", "Milestones Due", visibleMilestones, "within this window");
+      renderKpiCard("gantt-kpi-milestones-due", "blue", "Milestones Due", visibleMilestones.length, "within this window");
 
-    periodLabel.textContent =
-      baseDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" }) +
-      " – " +
-      windowEnd.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-    subtitle.textContent = workstreams.length + " active workstreams · " + visibleMilestones + " milestones · " + completing + " completing this window";
+    subtitle.textContent =
+      visibleWorkstreams.length +
+      " active workstreams · " +
+      visibleMilestones.length +
+      " milestones · " +
+      completing +
+      " completing this window";
   }
 
   function buildBudgetPage() {

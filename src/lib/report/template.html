@@ -699,6 +699,16 @@ body { font-family: Arial, sans-serif; background: #D8DDE3; color: var(--text); 
 .gantt-legend-item { display: flex; align-items: center; gap: 7px; font-size: 10px; color: var(--text-2); font-family: Arial, sans-serif; }
 .gantt-legend-bar { width: 22px; height: 8px; border-radius: 4px; flex-shrink: 0; }
 .gantt-legend-diamond { width: 10px; height: 10px; transform: rotate(45deg); flex-shrink: 0; border: 2px solid #005292; }
+.gantt-empty-state { display: none; border: 1px solid var(--rule); border-radius: 2px; background: linear-gradient(180deg,#ffffff 0%,#FBFCFE 100%); padding: 28px 30px; }
+.gantt-empty-state.active { display: block; }
+.gantt-empty-title { font-family: 'Arial Black', Arial, sans-serif; font-size: 24px; font-weight: 700; color: var(--text); margin-bottom: 10px; }
+.gantt-empty-copy { font-size: 13px; line-height: 1.6; color: var(--text-2); max-width: 680px; }
+.gantt-empty-actions { display: flex; gap: 12px; margin-top: 18px; }
+.gantt-empty-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 170px; padding: 11px 16px; border-radius: 6px; border: 1px solid rgba(0,82,146,0.18); background: #fff; color: var(--blue); font-size: 11px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; text-decoration: none; cursor: pointer; transition: all 0.15s; }
+.gantt-empty-btn:hover { border-color: var(--orange); color: var(--orange); }
+.gantt-empty-btn.primary { background: var(--orange); border-color: var(--orange); color: #fff; }
+.gantt-empty-btn.primary:hover { background: #d96d00; border-color: #d96d00; color: #fff; }
+.gantt-empty-note { margin-top: 12px; font-size: 11px; color: var(--text-3); }
 
 /* ── UTIL ── */
 .divider { height: 1px; background: var(--rule); margin: 20px 0; }
@@ -1108,6 +1118,15 @@ __REPORT_OVERRIDES__
 
       <div class="gantt-wrap">
         <svg id="gantt-svg" class="gantt-svg"></svg>
+      </div>
+      <div class="gantt-empty-state" id="gantt-empty-state">
+        <div class="gantt-empty-title">Portfolio Gantt is not available for this report</div>
+        <div class="gantt-empty-copy" id="gantt-empty-copy"></div>
+        <div class="gantt-empty-actions">
+          <a class="gantt-empty-btn primary" href="/?report=demo&amp;month=2026-06&amp;page=p-gantt" id="gantt-open-demo-link">Open bundled demo</a>
+          <button class="gantt-empty-btn" id="gantt-upload-btn" type="button">Upload v3 workbook</button>
+        </div>
+        <div class="gantt-empty-note">The existing workbook remains usable for the rest of the report pack; only the Portfolio Gantt page needs v3 inputs.</div>
       </div>
     </div>
 

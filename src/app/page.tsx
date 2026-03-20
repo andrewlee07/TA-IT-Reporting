@@ -31,6 +31,10 @@ function resolveMonth(report: Pick<AppReportRecord, "availableMonths" | "current
   return report.currentMonth;
 }
 
+function hasPortfolioGanttData(report: Pick<AppReportRecord, "templateVersion" | "snapshot">): boolean {
+  return report.templateVersion >= 3 && report.snapshot.portfolioGanttWorkstreams.length > 0;
+}
+
 async function loadAppReport(id: string): Promise<AppReportRecord | null> {
   if (id === "demo") {
     const snapshot = await getBundledDemoSnapshot();
@@ -60,6 +64,22 @@ async function loadAppReport(id: string): Promise<AppReportRecord | null> {
   };
 }
 
+async function loadPreferredFallbackReport(reports: ReturnType<typeof normalizeListEntry>[]): Promise<AppReportRecord | null> {
+  for (const report of reports) {
+    if (report.templateVersion < 3) {
+      continue;
+    }
+
+    const loadedReport = await loadAppReport(report.id);
+
+    if (loadedReport && hasPortfolioGanttData(loadedReport)) {
+      return loadedReport;
+    }
+  }
+
+  return loadAppReport("demo");
+}
+
 interface HomePageProps {
   searchParams: Promise<{
     report?: string | string[];
@@ -76,11 +96,12 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const requestedMonth = getSingleValue(query.month);
   const requestedPageId = getSingleValue(query.page);
 
-  const fallbackReportId = normalizedReports[0]?.id ?? "demo";
-  let activeReport = await loadAppReport(requestedReportId ?? fallbackReportId);
+  let activeReport = requestedReportId
+    ? await loadAppReport(requestedReportId)
+    : await loadPreferredFallbackReport(normalizedReports);
 
   if (!activeReport) {
-    activeReport = await loadAppReport(fallbackReportId);
+    activeReport = await loadPreferredFallbackReport(normalizedReports);
   }
 
   if (!activeReport) {
