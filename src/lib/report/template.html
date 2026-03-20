@@ -360,6 +360,11 @@ body { font-family: Arial, sans-serif; background: #D8DDE3; color: var(--text); 
   background: var(--blue); display: flex;
   align-items: center; gap: 11px; padding: 0 22px;
 }
+.ph-brand-gantt {
+  gap: 13px;
+  padding-left: 30px;
+  overflow: visible;
+}
 .ph-mark {
   width: 30px; height: 30px; background: var(--orange);
   border-radius: 4px; display: flex; align-items: center;
@@ -687,8 +692,9 @@ body { font-family: Arial, sans-serif; background: #D8DDE3; color: var(--text); 
 
 /* ── GANTT ── */
 .gantt-panel { position: relative; margin-bottom: 20px; }
-.gantt-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 2px; }
+.gantt-wrap { overflow-x: auto; overflow-y: hidden; border: 1px solid var(--rule); border-radius: 2px; max-width: 100%; }
 .gantt-svg { display: block; font-family: Arial, sans-serif; }
+.gantt-hover-target { cursor: pointer; }
 .gantt-lane-label { font-size: 11px; font-weight: 700; fill: #1A1A2E; font-family: Arial, sans-serif; }
 .gantt-lane-sub { font-size: 9.5px; fill: #9CA3AF; font-family: Arial, sans-serif; }
 .gantt-bar-label { font-size: 9px; fill: #fff; font-weight: 700; font-family: Arial, sans-serif; pointer-events: none; }
@@ -699,6 +705,69 @@ body { font-family: Arial, sans-serif; background: #D8DDE3; color: var(--text); 
 .gantt-legend-item { display: flex; align-items: center; gap: 7px; font-size: 10px; color: var(--text-2); font-family: Arial, sans-serif; }
 .gantt-legend-bar { width: 22px; height: 8px; border-radius: 4px; flex-shrink: 0; }
 .gantt-legend-diamond { width: 10px; height: 10px; transform: rotate(45deg); flex-shrink: 0; border: 2px solid #005292; }
+.gantt-tooltip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  min-width: 240px;
+  max-width: 320px;
+  padding: 12px 14px 13px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(17,24,39,0.96);
+  box-shadow: 0 18px 40px rgba(17,24,39,0.24);
+  color: #fff;
+  display: none;
+  pointer-events: none;
+  z-index: 24;
+  box-shadow: inset 3px 0 0 var(--tooltip-accent, var(--blue)), 0 18px 40px rgba(17,24,39,0.24);
+}
+.gantt-tooltip.active { display: block; }
+.gantt-tooltip-kicker {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: rgba(255,255,255,0.58);
+}
+.gantt-tooltip-title {
+  margin-top: 5px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: #fff;
+}
+.gantt-tooltip-sub {
+  margin-top: 3px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.76);
+  line-height: 1.45;
+}
+.gantt-tooltip-grid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 10px;
+  align-items: start;
+}
+.gantt-tooltip-key {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.9px;
+  color: rgba(255,255,255,0.5);
+}
+.gantt-tooltip-val {
+  font-size: 11px;
+  line-height: 1.45;
+  color: #fff;
+}
+.gantt-tooltip-body {
+  margin-top: 11px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: rgba(255,255,255,0.74);
+}
 .gantt-empty-state { display: none; border: 1px solid var(--rule); border-radius: 2px; background: linear-gradient(180deg,#ffffff 0%,#FBFCFE 100%); padding: 28px 30px; }
 .gantt-empty-state.active { display: block; }
 .gantt-empty-title { font-family: 'Arial Black', Arial, sans-serif; font-size: 24px; font-weight: 700; color: var(--text); margin-bottom: 10px; }
@@ -1095,7 +1164,7 @@ __REPORT_OVERRIDES__
 <!-- ══════════════════════════════════ PAGE 10: PORTFOLIO GANTT ══ -->
 <div class="report-page" id="p-gantt">
   <div class="ph">
-    <div class="ph-brand"><div class="ph-mark">TA</div><div><div class="ph-org">TeacherActive</div><div class="ph-dept">Information Technology</div></div></div>
+    <div class="ph-brand ph-brand-gantt"><div class="ph-mark">TA</div><div><div class="ph-org">TeacherActive</div><div class="ph-dept">Information Technology</div></div></div>
     <div class="ph-meta">
       <div><div class="ph-title">Portfolio Gantt</div><div class="ph-sub">Rolling 12-week delivery view across all active workstreams</div></div>
       <div><div class="ph-period-label">Rolling from</div><div class="ph-period-val" id="gantt-period-label">June 2026</div></div>
@@ -1119,6 +1188,7 @@ __REPORT_OVERRIDES__
       <div class="gantt-wrap">
         <svg id="gantt-svg" class="gantt-svg"></svg>
       </div>
+      <div class="gantt-tooltip" id="gantt-tooltip" aria-hidden="true"></div>
       <div class="gantt-empty-state" id="gantt-empty-state">
         <div class="gantt-empty-title">Portfolio Gantt is not available for this report</div>
         <div class="gantt-empty-copy" id="gantt-empty-copy"></div>

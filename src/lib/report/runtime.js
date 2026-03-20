@@ -210,6 +210,15 @@ export function initReportApp(root, options) {
     return String(value).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
   }
 
+  function escapeHtml(value) {
+    return String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
   function exportAttrs(id, label) {
     return ' id="' + escapeAttr(id) + '" data-export-id="' + escapeAttr(id) + '" data-export-label="' + escapeAttr(label) + '"';
   }
@@ -1521,6 +1530,7 @@ export function initReportApp(root, options) {
     var subtitle = document.getElementById("gantt-sub");
     var emptyState = document.getElementById("gantt-empty-state");
     var emptyCopy = document.getElementById("gantt-empty-copy");
+    var tooltip = document.getElementById("gantt-tooltip");
     var openDemoLink = document.getElementById("gantt-open-demo-link");
     var uploadButton = document.getElementById("gantt-upload-btn");
 
@@ -1565,9 +1575,82 @@ export function initReportApp(root, options) {
     var cutOffOffsetW = cutOffDate ? dayDiff(baseDate, cutOffDate) / 7 : null;
     var templateVersion = Number((D.meta && D.meta.templateVersion) || 0);
     var hasAnyGanttSourceData = Array.isArray(D.ganttWorkstreams) && D.ganttWorkstreams.length > 0;
+    var hoverItems = Object.create(null);
 
     function clamp(value, min, max) {
       return Math.max(min, Math.min(max, value));
+    }
+
+    function hideGanttTooltip() {
+      if (!tooltip) {
+        return;
+      }
+      tooltip.classList.remove("active");
+      tooltip.setAttribute("aria-hidden", "true");
+    }
+
+    function formatTooltipDate(date) {
+      return date
+        ? date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+        : "—";
+    }
+
+    function statusCopy(value) {
+      if (value === "Green") {
+        return "On track";
+      }
+      if (value === "Amber") {
+        return "At risk";
+      }
+      if (value === "Red") {
+        return "Off track";
+      }
+      return value || "Unknown";
+    }
+
+    function renderTooltipMarkup(meta) {
+      var content = '<div class="gantt-tooltip-kicker">' + escapeHtml(meta.kicker) + "</div>";
+      content += '<div class="gantt-tooltip-title">' + escapeHtml(meta.title) + "</div>";
+
+      if (meta.sub) {
+        content += '<div class="gantt-tooltip-sub">' + escapeHtml(meta.sub) + "</div>";
+      }
+
+      if (meta.rows && meta.rows.length) {
+        content += '<div class="gantt-tooltip-grid">';
+        meta.rows.forEach(function renderRow(row) {
+          content += '<div class="gantt-tooltip-key">' + escapeHtml(row.label) + '</div><div class="gantt-tooltip-val">' + escapeHtml(row.value) + "</div>";
+        });
+        content += "</div>";
+      }
+
+      if (meta.body) {
+        content += '<div class="gantt-tooltip-body">' + escapeHtml(meta.body) + "</div>";
+      }
+
+      return content;
+    }
+
+    function placeGanttTooltip(event, meta) {
+      if (!tooltip) {
+        return;
+      }
+
+      tooltip.style.setProperty("--tooltip-accent", meta.accent || COLORS.blue);
+      tooltip.innerHTML = renderTooltipMarkup(meta);
+      tooltip.classList.add("active");
+      tooltip.setAttribute("aria-hidden", "false");
+
+      var panelRect = chartBlock.getBoundingClientRect();
+      var tooltipRect = tooltip.getBoundingClientRect();
+      var left = event.clientX - panelRect.left + 16;
+      var top = event.clientY - panelRect.top + 18;
+
+      left = clamp(left, 10, Math.max(10, panelRect.width - tooltipRect.width - 10));
+      top = clamp(top, 10, Math.max(10, panelRect.height - tooltipRect.height - 10));
+
+      tooltip.style.left = left + "px";
+      tooltip.style.top = top + "px";
     }
 
     function xForWeek(weekOffset) {
@@ -1623,6 +1706,8 @@ export function initReportApp(root, options) {
       };
     }
 
+    hideGanttTooltip();
+
     if (!workstreams.length && !milestones.length) {
       subtitle.textContent =
         templateVersion >= 3
@@ -1656,12 +1741,13 @@ export function initReportApp(root, options) {
     if (legend) {
       legend.style.display = "";
     }
-    if (wrap) {
-      wrap.style.display = "";
-    }
-    if (summary) {
-      summary.style.display = "";
-    }
+      if (wrap) {
+        wrap.style.display = "";
+        wrap.onscroll = hideGanttTooltip;
+      }
+      if (summary) {
+        summary.style.display = "";
+      }
     if (emptyState) {
       emptyState.classList.remove("active");
     }
@@ -1773,10 +1859,13 @@ export function initReportApp(root, options) {
       var barY = y + ROW_PAD;
       var domainColor = GANTT_DOMAIN_COLOURS[item.Domain] || COLORS.grey;
       var ragColorValue = item.StatusRAG === "Green" ? COLORS.teal : item.StatusRAG === "Amber" ? COLORS.orange : COLORS.alert;
-      var startDate = parseIsoDate(item.StartDate);
-      var endDate = addDays(parseIsoDate(item.EndDate), 1);
-      var progressDate = item.ProgressDate ? addDays(parseIsoDate(item.ProgressDate), 1) : null;
-      var startW = dayDiff(baseDate, startDate) / 7;
+      var startDateInclusive = parseIsoDate(item.StartDate);
+      var endDateInclusive = parseIsoDate(item.EndDate);
+      var progressDateInclusive = item.ProgressDate ? parseIsoDate(item.ProgressDate) : null;
+      var startDate = startDateInclusive;
+      var endDate = addDays(endDateInclusive, 1);
+      var progressDate = progressDateInclusive ? addDays(progressDateInclusive, 1) : null;
+      var startW = dayDiff(baseDate, startDateInclusive) / 7;
       var endW = dayDiff(baseDate, endDate) / 7;
       var durationW = endW - startW;
       var visibleStart = clamp(startW, 0, WEEKS);
@@ -1787,6 +1876,20 @@ export function initReportApp(root, options) {
       var fullX2 = xForWeek(visibleEnd);
       var fullW = fullX2 - fullX;
       var nameY = item.SponsorOwner ? centerY - 5 : centerY + 4;
+      var rowHoverId = "gantt-workstream-" + index;
+
+      hoverItems[rowHoverId] = {
+        accent: domainColor,
+        kicker: item.Domain + " · " + statusCopy(item.StatusRAG),
+        title: item.WorkstreamName,
+        sub: item.SponsorOwner || "",
+        rows: [
+          { label: "Start", value: formatTooltipDate(startDateInclusive) },
+          { label: "End", value: formatTooltipDate(endDateInclusive) },
+          { label: "Progress", value: progressDateInclusive ? formatTooltipDate(progressDateInclusive) : "No progress date" },
+        ],
+        body: item.Detail || "",
+      };
 
       html += '<rect x="0" y="' + y + '" width="4" height="' + ROW_H + '" fill="' + domainColor + '"/>';
       html += '<circle cx="16" cy="' + centerY + '" r="4" fill="' + ragColorValue + '"/>';
@@ -1928,7 +2031,18 @@ export function initReportApp(root, options) {
         html += "</g>";
       }
 
-      (milestonesByWorkstream[item.WorkstreamName] || []).forEach(function renderMilestone(milestone) {
+      html +=
+        '<rect class="gantt-hover-target" data-hover-id="' +
+        rowHoverId +
+        '" x="0" y="' +
+        y +
+        '" width="' +
+        CHART_W +
+        '" height="' +
+        ROW_H +
+        '" fill="#FFFFFF" fill-opacity="0.001"/>';
+
+      (milestonesByWorkstream[item.WorkstreamName] || []).forEach(function renderMilestone(milestone, milestoneIndex) {
         var milestoneDate = parseIsoDate(milestone.MilestoneDate);
         var milestoneW = dayDiff(baseDate, milestoneDate) / 7;
         if (milestoneW < 0 || milestoneW > WEEKS) {
@@ -1937,6 +2051,20 @@ export function initReportApp(root, options) {
 
         var milestoneX = xForWeek(milestoneW);
         var milestoneSize = 7;
+        var milestoneHoverId = rowHoverId + "-milestone-" + milestoneIndex;
+        var hitWidth = Math.min(180, 26 + milestone.MilestoneLabel.length * 5.4);
+        hoverItems[milestoneHoverId] = {
+          accent: domainColor,
+          kicker: "Milestone · " + item.Domain,
+          title: milestone.MilestoneLabel,
+          sub: item.WorkstreamName + (item.SponsorOwner ? " · " + item.SponsorOwner : ""),
+          rows: [
+            { label: "Due", value: formatTooltipDate(milestoneDate) },
+            { label: "Status", value: statusCopy(item.StatusRAG) },
+            { label: "Window", value: formatTooltipDate(startDateInclusive) + " – " + formatTooltipDate(endDateInclusive) },
+          ],
+          body: item.Detail || "",
+        };
         html +=
           '<g clip-path="url(#gantt-clip)"><rect x="' +
           (milestoneX - milestoneSize) +
@@ -1968,7 +2096,15 @@ export function initReportApp(root, options) {
           (centerY - 4) +
           '" style="font-size:8.5px;fill:#4B5563;font-family:Arial;font-weight:600;">' +
           milestone.MilestoneLabel +
-          "</text></g>";
+          '</text><rect class="gantt-hover-target" data-hover-id="' +
+          milestoneHoverId +
+          '" x="' +
+          (milestoneX - 14) +
+          '" y="' +
+          (centerY - 14) +
+          '" width="' +
+          hitWidth +
+          '" height="28" fill="#FFFFFF" fill-opacity="0.001"/></g>';
       });
 
       html += '<line x1="0" y1="' + (y + ROW_H) + '" x2="' + CHART_W + '" y2="' + (y + ROW_H) + '" stroke="#F0F2F5" stroke-width="0.8"/>';
@@ -1976,6 +2112,22 @@ export function initReportApp(root, options) {
 
     html += '<line x1="' + LEFT_W + '" y1="' + (HEADER_H - 1) + '" x2="' + CHART_W + '" y2="' + (HEADER_H - 1) + '" stroke="#E5E7EB" stroke-width="1"/>';
     svg.innerHTML = html;
+    svg.onmouseleave = hideGanttTooltip;
+    Array.from(svg.querySelectorAll(".gantt-hover-target")).forEach(function bindHover(node) {
+      var hoverId = node.getAttribute("data-hover-id");
+      var meta = hoverItems[hoverId];
+      if (!meta) {
+        return;
+      }
+
+      node.addEventListener("mouseenter", function onMouseEnter(event) {
+        placeGanttTooltip(event, meta);
+      });
+      node.addEventListener("mousemove", function onMouseMove(event) {
+        placeGanttTooltip(event, meta);
+      });
+      node.addEventListener("mouseleave", hideGanttTooltip);
+    });
 
     summary.innerHTML =
       renderKpiCard("gantt-kpi-active-workstreams", "blue", "Active Workstreams", visibleWorkstreams.length, "in this 12-week window") +

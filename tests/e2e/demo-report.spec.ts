@@ -111,6 +111,22 @@ test("portfolio gantt renders as a first-class report page with summary cards", 
   await expect(page.locator("#gantt-period-label")).toContainText("2026");
 });
 
+test("portfolio gantt exposes hover details for workstreams and milestones", async ({ page }) => {
+  await page.goto("/?report=demo&month=2026-06&page=p-gantt");
+
+  const workstreamTarget = page.locator('#gantt-svg .gantt-hover-target[data-hover-id^="gantt-workstream-"]').first();
+  await workstreamTarget.hover();
+
+  await expect(page.locator("#gantt-tooltip")).toHaveClass(/active/);
+  await expect(page.locator("#gantt-tooltip")).toContainText("WAN Resilience Uplift");
+  await expect(page.locator("#gantt-tooltip")).toContainText("Head of IT");
+
+  const milestoneTarget = page.locator('#gantt-svg .gantt-hover-target[data-hover-id*="-milestone-"]').first();
+  await milestoneTarget.hover();
+
+  await expect(page.locator("#gantt-tooltip")).toContainText("Milestone");
+});
+
 test("legacy v2 reports show a compatibility empty state on portfolio gantt", async ({ page }) => {
   const legacyReportId = await seedLegacyV2Report();
 
