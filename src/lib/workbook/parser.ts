@@ -1,8 +1,18 @@
 import JSZip from "jszip";
 import { XMLParser } from "fast-xml-parser";
 import * as XLSX from "xlsx";
+import { format, isValid, parse, parseISO } from "date-fns";
 
-import { OFFICE_NETWORK_SHEET_NAME, REQUIRED_SHEET_NAMES, SHEET_CONTRACTS, WORKBOOK_TEMPLATE_KEY, WORKBOOK_TEMPLATE_VERSION } from "@/lib/workbook/contracts";
+import {
+  OFFICE_NETWORK_SHEET_NAME,
+  PORTFOLIO_GANTT_DOMAINS,
+  PORTFOLIO_GANTT_MILESTONES_SHEET_NAME,
+  PORTFOLIO_GANTT_WORKSTREAMS_SHEET_NAME,
+  REQUIRED_SHEET_NAMES,
+  SHEET_CONTRACTS,
+  WORKBOOK_TEMPLATE_KEY,
+  WORKBOOK_TEMPLATE_VERSION,
+} from "@/lib/workbook/contracts";
 import type {
   AssetsLifecycleRow,
   BudgetCommercialRow,
@@ -17,6 +27,8 @@ import type {
   OldestTicketRow,
   ParseWorkbookResult,
   PeriodRow,
+  PortfolioGanttMilestoneRow,
+  PortfolioGanttWorkstreamRow,
   ProjectPortfolioRow,
   RollingRoadmapRow,
   SecurityPatchingRow,
@@ -29,6 +41,7 @@ import { WorkbookValidationError } from "@/lib/workbook/types";
 const README_SHEET = "README";
 const NETWORK_SERVICE_NAME = "Network";
 const NETWORK_TARGET_PCT = 99.9;
+const DATE_PATTERNS = ["yyyy-MM-dd", "d/M/yyyy", "dd/MM/yyyy", "M/d/yyyy", "MM/dd/yyyy", "d MMM yyyy", "dd MMM yyyy"];
 
 type SheetRecord = Record<string, string>;
 
@@ -119,6 +132,33 @@ function parseScoreOutOfFive(value: string, fieldName: string): number {
   }
 
   return Number(match[1]);
+}
+
+function parseDateString(value: string, fieldName: string): string {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    throw new Error(`${fieldName} is required.`);
+  }
+
+  const attemptedDates = [parseISO(trimmed), ...DATE_PATTERNS.map((pattern) => parse(trimmed, pattern, new Date()))];
+  const parsedDate = attemptedDates.find((candidate) => isValid(candidate)) ?? new Date(trimmed);
+
+  if (!isValid(parsedDate)) {
+    throw new Error(`${fieldName} must be a valid date.`);
+  }
+
+  return format(parsedDate, "yyyy-MM-dd");
+}
+
+function parseOptionalDateString(value: string, fieldName: string): string | null {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  return parseDateString(trimmed, fieldName);
 }
 
 function roundTo(value: number, decimals = 2): number {
@@ -313,6 +353,7 @@ function parsePeriods(records: SheetRecord[]): PeriodRow[] {
     quarter: record["Quarter"],
     financialYear: record["Financial Year"],
     isCurrentPeriod: parseBoolean(record["Is Current Period"], "Periods.Is Current Period"),
+    reportCutOffDate: parseDateString(record["Report Cut-Off Date"], "Periods.Report Cut-Off Date"),
   }));
 }
 
@@ -503,6 +544,49 @@ function parseRollingRoadmap(records: SheetRecord[]): RollingRoadmapRow[] {
   }));
 }
 
+function parsePortfolioGanttWorkstreams(records: SheetRecord[]): PortfolioGanttWorkstreamRow[] {
+  return records.map((record) => {
+    const domain = record["Domain"];
+
+    if (!PORTFOLIO_GANTT_DOMAINS.includes(domain as (typeof PORTFOLIO_GANTT_DOMAINS)[number])) {
+      throw new Error(
+        `${PORTFOLIO_GANTT_WORKSTREAMS_SHEET_NAME}.Domain must be one of: ${PORTFOLIO_GANTT_DOMAINS.join(", ")}.`,
+      );
+    }
+
+    const startDate = parseDateString(record["Start Date"], `${PORTFOLIO_GANTT_WORKSTREAMS_SHEET_NAME}.Start Date`);
+    const endDate = parseDateString(record["End Date"], `${PORTFOLIO_GANTT_WORKSTREAMS_SHEET_NAME}.End Date`);
+
+    if (startDate > endDate) {
+      throw new Error(`${PORTFOLIO_GANTT_WORKSTREAMS_SHEET_NAME}.Start Date must be on or before End Date.`);
+    }
+
+    return {
+      reportingMonth: record["Reporting Month"],
+      workstreamName: record["Workstream Name"],
+      sponsorOwner: record["Sponsor / Owner"],
+      domain,
+      statusRag: record["Status RAG"],
+      startDate,
+      endDate,
+      progressDate: parseOptionalDateString(record["Progress Date"], `${PORTFOLIO_GANTT_WORKSTREAMS_SHEET_NAME}.Progress Date`),
+      detailCommentary: record["Detail / Commentary"],
+      displayOrder: parseNumber(record["Display Order"], `${PORTFOLIO_GANTT_WORKSTREAMS_SHEET_NAME}.Display Order`),
+      inScope: parseBoolean(record["In Scope"], `${PORTFOLIO_GANTT_WORKSTREAMS_SHEET_NAME}.In Scope`),
+    };
+  });
+}
+
+function parsePortfolioGanttMilestones(records: SheetRecord[]): PortfolioGanttMilestoneRow[] {
+  return records.map((record) => ({
+    reportingMonth: record["Reporting Month"],
+    workstreamName: record["Workstream Name"],
+    milestoneLabel: record["Milestone Label"],
+    milestoneDate: parseDateString(record["Milestone Date"], `${PORTFOLIO_GANTT_MILESTONES_SHEET_NAME}.Milestone Date`),
+    displayOrder: parseNumber(record["Display Order"], `${PORTFOLIO_GANTT_MILESTONES_SHEET_NAME}.Display Order`),
+  }));
+}
+
 function parseBudgetCommercials(records: SheetRecord[]): BudgetCommercialRow[] {
   return records.map((record) => ({
     reportingMonth: record["Reporting Month"],
@@ -642,6 +726,34 @@ function sortByReportingMonth<T extends { reportingMonth: string }>(rows: T[]): 
   return [...rows].sort((left, right) => left.reportingMonth.localeCompare(right.reportingMonth));
 }
 
+function validatePortfolioGanttRows(
+  periods: PeriodRow[],
+  workstreams: PortfolioGanttWorkstreamRow[],
+  milestones: PortfolioGanttMilestoneRow[],
+  issues: string[],
+): void {
+  const validMonths = new Set(periods.map((period) => period.reportingMonth));
+  const workstreamKeys = new Set(workstreams.map((row) => `${row.reportingMonth}::${row.workstreamName}`));
+
+  for (const row of workstreams) {
+    if (!validMonths.has(row.reportingMonth)) {
+      issues.push(`Portfolio Gantt workstream "${row.workstreamName}" references unknown month ${row.reportingMonth}.`);
+    }
+  }
+
+  for (const row of milestones) {
+    if (!validMonths.has(row.reportingMonth)) {
+      issues.push(`Portfolio Gantt milestone "${row.milestoneLabel}" references unknown month ${row.reportingMonth}.`);
+    }
+
+    if (!workstreamKeys.has(`${row.reportingMonth}::${row.workstreamName}`)) {
+      issues.push(
+        `Portfolio Gantt milestone "${row.milestoneLabel}" does not match a workstream named "${row.workstreamName}" in ${row.reportingMonth}.`,
+      );
+    }
+  }
+}
+
 export async function parseWorkbookBuffer(
   buffer: Buffer,
   sourceFilename: string,
@@ -682,13 +794,24 @@ export async function parseWorkbookBuffer(
   const officeLocations = parseOfficeLocations(parsedSheets.Office_Locations).sort((left, right) => left.displayOrder - right.displayOrder);
   const officeNetworkAvailability = sortByReportingMonth(parseOfficeNetworkAvailability(parsedSheets[OFFICE_NETWORK_SHEET_NAME]));
   const serviceAvailabilityInput = parseServiceAvailability(parsedSheets.INPUT_Service_Availability);
+  const portfolioGanttWorkstreams = sortByReportingMonth(parsePortfolioGanttWorkstreams(parsedSheets[PORTFOLIO_GANTT_WORKSTREAMS_SHEET_NAME])).sort(
+    (left, right) => left.reportingMonth.localeCompare(right.reportingMonth) || left.displayOrder - right.displayOrder || left.workstreamName.localeCompare(right.workstreamName),
+  );
+  const portfolioGanttMilestones = sortByReportingMonth(parsePortfolioGanttMilestones(parsedSheets[PORTFOLIO_GANTT_MILESTONES_SHEET_NAME])).sort(
+    (left, right) =>
+      left.reportingMonth.localeCompare(right.reportingMonth) ||
+      left.displayOrder - right.displayOrder ||
+      left.workstreamName.localeCompare(right.workstreamName) ||
+      left.milestoneDate.localeCompare(right.milestoneDate),
+  );
 
   if (serviceAvailabilityInput.some((row) => row.serviceName === NETWORK_SERVICE_NAME)) {
-    issues.push(`INPUT_Service_Availability must not contain manual "${NETWORK_SERVICE_NAME}" rows in template v2.`);
+    issues.push(`INPUT_Service_Availability must not contain manual "${NETWORK_SERVICE_NAME}" rows in template v3.`);
   }
 
   const derivedNetworkMetrics = deriveNetworkMetrics(periods, officeLocations, officeNetworkAvailability, issues);
   const derivedNetworkServiceRows = buildDerivedNetworkServiceRows(derivedNetworkMetrics);
+  validatePortfolioGanttRows(periods, portfolioGanttWorkstreams, portfolioGanttMilestones, issues);
   const serviceAvailability = sortByReportingMonth([
     ...serviceAvailabilityInput.filter((row) => row.serviceName !== NETWORK_SERVICE_NAME),
     ...derivedNetworkServiceRows,
@@ -724,6 +847,8 @@ export async function parseWorkbookBuffer(
     devDelivery: sortByReportingMonth(parseDevDelivery(parsedSheets.INPUT_Dev_Delivery)),
     projectPortfolio: sortByReportingMonth(parseProjectPortfolio(parsedSheets.INPUT_Project_Portfolio)),
     rollingRoadmap: parseRollingRoadmap(parsedSheets.INPUT_Rolling_Roadmap),
+    portfolioGanttWorkstreams,
+    portfolioGanttMilestones,
     budgetCommercials: sortByReportingMonth(parseBudgetCommercials(parsedSheets.INPUT_Budget_Commercials)),
     topRisks: sortByReportingMonth(parseTopRisks(parsedSheets.INPUT_Top_Risks)),
     narrativeNotes: sortByReportingMonth(parseNarrativeNotes(parsedSheets.INPUT_Narrative_Notes)),

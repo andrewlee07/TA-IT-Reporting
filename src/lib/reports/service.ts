@@ -37,6 +37,20 @@ export interface StoredReport {
   workbookObjectKey: string;
 }
 
+function normalizeSnapshot(snapshot: unknown): NormalizedReportSnapshot {
+  const rawSnapshot = snapshot as Partial<NormalizedReportSnapshot>;
+
+  return {
+    ...rawSnapshot,
+    periods: (rawSnapshot.periods ?? []).map((period) => ({
+      ...period,
+      reportCutOffDate: period.reportCutOffDate ?? period.monthEndDate ?? "",
+    })),
+    portfolioGanttWorkstreams: rawSnapshot.portfolioGanttWorkstreams ?? [],
+    portfolioGanttMilestones: rawSnapshot.portfolioGanttMilestones ?? [],
+  } as NormalizedReportSnapshot;
+}
+
 function sanitizeFilename(filename: string): string {
   return filename.replace(/[^a-zA-Z0-9._-]+/g, "-");
 }
@@ -96,7 +110,7 @@ function toStoredReport(report: {
     templateVersion: report.templateVersion,
     currentMonth: report.currentMonth,
     availableMonths: report.availableMonths as string[],
-    snapshot: report.snapshot as NormalizedReportSnapshot,
+    snapshot: normalizeSnapshot(report.snapshot),
     createdAt: report.createdAt,
     updatedAt: report.updatedAt,
     workbookObjectKey: report.workbookObjectKey,
@@ -188,6 +202,7 @@ export async function getStoredReport(id: string): Promise<StoredReport | null> 
       return report
         ? {
             ...report,
+            snapshot: normalizeSnapshot(report.snapshot),
             createdAt: new Date(report.createdAt),
             updatedAt: new Date(report.updatedAt),
           }
@@ -320,7 +335,7 @@ export async function getBundledDemoSnapshot(): Promise<NormalizedReportSnapshot
     return cachedDemoSnapshot;
   }
 
-  const workbookPath = path.resolve(process.cwd(), "fixtures", "IT_Exec_Reporting_Ingestion_Template_v2_dummy_data.xlsx");
+  const workbookPath = path.resolve(process.cwd(), "fixtures", "IT_Exec_Reporting_Ingestion_Template_v3_dummy_data.xlsx");
   const workbookBuffer = await fs.readFile(workbookPath);
   const parsed = await parseWorkbookBuffer(workbookBuffer, path.basename(workbookPath));
 

@@ -51,6 +51,17 @@ test("legacy report route redirects into the canonical root route", async ({ pag
   await expect(page.locator(".report-page.active .ph-title")).toHaveText("Network & Office Availability");
 });
 
+test("portfolio gantt renders as a first-class report page with summary cards", async ({ page }) => {
+  await page.goto("/?report=demo&month=2026-06&page=p-gantt");
+
+  await expect(page.locator(".nav-link.active")).toContainText("Portfolio Gantt");
+  await expect(page.locator(".report-page.active .ph-title")).toHaveText("Portfolio Gantt");
+  await expect(page.locator("#gantt-svg")).toBeVisible();
+  await expect(page.locator("#gantt-summary .kc")).toHaveCount(4);
+  await expect(page.locator("#gantt-sub")).toContainText("active workstreams");
+  await expect(page.locator("#gantt-period-label")).toContainText("2026");
+});
+
 test("prototype export mode is integrated into the report shell and clears selection on page change", async ({ page }) => {
   await page.goto("/?report=demo&month=2026-06&page=p-support");
 

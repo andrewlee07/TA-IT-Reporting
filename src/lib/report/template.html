@@ -685,6 +685,21 @@ body { font-family: Arial, sans-serif; background: #D8DDE3; color: var(--text); 
 .comp-fill  { height: 100%; border-radius: 5px; background: var(--blue); }
 .comp-val   { font-family: 'Arial Black', Arial, sans-serif; font-size: 13px; font-weight: 700; color: var(--text); text-align: right; }
 
+/* ── GANTT ── */
+.gantt-panel { position: relative; margin-bottom: 20px; }
+.gantt-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 2px; }
+.gantt-svg { display: block; font-family: Arial, sans-serif; }
+.gantt-lane-label { font-size: 11px; font-weight: 700; fill: #1A1A2E; font-family: Arial, sans-serif; }
+.gantt-lane-sub { font-size: 9.5px; fill: #9CA3AF; font-family: Arial, sans-serif; }
+.gantt-bar-label { font-size: 9px; fill: #fff; font-weight: 700; font-family: Arial, sans-serif; pointer-events: none; }
+.gantt-week-label { font-size: 9px; fill: #9CA3AF; font-family: Arial, sans-serif; }
+.gantt-month-label { font-size: 10px; font-weight: 700; fill: #4B5563; font-family: Arial, sans-serif; }
+.gantt-milestone text { font-size: 9px; fill: #4B5563; font-family: Arial, sans-serif; }
+.gantt-legend { display: flex; flex-wrap: wrap; gap: 18px; padding: 14px 24px 0; }
+.gantt-legend-item { display: flex; align-items: center; gap: 7px; font-size: 10px; color: var(--text-2); font-family: Arial, sans-serif; }
+.gantt-legend-bar { width: 22px; height: 8px; border-radius: 4px; flex-shrink: 0; }
+.gantt-legend-diamond { width: 10px; height: 10px; transform: rotate(45deg); flex-shrink: 0; border: 2px solid #005292; }
+
 /* ── UTIL ── */
 .divider { height: 1px; background: var(--rule); margin: 20px 0; }
 .mt-0 { margin-top: 0; }
@@ -717,6 +732,7 @@ __REPORT_OVERRIDES__
   <div class="nav-link" data-page-id="p-dev" title="Development &amp; Delivery" onclick="showPage('p-dev',this)"><div class="nav-icon">DV</div><span class="nav-text">Development &amp; Delivery</span></div>
   <div class="nav-link" data-page-id="p-projects" title="Project Portfolio" onclick="showPage('p-projects',this)"><div class="nav-icon">PF</div><span class="nav-text">Project Portfolio</span></div>
   <div class="nav-link" data-page-id="p-roadmap" title="Rolling Roadmap" onclick="showPage('p-roadmap',this)"><div class="nav-icon">RM</div><span class="nav-text">Rolling Roadmap</span></div>
+  <div class="nav-link" data-page-id="p-gantt" title="Portfolio Gantt" onclick="showPage('p-gantt',this)"><div class="nav-icon">GT</div><span class="nav-text">Portfolio Gantt</span></div>
   <div class="nav-link" data-page-id="p-budget" title="Budget &amp; Commercials" onclick="showPage('p-budget',this)"><div class="nav-icon">BD</div><span class="nav-text">Budget &amp; Commercials</span></div>
   <div class="nav-link" data-page-id="p-risks" title="Risks &amp; Decisions" onclick="showPage('p-risks',this)"><div class="nav-icon">RK</div><span class="nav-text">Risks &amp; Decisions</span></div>
   <div class="nav-section">App Utilities</div>
@@ -1066,7 +1082,41 @@ __REPORT_OVERRIDES__
   <div class="pf"><div class="pf-source">Source: IT Strategy · Sponsor alignment</div><div class="pf-page">ROLLING ROADMAP · PAGE 9 OF 11</div></div>
 </div>
 
-<!-- ══════════════════════════════════ PAGE 10: BUDGET ══ -->
+<!-- ══════════════════════════════════ PAGE 10: PORTFOLIO GANTT ══ -->
+<div class="report-page" id="p-gantt">
+  <div class="ph">
+    <div class="ph-brand"><div class="ph-mark">TA</div><div><div class="ph-org">TeacherActive</div><div class="ph-dept">Information Technology</div></div></div>
+    <div class="ph-meta">
+      <div><div class="ph-title">Portfolio Gantt</div><div class="ph-sub">Rolling 12-week delivery view across all active workstreams</div></div>
+      <div><div class="ph-period-label">Rolling from</div><div class="ph-period-val" id="gantt-period-label">June 2026</div></div>
+    </div>
+  </div>
+  <div class="pb">
+    <div class="sl"><div class="sl-tag">Delivery &amp; Projects</div><div class="sl-title">12-Week Rolling Portfolio View</div><div class="sl-sub" id="gantt-sub">Active workstreams, milestones and delivery windows · Weeks commencing from selected period</div></div>
+
+    <div class="gantt-panel" id="gantt-chart-block" data-export-id="gantt-chart-block" data-export-label="Portfolio gantt chart">
+      <div class="gantt-legend" style="margin-bottom:16px;">
+        <div class="gantt-legend-item"><div class="gantt-legend-bar" style="background:#005292"></div>Infrastructure</div>
+        <div class="gantt-legend-item"><div class="gantt-legend-bar" style="background:#F57D00"></div>End-user computing</div>
+        <div class="gantt-legend-item"><div class="gantt-legend-bar" style="background:#219D98"></div>Security &amp; compliance</div>
+        <div class="gantt-legend-item"><div class="gantt-legend-bar" style="background:#B45309"></div>Applications &amp; data</div>
+        <div class="gantt-legend-item"><div class="gantt-legend-bar" style="background:#7C3AED"></div>Product / development</div>
+        <div class="gantt-legend-item"><div class="gantt-legend-bar" style="background:#A9A9AA"></div>Business transformation</div>
+        <div class="gantt-legend-item"><div class="gantt-legend-diamond"></div>Milestone</div>
+        <div class="gantt-legend-item"><div style="width:2px;height:14px;background:#F57D00;flex-shrink:0"></div>Cut-off date</div>
+      </div>
+
+      <div class="gantt-wrap">
+        <svg id="gantt-svg" class="gantt-svg"></svg>
+      </div>
+    </div>
+
+    <div class="kpi-row cols-4" id="gantt-summary"></div>
+  </div>
+  <div class="pf"><div class="pf-source">Source: IT project governance · Delivery tracking · Active sprint plans</div><div class="pf-page">PORTFOLIO GANTT · PAGE 10 OF 13</div></div>
+</div>
+
+<!-- ══════════════════════════════════ PAGE 11: BUDGET ══ -->
 <div class="report-page" id="p-budget">
   <div class="ph">
     <div class="ph-brand"><div class="ph-mark">TA</div><div><div class="ph-org">TeacherActive</div><div class="ph-dept">Information Technology</div></div></div>

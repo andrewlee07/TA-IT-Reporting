@@ -53,6 +53,14 @@ export function initReportApp(root, options) {
     red: "#003D6E",
     alert: "#C0392B",
   };
+  var GANTT_DOMAIN_COLOURS = {
+    Infrastructure: "#005292",
+    "End-user computing": "#F57D00",
+    "Security & compliance": "#219D98",
+    "Applications & data": "#B45309",
+    "Product / development": "#7C3AED",
+    "Business transformation": "#A9A9AA",
+  };
   var CHARTS = Object.create(null);
 
   var orderedMonths = D.meta.availableMonths || [];
@@ -165,6 +173,37 @@ export function initReportApp(root, options) {
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "")
       .replace(/-{2,}/g, "-");
+  }
+
+  function parseIsoDate(value) {
+    if (!value) {
+      return null;
+    }
+
+    var parts = String(value).split("-");
+
+    if (parts.length !== 3) {
+      return null;
+    }
+
+    return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+  }
+
+  function addDays(date, days) {
+    var nextDate = new Date(date);
+    nextDate.setDate(nextDate.getDate() + days);
+    return nextDate;
+  }
+
+  function dayDiff(start, end) {
+    return (end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000);
+  }
+
+  function firstMondayOnOrAfter(monthValue) {
+    var monthStart = parseIsoDate(monthValue + "-01");
+    var dayOfWeek = monthStart.getDay();
+    var daysToMonday = dayOfWeek === 1 ? 0 : dayOfWeek === 0 ? 1 : 8 - dayOfWeek;
+    return addDays(monthStart, daysToMonday);
   }
 
   function escapeAttr(value) {
@@ -298,6 +337,9 @@ export function initReportApp(root, options) {
         break;
       case "p-roadmap":
         buildRoadmapPage();
+        break;
+      case "p-gantt":
+        buildGanttPage();
         break;
       case "p-budget":
         buildBudgetPage();
@@ -1469,6 +1511,386 @@ export function initReportApp(root, options) {
       .join("");
   }
 
+  function buildGanttPage() {
+    var svg = document.getElementById("gantt-svg");
+    var summary = document.getElementById("gantt-summary");
+    var periodLabel = document.getElementById("gantt-period-label");
+    var subtitle = document.getElementById("gantt-sub");
+
+    if (!svg || !summary || !periodLabel || !subtitle) {
+      return;
+    }
+
+    var workstreams = byMonth(D.ganttWorkstreams, activeMonth)
+      .filter(function filterWorkstream(item) {
+        return item.InScope === true;
+      })
+      .slice()
+      .sort(function sortWorkstreams(left, right) {
+        return left.DisplayOrder - right.DisplayOrder || String(left.WorkstreamName).localeCompare(String(right.WorkstreamName));
+      });
+    var milestones = byMonth(D.ganttMilestones, activeMonth).slice().sort(function sortMilestones(left, right) {
+      return left.DisplayOrder - right.DisplayOrder || String(left.MilestoneDate).localeCompare(String(right.MilestoneDate));
+    });
+
+    var milestonesByWorkstream = milestones.reduce(function reduceMilestones(map, milestone) {
+      var key = String(milestone.WorkstreamName);
+      var values = map[key] || [];
+      values.push(milestone);
+      map[key] = values;
+      return map;
+    }, Object.create(null));
+
+    var WEEKS = 12;
+    var LEFT_W = 240;
+    var ROW_H = 46;
+    var ROW_PAD = 8;
+    var BAR_H = ROW_H - ROW_PAD * 2;
+    var HEADER_H = 52;
+    var FOOTER_H = 12;
+    var WEEK_W = 74;
+    var CHART_W = LEFT_W + WEEKS * WEEK_W;
+    var CHART_H = HEADER_H + workstreams.length * ROW_H + FOOTER_H;
+    var CORNER_R = 6;
+
+    var baseDate = firstMondayOnOrAfter(activeMonth);
+    var windowEnd = addDays(baseDate, WEEKS * 7);
+    var cutOffDate = parseIsoDate((D.meta.reportCutOffDates && D.meta.reportCutOffDates[activeMonth]) || "");
+    var cutOffOffsetW = cutOffDate ? dayDiff(baseDate, cutOffDate) / 7 : null;
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function xForWeek(weekOffset) {
+      return LEFT_W + weekOffset * WEEK_W;
+    }
+
+    var weekDates = Array.from({ length: WEEKS }, function mapWeek(_, index) {
+      return addDays(baseDate, index * 7);
+    });
+
+    var monthGroups = {};
+    weekDates.forEach(function groupMonth(date, index) {
+      var label = date.toLocaleDateString("en-GB", { month: "short", year: "numeric" });
+      if (!monthGroups[label]) {
+        monthGroups[label] = { start: index, count: 0 };
+      }
+      monthGroups[label].count += 1;
+    });
+
+    svg.setAttribute("width", String(CHART_W));
+    svg.setAttribute("height", String(CHART_H));
+    svg.setAttribute("viewBox", "0 0 " + CHART_W + " " + CHART_H);
+    svg.style.minWidth = CHART_W + "px";
+
+    var html =
+      '<defs><clipPath id="gantt-clip"><rect x="' +
+      LEFT_W +
+      '" y="0" width="' +
+      WEEKS * WEEK_W +
+      '" height="' +
+      CHART_H +
+      '"/></clipPath></defs>';
+    html += '<rect width="' + CHART_W + '" height="' + CHART_H + '" fill="#FFFFFF"/>';
+
+    workstreams.forEach(function renderRowBand(_, index) {
+      var y = HEADER_H + index * ROW_H;
+      html +=
+        '<rect x="0" y="' +
+        y +
+        '" width="' +
+        CHART_W +
+        '" height="' +
+        ROW_H +
+        '" fill="' +
+        (index % 2 === 0 ? "#FAFAFA" : "#FFFFFF") +
+        '"/>';
+    });
+
+    for (var weekIndex = 0; weekIndex <= WEEKS; weekIndex += 1) {
+      var x = xForWeek(weekIndex);
+      var isMonthBoundary = weekIndex > 0 && weekDates[weekIndex] && weekDates[weekIndex - 1] && weekDates[weekIndex].getMonth() !== weekDates[weekIndex - 1].getMonth();
+      html +=
+        '<line x1="' +
+        x +
+        '" y1="' +
+        (HEADER_H - 8) +
+        '" x2="' +
+        x +
+        '" y2="' +
+        (CHART_H - FOOTER_H) +
+        '" stroke="' +
+        (isMonthBoundary ? "#CBD5E1" : "#F0F2F5") +
+        '" stroke-width="' +
+        (isMonthBoundary ? 1.5 : 0.8) +
+        '"/>';
+    }
+
+    html += '<line x1="' + LEFT_W + '" y1="0" x2="' + LEFT_W + '" y2="' + CHART_H + '" stroke="#E5E7EB" stroke-width="1"/>';
+    html += '<rect x="0" y="0" width="' + CHART_W + '" height="' + HEADER_H + '" fill="#F8F9FA"/>';
+    html += '<line x1="0" y1="' + HEADER_H + '" x2="' + CHART_W + '" y2="' + HEADER_H + '" stroke="#E5E7EB" stroke-width="1"/>';
+
+    Object.entries(monthGroups).forEach(function renderMonthGroup(entry) {
+      var label = entry[0];
+      var group = entry[1];
+      var x1 = xForWeek(group.start);
+      var x2 = xForWeek(group.start + group.count);
+      var centerX = (x1 + x2) / 2;
+      html += '<text x="' + centerX + '" y="18" text-anchor="middle" class="gantt-month-label">' + label + "</text>";
+      if (group.start > 0) {
+        html += '<line x1="' + x1 + '" y1="0" x2="' + x1 + '" y2="' + HEADER_H + '" stroke="#E5E7EB" stroke-width="1"/>';
+      }
+    });
+
+    weekDates.forEach(function renderWeekLabel(date, index) {
+      var centerX = xForWeek(index) + WEEK_W / 2;
+      var dayLabel = date.getDate() + " " + date.toLocaleDateString("en-GB", { month: "short" });
+      html += '<text x="' + centerX + '" y="' + (HEADER_H - 22) + '" text-anchor="middle" style="font-size:8px;fill:#C0C8D4;font-family:Arial;">W' + (index + 1) + "</text>";
+      html += '<text x="' + centerX + '" y="' + (HEADER_H - 10) + '" text-anchor="middle" class="gantt-week-label">' + dayLabel + "</text>";
+    });
+
+    if (cutOffOffsetW !== null && cutOffOffsetW >= 0 && cutOffOffsetW <= WEEKS) {
+      var cutOffX = xForWeek(cutOffOffsetW);
+      html +=
+        '<g clip-path="url(#gantt-clip)"><line x1="' +
+        cutOffX +
+        '" y1="' +
+        HEADER_H +
+        '" x2="' +
+        cutOffX +
+        '" y2="' +
+        (CHART_H - FOOTER_H) +
+        '" stroke="#F57D00" stroke-width="2" opacity="0.9"/><polygon points="' +
+        (cutOffX - 6) +
+        "," +
+        HEADER_H +
+        " " +
+        (cutOffX + 6) +
+        "," +
+        HEADER_H +
+        " " +
+        cutOffX +
+        "," +
+        (HEADER_H + 8) +
+        '" fill="#F57D00"/><text x="' +
+        cutOffX +
+        '" y="' +
+        (CHART_H - 2) +
+        '" text-anchor="middle" style="font-size:8px;font-weight:700;fill:#F57D00;font-family:Arial;">CUT-OFF</text></g>';
+    }
+
+    workstreams.forEach(function renderWorkstream(item, index) {
+      var y = HEADER_H + index * ROW_H;
+      var centerY = y + ROW_H / 2;
+      var barY = y + ROW_PAD;
+      var domainColor = GANTT_DOMAIN_COLOURS[item.Domain] || COLORS.grey;
+      var ragColorValue = item.StatusRAG === "Green" ? COLORS.teal : item.StatusRAG === "Amber" ? COLORS.orange : COLORS.alert;
+      var startDate = parseIsoDate(item.StartDate);
+      var endDate = addDays(parseIsoDate(item.EndDate), 1);
+      var progressDate = item.ProgressDate ? addDays(parseIsoDate(item.ProgressDate), 1) : null;
+      var startW = dayDiff(baseDate, startDate) / 7;
+      var endW = dayDiff(baseDate, endDate) / 7;
+      var durationW = endW - startW;
+      var visibleStart = clamp(startW, 0, WEEKS);
+      var visibleEnd = clamp(endW, 0, WEEKS);
+      var startCapped = startW < 0;
+      var endCapped = endW > WEEKS;
+      var fullX = xForWeek(visibleStart);
+      var fullX2 = xForWeek(visibleEnd);
+      var fullW = fullX2 - fullX;
+
+      html += '<rect x="0" y="' + y + '" width="4" height="' + ROW_H + '" fill="' + domainColor + '"/>';
+      html += '<circle cx="16" cy="' + centerY + '" r="4" fill="' + ragColorValue + '"/>';
+      html += '<text x="28" y="' + (item.SponsorOwner ? centerY - 4 : centerY + 4) + '" class="gantt-lane-label">' + item.WorkstreamName + "</text>";
+      if (item.SponsorOwner) {
+        html += '<text x="28" y="' + (centerY + 10) + '" class="gantt-lane-sub">' + item.SponsorOwner + "</text>";
+      }
+
+      if (visibleEnd > visibleStart) {
+        var leftRadius = startCapped ? 0 : CORNER_R;
+        html += '<g clip-path="url(#gantt-clip)">';
+        html +=
+          '<rect x="' +
+          fullX +
+          '" y="' +
+          (barY + 2) +
+          '" width="' +
+          fullW +
+          '" height="' +
+          (BAR_H - 4) +
+          '" rx="' +
+          leftRadius +
+          '" ry="' +
+          leftRadius +
+          '" fill="' +
+          domainColor +
+          '" opacity="0.12"/>';
+
+        if (progressDate) {
+          var progressEndW = dayDiff(baseDate, progressDate) / 7;
+          var completeWidth = clamp(progressEndW - startW, 0, durationW);
+          if (completeWidth > 0) {
+            var progressEndX = xForWeek(clamp(startW + completeWidth, 0, WEEKS));
+            var progressVisibleWidth = progressEndX - fullX;
+            if (progressVisibleWidth > 0) {
+              html +=
+                '<rect x="' +
+                fullX +
+                '" y="' +
+                (barY + 2) +
+                '" width="' +
+                progressVisibleWidth +
+                '" height="' +
+                (BAR_H - 4) +
+                '" rx="' +
+                leftRadius +
+                '" ry="' +
+                leftRadius +
+                '" fill="' +
+                domainColor +
+                '" opacity="0.85"/>';
+            }
+          }
+        }
+
+        html +=
+          '<rect x="' +
+          fullX +
+          '" y="' +
+          (barY + 2) +
+          '" width="' +
+          fullW +
+          '" height="' +
+          (BAR_H - 4) +
+          '" rx="' +
+          leftRadius +
+          '" ry="' +
+          leftRadius +
+          '" fill="none" stroke="' +
+          domainColor +
+          '" stroke-width="1.5" opacity="0.5"/>';
+
+        if (startCapped) {
+          html +=
+            '<polygon points="' +
+            LEFT_W +
+            "," +
+            (barY + 6) +
+            " " +
+            (LEFT_W + 7) +
+            "," +
+            centerY +
+            " " +
+            LEFT_W +
+            "," +
+            (barY + BAR_H - 4) +
+            '" fill="' +
+            domainColor +
+            '" opacity="0.7"/>';
+        }
+
+        if (endCapped) {
+          var clipX = xForWeek(WEEKS);
+          html +=
+            '<polygon points="' +
+            clipX +
+            "," +
+            (barY + 6) +
+            " " +
+            (clipX - 7) +
+            "," +
+            centerY +
+            " " +
+            clipX +
+            "," +
+            (barY + BAR_H - 4) +
+            '" fill="' +
+            domainColor +
+            '" opacity="0.7"/>';
+        }
+
+        html += "</g>";
+      }
+
+      (milestonesByWorkstream[item.WorkstreamName] || []).forEach(function renderMilestone(milestone) {
+        var milestoneDate = parseIsoDate(milestone.MilestoneDate);
+        var milestoneW = dayDiff(baseDate, milestoneDate) / 7;
+        if (milestoneW < 0 || milestoneW > WEEKS) {
+          return;
+        }
+
+        var milestoneX = xForWeek(milestoneW);
+        var milestoneSize = 7;
+        html +=
+          '<g clip-path="url(#gantt-clip)"><rect x="' +
+          (milestoneX - milestoneSize) +
+          '" y="' +
+          (centerY - milestoneSize) +
+          '" width="' +
+          milestoneSize * 2 +
+          '" height="' +
+          milestoneSize * 2 +
+          '" transform="rotate(45 ' +
+          milestoneX +
+          " " +
+          centerY +
+          ')" fill="white" stroke="' +
+          domainColor +
+          '" stroke-width="2"/><line x1="' +
+          milestoneX +
+          '" y1="' +
+          (centerY + milestoneSize + 3) +
+          '" x2="' +
+          milestoneX +
+          '" y2="' +
+          (y + ROW_H) +
+          '" stroke="' +
+          domainColor +
+          '" stroke-width="1" stroke-dasharray="2,2" opacity="0.4"/><text x="' +
+          (milestoneX + 10) +
+          '" y="' +
+          (centerY - 4) +
+          '" style="font-size:8.5px;fill:#4B5563;font-family:Arial;font-weight:600;">' +
+          milestone.MilestoneLabel +
+          "</text></g>";
+      });
+
+      html += '<line x1="0" y1="' + (y + ROW_H) + '" x2="' + CHART_W + '" y2="' + (y + ROW_H) + '" stroke="#F0F2F5" stroke-width="0.8"/>';
+    });
+
+    html += '<line x1="' + LEFT_W + '" y1="' + (HEADER_H - 1) + '" x2="' + CHART_W + '" y2="' + (HEADER_H - 1) + '" stroke="#E5E7EB" stroke-width="1"/>';
+    svg.innerHTML = html;
+
+    var visibleMilestones = milestones.filter(function filterMilestone(milestone) {
+      var milestoneDate = parseIsoDate(milestone.MilestoneDate);
+      var milestoneW = dayDiff(baseDate, milestoneDate) / 7;
+      return milestoneW >= 0 && milestoneW <= WEEKS;
+    }).length;
+    var completing = workstreams.filter(function filterCompleting(item) {
+      var endDate = parseIsoDate(item.EndDate);
+      return endDate >= baseDate && endDate <= windowEnd;
+    }).length;
+    var onTrack = workstreams.filter(function filterOnTrack(item) {
+      return item.StatusRAG === "Green";
+    }).length;
+    var atRisk = workstreams.filter(function filterAtRisk(item) {
+      return item.StatusRAG === "Amber";
+    }).length;
+
+    summary.innerHTML =
+      renderKpiCard("gantt-kpi-active-workstreams", "blue", "Active Workstreams", workstreams.length, "in this 12-week window") +
+      renderKpiCard("gantt-kpi-on-track", "teal", "On Track", onTrack, "Green RAG", "up") +
+      renderKpiCard("gantt-kpi-at-risk", "orange", "At Risk", atRisk, "Amber RAG · monitoring") +
+      renderKpiCard("gantt-kpi-milestones-due", "blue", "Milestones Due", visibleMilestones, "within this window");
+
+    periodLabel.textContent =
+      baseDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" }) +
+      " – " +
+      windowEnd.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+    subtitle.textContent = workstreams.length + " active workstreams · " + visibleMilestones + " milestones · " + completing + " completing this window";
+  }
+
   function buildBudgetPage() {
     var budgetRows = byMonth(D.budget, activeMonth);
     var totals = latest(D.budgetMonthlyTotals);
@@ -1640,6 +2062,7 @@ export function initReportApp(root, options) {
   buildDevelopmentPage();
   buildProjectsPage();
   buildRoadmapPage();
+  buildGanttPage();
   buildBudgetPage();
   buildRisksPage();
 

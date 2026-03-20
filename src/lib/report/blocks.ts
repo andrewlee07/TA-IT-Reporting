@@ -19,6 +19,7 @@ export const REPORT_PAGES: ReportPageDefinition[] = [
   { id: "p-dev", label: "Development & Delivery" },
   { id: "p-projects", label: "Project Portfolio" },
   { id: "p-roadmap", label: "Rolling Roadmap" },
+  { id: "p-gantt", label: "Portfolio Gantt" },
   { id: "p-budget", label: "Budget & Commercials" },
   { id: "p-risks", label: "Risks & Decisions" },
 ];
@@ -100,6 +101,13 @@ export const REPORT_BLOCKS: Record<string, ReportBlockDefinition[]> = {
     { id: "prj-note-block", label: "Portfolio note" },
   ],
   "p-roadmap": [{ id: "roadmap-quarter-2026-q2", label: "Roadmap quarter section" }],
+  "p-gantt": [
+    { id: "gantt-chart-block", label: "Portfolio gantt chart" },
+    { id: "gantt-kpi-active-workstreams", label: "Active workstreams KPI" },
+    { id: "gantt-kpi-on-track", label: "On track KPI" },
+    { id: "gantt-kpi-at-risk", label: "At risk KPI" },
+    { id: "gantt-kpi-milestones-due", label: "Milestones due KPI" },
+  ],
   "p-budget": [
     { id: "budget-kpi-total-budget", label: "Total budget KPI" },
     { id: "budget-kpi-total-actual", label: "Total actual KPI" },

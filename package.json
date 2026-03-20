@@ -13,7 +13,7 @@
     "test:e2e": "playwright test",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "template:upgrade": ".venv/bin/python scripts/upgrade_template_v2.py",
+    "template:upgrade": ".venv/bin/python scripts/upgrade_template_v3.py",
     "snapshot:demo": "tsx scripts/generate_demo_snapshot.ts"
   },
   "dependencies": {

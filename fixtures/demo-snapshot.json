@@ -1,8 +1,8 @@
 {
   "metadata": {
-    "templateKey": "IT_EXEC_TEMPLATE_V2",
-    "templateVersion": 2,
-    "sourceFilename": "IT_Exec_Reporting_Ingestion_Template_v2_dummy_data.xlsx",
+    "templateKey": "IT_EXEC_TEMPLATE_V3",
+    "templateVersion": 3,
+    "sourceFilename": "IT_Exec_Reporting_Ingestion_Template_v3_dummy_data.xlsx",
     "tableMap": {
       "README": [],
       "Reporting_Framework": [
@@ -51,6 +51,12 @@
       "INPUT_Rolling_Roadmap": [
         "TRollingRoadmap"
       ],
+      "INPUT_Gantt_Workstreams": [
+        "TPortfolioGanttWorkstreams"
+      ],
+      "INPUT_Gantt_Milestones": [
+        "TPortfolioGanttMilestones"
+      ],
       "INPUT_Budget_Commercials": [
         "TBudgetCommercials"
       ],
@@ -77,42 +83,48 @@
       "monthEndDate": "2026-01-31",
       "quarter": "2026 Q1",
       "financialYear": "FY2025/26",
-      "isCurrentPeriod": false
+      "isCurrentPeriod": false,
+      "reportCutOffDate": "2026-01-19"
     },
     {
       "reportingMonth": "2026-02",
       "monthEndDate": "2026-02-28",
       "quarter": "2026 Q1",
       "financialYear": "FY2025/26",
-      "isCurrentPeriod": false
+      "isCurrentPeriod": false,
+      "reportCutOffDate": "2026-02-19"
     },
     {
       "reportingMonth": "2026-03",
       "monthEndDate": "2026-03-31",
       "quarter": "2026 Q1",
       "financialYear": "FY2025/26",
-      "isCurrentPeriod": false
+      "isCurrentPeriod": false,
+      "reportCutOffDate": "2026-03-19"
     },
     {
       "reportingMonth": "2026-04",
       "monthEndDate": "2026-04-30",
       "quarter": "2026 Q2",
       "financialYear": "FY2026/27",
-      "isCurrentPeriod": false
+      "isCurrentPeriod": false,
+      "reportCutOffDate": "2026-04-19"
     },
     {
       "reportingMonth": "2026-05",
       "monthEndDate": "2026-05-31",
       "quarter": "2026 Q2",
       "financialYear": "FY2026/27",
-      "isCurrentPeriod": false
+      "isCurrentPeriod": false,
+      "reportCutOffDate": "2026-05-19"
     },
     {
       "reportingMonth": "2026-06",
       "monthEndDate": "2026-06-30",
       "quarter": "2026 Q2",
       "financialYear": "FY2026/27",
-      "isCurrentPeriod": true
+      "isCurrentPeriod": true,
+      "reportCutOffDate": "2026-06-19"
     }
   ],
   "entities": [
@@ -3052,6 +3064,1360 @@
       "dependency": "Licensing decision",
       "decisionRequired": true,
       "notes": "Dependent on M365 roadmap choice."
+    }
+  ],
+  "portfolioGanttWorkstreams": [
+    {
+      "reportingMonth": "2026-01",
+      "workstreamName": "WAN Resilience Uplift",
+      "sponsorOwner": "Head of IT",
+      "domain": "Infrastructure",
+      "statusRag": "Amber",
+      "startDate": "2025-12-08",
+      "endDate": "2026-02-15",
+      "progressDate": "2026-01-11",
+      "detailCommentary": "Secondary path design agreed; implementation underway",
+      "displayOrder": 1,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-01",
+      "workstreamName": "Private Cloud Rationalisation",
+      "sponsorOwner": "Head of IT",
+      "domain": "Infrastructure",
+      "statusRag": "Amber",
+      "startDate": "2026-03-02",
+      "endDate": "2026-05-24",
+      "progressDate": null,
+      "detailCommentary": "Commercial options review in progress",
+      "displayOrder": 2,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-01",
+      "workstreamName": "Laptop Refresh Phase 3",
+      "sponsorOwner": "COO",
+      "domain": "End-user computing",
+      "statusRag": "Green",
+      "startDate": "2025-12-22",
+      "endDate": "2026-02-15",
+      "progressDate": "2026-01-11",
+      "detailCommentary": "Q3 refresh ready to launch; supplier slots confirmed",
+      "displayOrder": 3,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-01",
+      "workstreamName": "Mobile Fleet Review",
+      "sponsorOwner": "IT Operations",
+      "domain": "End-user computing",
+      "statusRag": "Green",
+      "startDate": "2026-02-16",
+      "endDate": "2026-03-29",
+      "progressDate": null,
+      "detailCommentary": "Scheduled for Q3; estate in good health",
+      "displayOrder": 4,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-01",
+      "workstreamName": "Security Remediation Sprint",
+      "sponsorOwner": "CEO",
+      "domain": "Security & compliance",
+      "statusRag": "Green",
+      "startDate": "2025-11-24",
+      "endDate": "2026-01-18",
+      "progressDate": "2026-01-11",
+      "detailCommentary": "Critical backlog cleared; wrapping up",
+      "displayOrder": 5,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-01",
+      "workstreamName": "Access Control Rationalisation",
+      "sponsorOwner": "Security Lead",
+      "domain": "Security & compliance",
+      "statusRag": "Amber",
+      "startDate": "2026-03-16",
+      "endDate": "2026-05-24",
+      "progressDate": null,
+      "detailCommentary": "Cross-functional dependency; scheduling in progress",
+      "displayOrder": 6,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-01",
+      "workstreamName": "Patch Compliance Uplift",
+      "sponsorOwner": "Infrastructure Manager",
+      "domain": "Security & compliance",
+      "statusRag": "Green",
+      "startDate": "2025-11-10",
+      "endDate": "2026-02-01",
+      "progressDate": "2026-01-11",
+      "detailCommentary": "Continuous programme; trajectory positive",
+      "displayOrder": 7,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-01",
+      "workstreamName": "Data & Reporting Uplift",
+      "sponsorOwner": "CFO",
+      "domain": "Applications & data",
+      "statusRag": "Green",
+      "startDate": "2025-10-27",
+      "endDate": "2026-02-01",
+      "progressDate": "2026-01-11",
+      "detailCommentary": "Management reporting foundation established",
+      "displayOrder": 8,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-01",
+      "workstreamName": "MI Self-Service Reporting",
+      "sponsorOwner": "Data Lead",
+      "domain": "Applications & data",
+      "statusRag": "Green",
+      "startDate": "2026-03-30",
+      "endDate": "2026-06-07",
+      "progressDate": null,
+      "detailCommentary": "Dependent on ingestion model; planned Q4",
+      "displayOrder": 9,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-01",
+      "workstreamName": "TABS Prioritisation Reset",
+      "sponsorOwner": "IT Director",
+      "domain": "Product / development",
+      "statusRag": "Amber",
+      "startDate": "2026-01-19",
+      "endDate": "2026-03-15",
+      "progressDate": null,
+      "detailCommentary": "Business prioritisation required before mobilisation",
+      "displayOrder": 10,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-01",
+      "workstreamName": "Dev Backlog Quality Reset",
+      "sponsorOwner": "IT Director",
+      "domain": "Product / development",
+      "statusRag": "Amber",
+      "startDate": "2026-04-13",
+      "endDate": "2026-06-07",
+      "progressDate": null,
+      "detailCommentary": "Archive and close criteria decision pending",
+      "displayOrder": 11,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-01",
+      "workstreamName": "Portfolio Governance Refresh",
+      "sponsorOwner": "CIO",
+      "domain": "Business transformation",
+      "statusRag": "Green",
+      "startDate": "2025-12-22",
+      "endDate": "2026-02-01",
+      "progressDate": "2026-01-04",
+      "detailCommentary": "Prioritisation discipline; steering cadence defined",
+      "displayOrder": 12,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-01",
+      "workstreamName": "Identity Modernisation",
+      "sponsorOwner": "CEO",
+      "domain": "Business transformation",
+      "statusRag": "Green",
+      "startDate": "2025-09-15",
+      "endDate": "2026-01-04",
+      "progressDate": "2025-12-28",
+      "detailCommentary": "Security uplift and admin overhead reduction delivered",
+      "displayOrder": 13,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-02",
+      "workstreamName": "WAN Resilience Uplift",
+      "sponsorOwner": "Head of IT",
+      "domain": "Infrastructure",
+      "statusRag": "Amber",
+      "startDate": "2026-01-05",
+      "endDate": "2026-03-15",
+      "progressDate": "2026-02-08",
+      "detailCommentary": "Secondary path design agreed; implementation underway",
+      "displayOrder": 1,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-02",
+      "workstreamName": "Private Cloud Rationalisation",
+      "sponsorOwner": "Head of IT",
+      "domain": "Infrastructure",
+      "statusRag": "Amber",
+      "startDate": "2026-03-30",
+      "endDate": "2026-06-21",
+      "progressDate": null,
+      "detailCommentary": "Commercial options review in progress",
+      "displayOrder": 2,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-02",
+      "workstreamName": "Laptop Refresh Phase 3",
+      "sponsorOwner": "COO",
+      "domain": "End-user computing",
+      "statusRag": "Green",
+      "startDate": "2026-01-19",
+      "endDate": "2026-03-15",
+      "progressDate": "2026-02-08",
+      "detailCommentary": "Q3 refresh ready to launch; supplier slots confirmed",
+      "displayOrder": 3,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-02",
+      "workstreamName": "Mobile Fleet Review",
+      "sponsorOwner": "IT Operations",
+      "domain": "End-user computing",
+      "statusRag": "Green",
+      "startDate": "2026-03-16",
+      "endDate": "2026-04-26",
+      "progressDate": null,
+      "detailCommentary": "Scheduled for Q3; estate in good health",
+      "displayOrder": 4,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-02",
+      "workstreamName": "Security Remediation Sprint",
+      "sponsorOwner": "CEO",
+      "domain": "Security & compliance",
+      "statusRag": "Green",
+      "startDate": "2025-12-22",
+      "endDate": "2026-02-15",
+      "progressDate": "2026-02-08",
+      "detailCommentary": "Critical backlog cleared; wrapping up",
+      "displayOrder": 5,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-02",
+      "workstreamName": "Access Control Rationalisation",
+      "sponsorOwner": "Security Lead",
+      "domain": "Security & compliance",
+      "statusRag": "Amber",
+      "startDate": "2026-04-13",
+      "endDate": "2026-06-21",
+      "progressDate": null,
+      "detailCommentary": "Cross-functional dependency; scheduling in progress",
+      "displayOrder": 6,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-02",
+      "workstreamName": "Patch Compliance Uplift",
+      "sponsorOwner": "Infrastructure Manager",
+      "domain": "Security & compliance",
+      "statusRag": "Green",
+      "startDate": "2025-12-08",
+      "endDate": "2026-03-01",
+      "progressDate": "2026-02-08",
+      "detailCommentary": "Continuous programme; trajectory positive",
+      "displayOrder": 7,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-02",
+      "workstreamName": "Data & Reporting Uplift",
+      "sponsorOwner": "CFO",
+      "domain": "Applications & data",
+      "statusRag": "Green",
+      "startDate": "2025-11-24",
+      "endDate": "2026-03-01",
+      "progressDate": "2026-02-08",
+      "detailCommentary": "Management reporting foundation established",
+      "displayOrder": 8,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-02",
+      "workstreamName": "MI Self-Service Reporting",
+      "sponsorOwner": "Data Lead",
+      "domain": "Applications & data",
+      "statusRag": "Green",
+      "startDate": "2026-04-27",
+      "endDate": "2026-07-05",
+      "progressDate": null,
+      "detailCommentary": "Dependent on ingestion model; planned Q4",
+      "displayOrder": 9,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-02",
+      "workstreamName": "TABS Prioritisation Reset",
+      "sponsorOwner": "IT Director",
+      "domain": "Product / development",
+      "statusRag": "Amber",
+      "startDate": "2026-02-16",
+      "endDate": "2026-04-12",
+      "progressDate": null,
+      "detailCommentary": "Business prioritisation required before mobilisation",
+      "displayOrder": 10,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-02",
+      "workstreamName": "Dev Backlog Quality Reset",
+      "sponsorOwner": "IT Director",
+      "domain": "Product / development",
+      "statusRag": "Amber",
+      "startDate": "2026-05-11",
+      "endDate": "2026-07-05",
+      "progressDate": null,
+      "detailCommentary": "Archive and close criteria decision pending",
+      "displayOrder": 11,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-02",
+      "workstreamName": "Portfolio Governance Refresh",
+      "sponsorOwner": "CIO",
+      "domain": "Business transformation",
+      "statusRag": "Green",
+      "startDate": "2026-01-19",
+      "endDate": "2026-03-01",
+      "progressDate": "2026-02-01",
+      "detailCommentary": "Prioritisation discipline; steering cadence defined",
+      "displayOrder": 12,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-02",
+      "workstreamName": "Identity Modernisation",
+      "sponsorOwner": "CEO",
+      "domain": "Business transformation",
+      "statusRag": "Green",
+      "startDate": "2025-10-13",
+      "endDate": "2026-02-01",
+      "progressDate": "2026-01-25",
+      "detailCommentary": "Security uplift and admin overhead reduction delivered",
+      "displayOrder": 13,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-03",
+      "workstreamName": "WAN Resilience Uplift",
+      "sponsorOwner": "Head of IT",
+      "domain": "Infrastructure",
+      "statusRag": "Amber",
+      "startDate": "2026-02-02",
+      "endDate": "2026-04-12",
+      "progressDate": "2026-03-08",
+      "detailCommentary": "Secondary path design agreed; implementation underway",
+      "displayOrder": 1,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-03",
+      "workstreamName": "Private Cloud Rationalisation",
+      "sponsorOwner": "Head of IT",
+      "domain": "Infrastructure",
+      "statusRag": "Amber",
+      "startDate": "2026-04-27",
+      "endDate": "2026-07-19",
+      "progressDate": null,
+      "detailCommentary": "Commercial options review in progress",
+      "displayOrder": 2,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-03",
+      "workstreamName": "Laptop Refresh Phase 3",
+      "sponsorOwner": "COO",
+      "domain": "End-user computing",
+      "statusRag": "Green",
+      "startDate": "2026-02-16",
+      "endDate": "2026-04-12",
+      "progressDate": "2026-03-08",
+      "detailCommentary": "Q3 refresh ready to launch; supplier slots confirmed",
+      "displayOrder": 3,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-03",
+      "workstreamName": "Mobile Fleet Review",
+      "sponsorOwner": "IT Operations",
+      "domain": "End-user computing",
+      "statusRag": "Green",
+      "startDate": "2026-04-13",
+      "endDate": "2026-05-24",
+      "progressDate": null,
+      "detailCommentary": "Scheduled for Q3; estate in good health",
+      "displayOrder": 4,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-03",
+      "workstreamName": "Security Remediation Sprint",
+      "sponsorOwner": "CEO",
+      "domain": "Security & compliance",
+      "statusRag": "Green",
+      "startDate": "2026-01-19",
+      "endDate": "2026-03-15",
+      "progressDate": "2026-03-08",
+      "detailCommentary": "Critical backlog cleared; wrapping up",
+      "displayOrder": 5,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-03",
+      "workstreamName": "Access Control Rationalisation",
+      "sponsorOwner": "Security Lead",
+      "domain": "Security & compliance",
+      "statusRag": "Amber",
+      "startDate": "2026-05-11",
+      "endDate": "2026-07-19",
+      "progressDate": null,
+      "detailCommentary": "Cross-functional dependency; scheduling in progress",
+      "displayOrder": 6,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-03",
+      "workstreamName": "Patch Compliance Uplift",
+      "sponsorOwner": "Infrastructure Manager",
+      "domain": "Security & compliance",
+      "statusRag": "Green",
+      "startDate": "2026-01-05",
+      "endDate": "2026-03-29",
+      "progressDate": "2026-03-08",
+      "detailCommentary": "Continuous programme; trajectory positive",
+      "displayOrder": 7,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-03",
+      "workstreamName": "Data & Reporting Uplift",
+      "sponsorOwner": "CFO",
+      "domain": "Applications & data",
+      "statusRag": "Green",
+      "startDate": "2025-12-22",
+      "endDate": "2026-03-29",
+      "progressDate": "2026-03-08",
+      "detailCommentary": "Management reporting foundation established",
+      "displayOrder": 8,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-03",
+      "workstreamName": "MI Self-Service Reporting",
+      "sponsorOwner": "Data Lead",
+      "domain": "Applications & data",
+      "statusRag": "Green",
+      "startDate": "2026-05-25",
+      "endDate": "2026-08-02",
+      "progressDate": null,
+      "detailCommentary": "Dependent on ingestion model; planned Q4",
+      "displayOrder": 9,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-03",
+      "workstreamName": "TABS Prioritisation Reset",
+      "sponsorOwner": "IT Director",
+      "domain": "Product / development",
+      "statusRag": "Amber",
+      "startDate": "2026-03-16",
+      "endDate": "2026-05-10",
+      "progressDate": null,
+      "detailCommentary": "Business prioritisation required before mobilisation",
+      "displayOrder": 10,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-03",
+      "workstreamName": "Dev Backlog Quality Reset",
+      "sponsorOwner": "IT Director",
+      "domain": "Product / development",
+      "statusRag": "Amber",
+      "startDate": "2026-06-08",
+      "endDate": "2026-08-02",
+      "progressDate": null,
+      "detailCommentary": "Archive and close criteria decision pending",
+      "displayOrder": 11,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-03",
+      "workstreamName": "Portfolio Governance Refresh",
+      "sponsorOwner": "CIO",
+      "domain": "Business transformation",
+      "statusRag": "Green",
+      "startDate": "2026-02-16",
+      "endDate": "2026-03-29",
+      "progressDate": "2026-03-01",
+      "detailCommentary": "Prioritisation discipline; steering cadence defined",
+      "displayOrder": 12,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-03",
+      "workstreamName": "Identity Modernisation",
+      "sponsorOwner": "CEO",
+      "domain": "Business transformation",
+      "statusRag": "Green",
+      "startDate": "2025-11-10",
+      "endDate": "2026-03-01",
+      "progressDate": "2026-02-22",
+      "detailCommentary": "Security uplift and admin overhead reduction delivered",
+      "displayOrder": 13,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-04",
+      "workstreamName": "WAN Resilience Uplift",
+      "sponsorOwner": "Head of IT",
+      "domain": "Infrastructure",
+      "statusRag": "Amber",
+      "startDate": "2026-03-09",
+      "endDate": "2026-05-17",
+      "progressDate": "2026-04-12",
+      "detailCommentary": "Secondary path design agreed; implementation underway",
+      "displayOrder": 1,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-04",
+      "workstreamName": "Private Cloud Rationalisation",
+      "sponsorOwner": "Head of IT",
+      "domain": "Infrastructure",
+      "statusRag": "Amber",
+      "startDate": "2026-06-01",
+      "endDate": "2026-08-23",
+      "progressDate": null,
+      "detailCommentary": "Commercial options review in progress",
+      "displayOrder": 2,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-04",
+      "workstreamName": "Laptop Refresh Phase 3",
+      "sponsorOwner": "COO",
+      "domain": "End-user computing",
+      "statusRag": "Green",
+      "startDate": "2026-03-23",
+      "endDate": "2026-05-17",
+      "progressDate": "2026-04-12",
+      "detailCommentary": "Q3 refresh ready to launch; supplier slots confirmed",
+      "displayOrder": 3,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-04",
+      "workstreamName": "Mobile Fleet Review",
+      "sponsorOwner": "IT Operations",
+      "domain": "End-user computing",
+      "statusRag": "Green",
+      "startDate": "2026-05-18",
+      "endDate": "2026-06-28",
+      "progressDate": null,
+      "detailCommentary": "Scheduled for Q3; estate in good health",
+      "displayOrder": 4,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-04",
+      "workstreamName": "Security Remediation Sprint",
+      "sponsorOwner": "CEO",
+      "domain": "Security & compliance",
+      "statusRag": "Green",
+      "startDate": "2026-02-23",
+      "endDate": "2026-04-19",
+      "progressDate": "2026-04-12",
+      "detailCommentary": "Critical backlog cleared; wrapping up",
+      "displayOrder": 5,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-04",
+      "workstreamName": "Access Control Rationalisation",
+      "sponsorOwner": "Security Lead",
+      "domain": "Security & compliance",
+      "statusRag": "Amber",
+      "startDate": "2026-06-15",
+      "endDate": "2026-08-23",
+      "progressDate": null,
+      "detailCommentary": "Cross-functional dependency; scheduling in progress",
+      "displayOrder": 6,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-04",
+      "workstreamName": "Patch Compliance Uplift",
+      "sponsorOwner": "Infrastructure Manager",
+      "domain": "Security & compliance",
+      "statusRag": "Green",
+      "startDate": "2026-02-09",
+      "endDate": "2026-05-03",
+      "progressDate": "2026-04-12",
+      "detailCommentary": "Continuous programme; trajectory positive",
+      "displayOrder": 7,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-04",
+      "workstreamName": "Data & Reporting Uplift",
+      "sponsorOwner": "CFO",
+      "domain": "Applications & data",
+      "statusRag": "Green",
+      "startDate": "2026-01-26",
+      "endDate": "2026-05-03",
+      "progressDate": "2026-04-12",
+      "detailCommentary": "Management reporting foundation established",
+      "displayOrder": 8,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-04",
+      "workstreamName": "MI Self-Service Reporting",
+      "sponsorOwner": "Data Lead",
+      "domain": "Applications & data",
+      "statusRag": "Green",
+      "startDate": "2026-06-29",
+      "endDate": "2026-09-06",
+      "progressDate": null,
+      "detailCommentary": "Dependent on ingestion model; planned Q4",
+      "displayOrder": 9,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-04",
+      "workstreamName": "TABS Prioritisation Reset",
+      "sponsorOwner": "IT Director",
+      "domain": "Product / development",
+      "statusRag": "Amber",
+      "startDate": "2026-04-20",
+      "endDate": "2026-06-14",
+      "progressDate": null,
+      "detailCommentary": "Business prioritisation required before mobilisation",
+      "displayOrder": 10,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-04",
+      "workstreamName": "Dev Backlog Quality Reset",
+      "sponsorOwner": "IT Director",
+      "domain": "Product / development",
+      "statusRag": "Amber",
+      "startDate": "2026-07-13",
+      "endDate": "2026-09-06",
+      "progressDate": null,
+      "detailCommentary": "Archive and close criteria decision pending",
+      "displayOrder": 11,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-04",
+      "workstreamName": "Portfolio Governance Refresh",
+      "sponsorOwner": "CIO",
+      "domain": "Business transformation",
+      "statusRag": "Green",
+      "startDate": "2026-03-23",
+      "endDate": "2026-05-03",
+      "progressDate": "2026-04-05",
+      "detailCommentary": "Prioritisation discipline; steering cadence defined",
+      "displayOrder": 12,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-04",
+      "workstreamName": "Identity Modernisation",
+      "sponsorOwner": "CEO",
+      "domain": "Business transformation",
+      "statusRag": "Green",
+      "startDate": "2025-12-15",
+      "endDate": "2026-04-05",
+      "progressDate": "2026-03-29",
+      "detailCommentary": "Security uplift and admin overhead reduction delivered",
+      "displayOrder": 13,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-05",
+      "workstreamName": "WAN Resilience Uplift",
+      "sponsorOwner": "Head of IT",
+      "domain": "Infrastructure",
+      "statusRag": "Amber",
+      "startDate": "2026-04-06",
+      "endDate": "2026-06-14",
+      "progressDate": "2026-05-10",
+      "detailCommentary": "Secondary path design agreed; implementation underway",
+      "displayOrder": 1,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-05",
+      "workstreamName": "Private Cloud Rationalisation",
+      "sponsorOwner": "Head of IT",
+      "domain": "Infrastructure",
+      "statusRag": "Amber",
+      "startDate": "2026-06-29",
+      "endDate": "2026-09-20",
+      "progressDate": null,
+      "detailCommentary": "Commercial options review in progress",
+      "displayOrder": 2,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-05",
+      "workstreamName": "Laptop Refresh Phase 3",
+      "sponsorOwner": "COO",
+      "domain": "End-user computing",
+      "statusRag": "Green",
+      "startDate": "2026-04-20",
+      "endDate": "2026-06-14",
+      "progressDate": "2026-05-10",
+      "detailCommentary": "Q3 refresh ready to launch; supplier slots confirmed",
+      "displayOrder": 3,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-05",
+      "workstreamName": "Mobile Fleet Review",
+      "sponsorOwner": "IT Operations",
+      "domain": "End-user computing",
+      "statusRag": "Green",
+      "startDate": "2026-06-15",
+      "endDate": "2026-07-26",
+      "progressDate": null,
+      "detailCommentary": "Scheduled for Q3; estate in good health",
+      "displayOrder": 4,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-05",
+      "workstreamName": "Security Remediation Sprint",
+      "sponsorOwner": "CEO",
+      "domain": "Security & compliance",
+      "statusRag": "Green",
+      "startDate": "2026-03-23",
+      "endDate": "2026-05-17",
+      "progressDate": "2026-05-10",
+      "detailCommentary": "Critical backlog cleared; wrapping up",
+      "displayOrder": 5,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-05",
+      "workstreamName": "Access Control Rationalisation",
+      "sponsorOwner": "Security Lead",
+      "domain": "Security & compliance",
+      "statusRag": "Amber",
+      "startDate": "2026-07-13",
+      "endDate": "2026-09-20",
+      "progressDate": null,
+      "detailCommentary": "Cross-functional dependency; scheduling in progress",
+      "displayOrder": 6,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-05",
+      "workstreamName": "Patch Compliance Uplift",
+      "sponsorOwner": "Infrastructure Manager",
+      "domain": "Security & compliance",
+      "statusRag": "Green",
+      "startDate": "2026-03-09",
+      "endDate": "2026-05-31",
+      "progressDate": "2026-05-10",
+      "detailCommentary": "Continuous programme; trajectory positive",
+      "displayOrder": 7,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-05",
+      "workstreamName": "Data & Reporting Uplift",
+      "sponsorOwner": "CFO",
+      "domain": "Applications & data",
+      "statusRag": "Green",
+      "startDate": "2026-02-23",
+      "endDate": "2026-05-31",
+      "progressDate": "2026-05-10",
+      "detailCommentary": "Management reporting foundation established",
+      "displayOrder": 8,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-05",
+      "workstreamName": "MI Self-Service Reporting",
+      "sponsorOwner": "Data Lead",
+      "domain": "Applications & data",
+      "statusRag": "Green",
+      "startDate": "2026-07-27",
+      "endDate": "2026-10-04",
+      "progressDate": null,
+      "detailCommentary": "Dependent on ingestion model; planned Q4",
+      "displayOrder": 9,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-05",
+      "workstreamName": "TABS Prioritisation Reset",
+      "sponsorOwner": "IT Director",
+      "domain": "Product / development",
+      "statusRag": "Amber",
+      "startDate": "2026-05-18",
+      "endDate": "2026-07-12",
+      "progressDate": null,
+      "detailCommentary": "Business prioritisation required before mobilisation",
+      "displayOrder": 10,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-05",
+      "workstreamName": "Dev Backlog Quality Reset",
+      "sponsorOwner": "IT Director",
+      "domain": "Product / development",
+      "statusRag": "Amber",
+      "startDate": "2026-08-10",
+      "endDate": "2026-10-04",
+      "progressDate": null,
+      "detailCommentary": "Archive and close criteria decision pending",
+      "displayOrder": 11,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-05",
+      "workstreamName": "Portfolio Governance Refresh",
+      "sponsorOwner": "CIO",
+      "domain": "Business transformation",
+      "statusRag": "Green",
+      "startDate": "2026-04-20",
+      "endDate": "2026-05-31",
+      "progressDate": "2026-05-03",
+      "detailCommentary": "Prioritisation discipline; steering cadence defined",
+      "displayOrder": 12,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-05",
+      "workstreamName": "Identity Modernisation",
+      "sponsorOwner": "CEO",
+      "domain": "Business transformation",
+      "statusRag": "Green",
+      "startDate": "2026-01-12",
+      "endDate": "2026-05-03",
+      "progressDate": "2026-04-26",
+      "detailCommentary": "Security uplift and admin overhead reduction delivered",
+      "displayOrder": 13,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-06",
+      "workstreamName": "WAN Resilience Uplift",
+      "sponsorOwner": "Head of IT",
+      "domain": "Infrastructure",
+      "statusRag": "Amber",
+      "startDate": "2026-05-04",
+      "endDate": "2026-07-12",
+      "progressDate": "2026-06-07",
+      "detailCommentary": "Secondary path design agreed; implementation underway",
+      "displayOrder": 1,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-06",
+      "workstreamName": "Private Cloud Rationalisation",
+      "sponsorOwner": "Head of IT",
+      "domain": "Infrastructure",
+      "statusRag": "Amber",
+      "startDate": "2026-07-27",
+      "endDate": "2026-10-18",
+      "progressDate": null,
+      "detailCommentary": "Commercial options review in progress",
+      "displayOrder": 2,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-06",
+      "workstreamName": "Laptop Refresh Phase 3",
+      "sponsorOwner": "COO",
+      "domain": "End-user computing",
+      "statusRag": "Green",
+      "startDate": "2026-05-18",
+      "endDate": "2026-07-12",
+      "progressDate": "2026-06-07",
+      "detailCommentary": "Q3 refresh ready to launch; supplier slots confirmed",
+      "displayOrder": 3,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-06",
+      "workstreamName": "Mobile Fleet Review",
+      "sponsorOwner": "IT Operations",
+      "domain": "End-user computing",
+      "statusRag": "Green",
+      "startDate": "2026-07-13",
+      "endDate": "2026-08-23",
+      "progressDate": null,
+      "detailCommentary": "Scheduled for Q3; estate in good health",
+      "displayOrder": 4,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-06",
+      "workstreamName": "Security Remediation Sprint",
+      "sponsorOwner": "CEO",
+      "domain": "Security & compliance",
+      "statusRag": "Green",
+      "startDate": "2026-04-20",
+      "endDate": "2026-06-14",
+      "progressDate": "2026-06-07",
+      "detailCommentary": "Critical backlog cleared; wrapping up",
+      "displayOrder": 5,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-06",
+      "workstreamName": "Access Control Rationalisation",
+      "sponsorOwner": "Security Lead",
+      "domain": "Security & compliance",
+      "statusRag": "Amber",
+      "startDate": "2026-08-10",
+      "endDate": "2026-10-18",
+      "progressDate": null,
+      "detailCommentary": "Cross-functional dependency; scheduling in progress",
+      "displayOrder": 6,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-06",
+      "workstreamName": "Patch Compliance Uplift",
+      "sponsorOwner": "Infrastructure Manager",
+      "domain": "Security & compliance",
+      "statusRag": "Green",
+      "startDate": "2026-04-06",
+      "endDate": "2026-06-28",
+      "progressDate": "2026-06-07",
+      "detailCommentary": "Continuous programme; trajectory positive",
+      "displayOrder": 7,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-06",
+      "workstreamName": "Data & Reporting Uplift",
+      "sponsorOwner": "CFO",
+      "domain": "Applications & data",
+      "statusRag": "Green",
+      "startDate": "2026-03-23",
+      "endDate": "2026-06-28",
+      "progressDate": "2026-06-07",
+      "detailCommentary": "Management reporting foundation established",
+      "displayOrder": 8,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-06",
+      "workstreamName": "MI Self-Service Reporting",
+      "sponsorOwner": "Data Lead",
+      "domain": "Applications & data",
+      "statusRag": "Green",
+      "startDate": "2026-08-24",
+      "endDate": "2026-11-01",
+      "progressDate": null,
+      "detailCommentary": "Dependent on ingestion model; planned Q4",
+      "displayOrder": 9,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-06",
+      "workstreamName": "TABS Prioritisation Reset",
+      "sponsorOwner": "IT Director",
+      "domain": "Product / development",
+      "statusRag": "Amber",
+      "startDate": "2026-06-15",
+      "endDate": "2026-08-09",
+      "progressDate": null,
+      "detailCommentary": "Business prioritisation required before mobilisation",
+      "displayOrder": 10,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-06",
+      "workstreamName": "Dev Backlog Quality Reset",
+      "sponsorOwner": "IT Director",
+      "domain": "Product / development",
+      "statusRag": "Amber",
+      "startDate": "2026-09-07",
+      "endDate": "2026-11-01",
+      "progressDate": null,
+      "detailCommentary": "Archive and close criteria decision pending",
+      "displayOrder": 11,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-06",
+      "workstreamName": "Portfolio Governance Refresh",
+      "sponsorOwner": "CIO",
+      "domain": "Business transformation",
+      "statusRag": "Green",
+      "startDate": "2026-05-18",
+      "endDate": "2026-06-28",
+      "progressDate": "2026-05-31",
+      "detailCommentary": "Prioritisation discipline; steering cadence defined",
+      "displayOrder": 12,
+      "inScope": true
+    },
+    {
+      "reportingMonth": "2026-06",
+      "workstreamName": "Identity Modernisation",
+      "sponsorOwner": "CEO",
+      "domain": "Business transformation",
+      "statusRag": "Green",
+      "startDate": "2026-02-09",
+      "endDate": "2026-05-31",
+      "progressDate": "2026-05-24",
+      "detailCommentary": "Security uplift and admin overhead reduction delivered",
+      "displayOrder": 13,
+      "inScope": true
+    }
+  ],
+  "portfolioGanttMilestones": [
+    {
+      "reportingMonth": "2026-01",
+      "workstreamName": "WAN Resilience Uplift",
+      "milestoneLabel": "Secondary path live",
+      "milestoneDate": "2026-01-19",
+      "displayOrder": 1
+    },
+    {
+      "reportingMonth": "2026-01",
+      "workstreamName": "Private Cloud Rationalisation",
+      "milestoneLabel": "Options decision",
+      "milestoneDate": "2026-05-25",
+      "displayOrder": 2
+    },
+    {
+      "reportingMonth": "2026-01",
+      "workstreamName": "Laptop Refresh Phase 3",
+      "milestoneLabel": "Deployment start",
+      "milestoneDate": "2026-01-05",
+      "displayOrder": 3
+    },
+    {
+      "reportingMonth": "2026-01",
+      "workstreamName": "Security Remediation Sprint",
+      "milestoneLabel": "Closure & handover",
+      "milestoneDate": "2025-12-08",
+      "displayOrder": 4
+    },
+    {
+      "reportingMonth": "2026-01",
+      "workstreamName": "Data & Reporting Uplift",
+      "milestoneLabel": "Visual design pack",
+      "milestoneDate": "2025-11-17",
+      "displayOrder": 5
+    },
+    {
+      "reportingMonth": "2026-01",
+      "workstreamName": "TABS Prioritisation Reset",
+      "milestoneLabel": "Scope agreed",
+      "milestoneDate": "2026-02-16",
+      "displayOrder": 6
+    },
+    {
+      "reportingMonth": "2026-01",
+      "workstreamName": "Portfolio Governance Refresh",
+      "milestoneLabel": "Steering cadence",
+      "milestoneDate": "2026-01-19",
+      "displayOrder": 7
+    },
+    {
+      "reportingMonth": "2026-01",
+      "workstreamName": "Identity Modernisation",
+      "milestoneLabel": "Project closure",
+      "milestoneDate": "2025-09-22",
+      "displayOrder": 8
+    },
+    {
+      "reportingMonth": "2026-02",
+      "workstreamName": "WAN Resilience Uplift",
+      "milestoneLabel": "Secondary path live",
+      "milestoneDate": "2026-02-16",
+      "displayOrder": 1
+    },
+    {
+      "reportingMonth": "2026-02",
+      "workstreamName": "Private Cloud Rationalisation",
+      "milestoneLabel": "Options decision",
+      "milestoneDate": "2026-06-22",
+      "displayOrder": 2
+    },
+    {
+      "reportingMonth": "2026-02",
+      "workstreamName": "Laptop Refresh Phase 3",
+      "milestoneLabel": "Deployment start",
+      "milestoneDate": "2026-02-02",
+      "displayOrder": 3
+    },
+    {
+      "reportingMonth": "2026-02",
+      "workstreamName": "Security Remediation Sprint",
+      "milestoneLabel": "Closure & handover",
+      "milestoneDate": "2026-01-05",
+      "displayOrder": 4
+    },
+    {
+      "reportingMonth": "2026-02",
+      "workstreamName": "Data & Reporting Uplift",
+      "milestoneLabel": "Visual design pack",
+      "milestoneDate": "2025-12-15",
+      "displayOrder": 5
+    },
+    {
+      "reportingMonth": "2026-02",
+      "workstreamName": "TABS Prioritisation Reset",
+      "milestoneLabel": "Scope agreed",
+      "milestoneDate": "2026-03-16",
+      "displayOrder": 6
+    },
+    {
+      "reportingMonth": "2026-02",
+      "workstreamName": "Portfolio Governance Refresh",
+      "milestoneLabel": "Steering cadence",
+      "milestoneDate": "2026-02-16",
+      "displayOrder": 7
+    },
+    {
+      "reportingMonth": "2026-02",
+      "workstreamName": "Identity Modernisation",
+      "milestoneLabel": "Project closure",
+      "milestoneDate": "2025-10-20",
+      "displayOrder": 8
+    },
+    {
+      "reportingMonth": "2026-03",
+      "workstreamName": "WAN Resilience Uplift",
+      "milestoneLabel": "Secondary path live",
+      "milestoneDate": "2026-03-16",
+      "displayOrder": 1
+    },
+    {
+      "reportingMonth": "2026-03",
+      "workstreamName": "Private Cloud Rationalisation",
+      "milestoneLabel": "Options decision",
+      "milestoneDate": "2026-07-20",
+      "displayOrder": 2
+    },
+    {
+      "reportingMonth": "2026-03",
+      "workstreamName": "Laptop Refresh Phase 3",
+      "milestoneLabel": "Deployment start",
+      "milestoneDate": "2026-03-02",
+      "displayOrder": 3
+    },
+    {
+      "reportingMonth": "2026-03",
+      "workstreamName": "Security Remediation Sprint",
+      "milestoneLabel": "Closure & handover",
+      "milestoneDate": "2026-02-02",
+      "displayOrder": 4
+    },
+    {
+      "reportingMonth": "2026-03",
+      "workstreamName": "Data & Reporting Uplift",
+      "milestoneLabel": "Visual design pack",
+      "milestoneDate": "2026-01-12",
+      "displayOrder": 5
+    },
+    {
+      "reportingMonth": "2026-03",
+      "workstreamName": "TABS Prioritisation Reset",
+      "milestoneLabel": "Scope agreed",
+      "milestoneDate": "2026-04-13",
+      "displayOrder": 6
+    },
+    {
+      "reportingMonth": "2026-03",
+      "workstreamName": "Portfolio Governance Refresh",
+      "milestoneLabel": "Steering cadence",
+      "milestoneDate": "2026-03-16",
+      "displayOrder": 7
+    },
+    {
+      "reportingMonth": "2026-03",
+      "workstreamName": "Identity Modernisation",
+      "milestoneLabel": "Project closure",
+      "milestoneDate": "2025-11-17",
+      "displayOrder": 8
+    },
+    {
+      "reportingMonth": "2026-04",
+      "workstreamName": "WAN Resilience Uplift",
+      "milestoneLabel": "Secondary path live",
+      "milestoneDate": "2026-04-20",
+      "displayOrder": 1
+    },
+    {
+      "reportingMonth": "2026-04",
+      "workstreamName": "Private Cloud Rationalisation",
+      "milestoneLabel": "Options decision",
+      "milestoneDate": "2026-08-24",
+      "displayOrder": 2
+    },
+    {
+      "reportingMonth": "2026-04",
+      "workstreamName": "Laptop Refresh Phase 3",
+      "milestoneLabel": "Deployment start",
+      "milestoneDate": "2026-04-06",
+      "displayOrder": 3
+    },
+    {
+      "reportingMonth": "2026-04",
+      "workstreamName": "Security Remediation Sprint",
+      "milestoneLabel": "Closure & handover",
+      "milestoneDate": "2026-03-09",
+      "displayOrder": 4
+    },
+    {
+      "reportingMonth": "2026-04",
+      "workstreamName": "Data & Reporting Uplift",
+      "milestoneLabel": "Visual design pack",
+      "milestoneDate": "2026-02-16",
+      "displayOrder": 5
+    },
+    {
+      "reportingMonth": "2026-04",
+      "workstreamName": "TABS Prioritisation Reset",
+      "milestoneLabel": "Scope agreed",
+      "milestoneDate": "2026-05-18",
+      "displayOrder": 6
+    },
+    {
+      "reportingMonth": "2026-04",
+      "workstreamName": "Portfolio Governance Refresh",
+      "milestoneLabel": "Steering cadence",
+      "milestoneDate": "2026-04-20",
+      "displayOrder": 7
+    },
+    {
+      "reportingMonth": "2026-04",
+      "workstreamName": "Identity Modernisation",
+      "milestoneLabel": "Project closure",
+      "milestoneDate": "2025-12-22",
+      "displayOrder": 8
+    },
+    {
+      "reportingMonth": "2026-05",
+      "workstreamName": "WAN Resilience Uplift",
+      "milestoneLabel": "Secondary path live",
+      "milestoneDate": "2026-05-18",
+      "displayOrder": 1
+    },
+    {
+      "reportingMonth": "2026-05",
+      "workstreamName": "Private Cloud Rationalisation",
+      "milestoneLabel": "Options decision",
+      "milestoneDate": "2026-09-21",
+      "displayOrder": 2
+    },
+    {
+      "reportingMonth": "2026-05",
+      "workstreamName": "Laptop Refresh Phase 3",
+      "milestoneLabel": "Deployment start",
+      "milestoneDate": "2026-05-04",
+      "displayOrder": 3
+    },
+    {
+      "reportingMonth": "2026-05",
+      "workstreamName": "Security Remediation Sprint",
+      "milestoneLabel": "Closure & handover",
+      "milestoneDate": "2026-04-06",
+      "displayOrder": 4
+    },
+    {
+      "reportingMonth": "2026-05",
+      "workstreamName": "Data & Reporting Uplift",
+      "milestoneLabel": "Visual design pack",
+      "milestoneDate": "2026-03-16",
+      "displayOrder": 5
+    },
+    {
+      "reportingMonth": "2026-05",
+      "workstreamName": "TABS Prioritisation Reset",
+      "milestoneLabel": "Scope agreed",
+      "milestoneDate": "2026-06-15",
+      "displayOrder": 6
+    },
+    {
+      "reportingMonth": "2026-05",
+      "workstreamName": "Portfolio Governance Refresh",
+      "milestoneLabel": "Steering cadence",
+      "milestoneDate": "2026-05-18",
+      "displayOrder": 7
+    },
+    {
+      "reportingMonth": "2026-05",
+      "workstreamName": "Identity Modernisation",
+      "milestoneLabel": "Project closure",
+      "milestoneDate": "2026-01-19",
+      "displayOrder": 8
+    },
+    {
+      "reportingMonth": "2026-06",
+      "workstreamName": "WAN Resilience Uplift",
+      "milestoneLabel": "Secondary path live",
+      "milestoneDate": "2026-06-15",
+      "displayOrder": 1
+    },
+    {
+      "reportingMonth": "2026-06",
+      "workstreamName": "Private Cloud Rationalisation",
+      "milestoneLabel": "Options decision",
+      "milestoneDate": "2026-10-19",
+      "displayOrder": 2
+    },
+    {
+      "reportingMonth": "2026-06",
+      "workstreamName": "Laptop Refresh Phase 3",
+      "milestoneLabel": "Deployment start",
+      "milestoneDate": "2026-06-01",
+      "displayOrder": 3
+    },
+    {
+      "reportingMonth": "2026-06",
+      "workstreamName": "Security Remediation Sprint",
+      "milestoneLabel": "Closure & handover",
+      "milestoneDate": "2026-05-04",
+      "displayOrder": 4
+    },
+    {
+      "reportingMonth": "2026-06",
+      "workstreamName": "Data & Reporting Uplift",
+      "milestoneLabel": "Visual design pack",
+      "milestoneDate": "2026-04-13",
+      "displayOrder": 5
+    },
+    {
+      "reportingMonth": "2026-06",
+      "workstreamName": "TABS Prioritisation Reset",
+      "milestoneLabel": "Scope agreed",
+      "milestoneDate": "2026-07-13",
+      "displayOrder": 6
+    },
+    {
+      "reportingMonth": "2026-06",
+      "workstreamName": "Portfolio Governance Refresh",
+      "milestoneLabel": "Steering cadence",
+      "milestoneDate": "2026-06-15",
+      "displayOrder": 7
+    },
+    {
+      "reportingMonth": "2026-06",
+      "workstreamName": "Identity Modernisation",
+      "milestoneLabel": "Project closure",
+      "milestoneDate": "2026-02-16",
+      "displayOrder": 8
     }
   ],
   "budgetCommercials": [
