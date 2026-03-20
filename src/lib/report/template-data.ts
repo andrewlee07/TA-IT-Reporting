@@ -1,5 +1,6 @@
 import { format, parseISO } from "date-fns";
 
+import type { ExecSummaryMode, ExecSummaryState } from "@/lib/reports/exec-summary";
 import type { NormalizedReportSnapshot } from "@/lib/workbook/types";
 
 export interface TemplateData {
@@ -14,6 +15,13 @@ export interface TemplateData {
     templateKey: string;
     templateVersion: number;
     sourceFilename: string;
+  };
+  execSummary: {
+    mode: ExecSummaryMode;
+    contentHtml: string;
+    excerpt: string;
+    updatedAt: string | null;
+    sourceReportId: string | null;
   };
   support: Array<Record<string, number | string>>;
   service: Array<Record<string, number | string>>;
@@ -95,10 +103,17 @@ function buildRoadmapHorizon(snapshot: NormalizedReportSnapshot): string {
   return `${quarters[0]} – ${quarters[quarters.length - 1]}`;
 }
 
-export function buildTemplateData(snapshot: NormalizedReportSnapshot, month: string): TemplateData {
+export function buildTemplateData(snapshot: NormalizedReportSnapshot, month: string, execSummary?: ExecSummaryState): TemplateData {
   const monthLabels = Object.fromEntries(snapshot.availableMonths.map((entry) => [entry, formatMonthShort(entry)]));
   const portfolioGanttWorkstreams = snapshot.portfolioGanttWorkstreams ?? [];
   const portfolioGanttMilestones = snapshot.portfolioGanttMilestones ?? [];
+  const summaryState: ExecSummaryState = execSummary ?? {
+    mode: "loading",
+    contentHtml: "",
+    excerpt: "",
+    updatedAt: null,
+    sourceReportId: null,
+  };
 
   return {
     meta: {
@@ -112,6 +127,13 @@ export function buildTemplateData(snapshot: NormalizedReportSnapshot, month: str
       templateKey: snapshot.metadata.templateKey,
       templateVersion: snapshot.metadata.templateVersion,
       sourceFilename: snapshot.metadata.sourceFilename,
+    },
+    execSummary: {
+      mode: summaryState.mode,
+      contentHtml: summaryState.contentHtml,
+      excerpt: summaryState.excerpt,
+      updatedAt: summaryState.updatedAt,
+      sourceReportId: summaryState.sourceReportId,
     },
     support: snapshot.supportOperations.map((row) => ({
       Month: row.reportingMonth,

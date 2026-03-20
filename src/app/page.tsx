@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { ReportAppShell, type AppReportRecord } from "@/components/report-app-shell";
 import { REPORT_PAGES, isValidPageId } from "@/lib/report/blocks";
 import { loadTemplateBodyMarkup, loadTemplateStyles } from "@/lib/report/template-source";
-import { getBundledDemoSnapshot, getStoredReport, listReports, type ReportListItem } from "@/lib/reports/service";
+import { getBundledDemoSnapshot, getExecSummaryState, getStoredReport, listReports, type ReportListItem } from "@/lib/reports/service";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +42,7 @@ async function loadAppReport(id: string): Promise<AppReportRecord | null> {
       id: "demo",
       title: "Bundled Demo Report",
       originalFilename: snapshot.metadata.sourceFilename,
+      reportSeriesKey: "bundled-demo-report",
       templateKey: snapshot.metadata.templateKey,
       templateVersion: snapshot.metadata.templateVersion,
       currentMonth: snapshot.currentMonth,
@@ -116,7 +117,11 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     redirect(`/?report=${canonicalReportId}&month=${canonicalMonth}&page=${canonicalPageId}`);
   }
 
-  const [templateStyles, templateBody] = await Promise.all([loadTemplateStyles(), loadTemplateBodyMarkup()]);
+  const [templateStyles, templateBody, initialExecSummary] = await Promise.all([
+    loadTemplateStyles(),
+    loadTemplateBodyMarkup(),
+    getExecSummaryState(canonicalReportId, canonicalMonth),
+  ]);
 
   return (
     <>
@@ -126,6 +131,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         initialPageId={canonicalPageId}
         initialReport={activeReport}
         initialReports={normalizedReports}
+        initialExecSummary={initialExecSummary}
         templateBody={templateBody}
       />
     </>

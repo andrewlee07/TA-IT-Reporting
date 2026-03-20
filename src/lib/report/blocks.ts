@@ -9,6 +9,7 @@ export interface ReportBlockDefinition {
 }
 
 export const REPORT_PAGES: ReportPageDefinition[] = [
+  { id: "p-summary", label: "Exec Summary" },
   { id: "p-exec", label: "Executive Scorecard" },
   { id: "p-avail", label: "Service Availability" },
   { id: "p-network", label: "Network & Offices" },
@@ -25,6 +26,7 @@ export const REPORT_PAGES: ReportPageDefinition[] = [
 ];
 
 export const REPORT_BLOCKS: Record<string, ReportBlockDefinition[]> = {
+  "p-summary": [{ id: "summary-content-block", label: "Exec summary content" }],
   "p-exec": [
     { id: "exec-kpi-support-sla", label: "Support SLA KPI" },
     { id: "exec-kpi-user-csat", label: "User CSAT KPI" },

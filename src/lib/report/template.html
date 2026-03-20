@@ -123,6 +123,38 @@ body { font-family: Arial, sans-serif; background: #D8DDE3; color: var(--text); 
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.nav-tooltip {
+  display: none;
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%) translateX(-4px);
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: rgba(17, 24, 39, 0.96);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  line-height: 1.2;
+  white-space: nowrap;
+  box-shadow: 0 10px 24px rgba(0,0,0,0.24);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 40;
+  transition: opacity 0.14s ease, transform 0.14s ease;
+}
+.nav-tooltip::before {
+  content: "";
+  position: absolute;
+  left: -5px;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  background: rgba(17, 24, 39, 0.96);
+  transform: translateY(-50%) rotate(45deg);
+  border-radius: 2px;
+}
 .nav-link.active .nav-icon {
   background: rgba(245,125,0,0.18);
   color: #fff;
@@ -251,6 +283,7 @@ body { font-family: Arial, sans-serif; background: #D8DDE3; color: var(--text); 
   display: none;
 }
 .shell.sidebar-collapsed .nav-link {
+  position: relative;
   justify-content: center;
   gap: 0;
   padding: 8px 0;
@@ -281,6 +314,15 @@ body { font-family: Arial, sans-serif; background: #D8DDE3; color: var(--text); 
 }
 .shell.sidebar-collapsed.sidebar-use-initials .nav-icon-glyph {
   display: none;
+}
+.shell.sidebar-collapsed .nav-tooltip {
+  display: inline-flex;
+  align-items: center;
+}
+.shell.sidebar-collapsed .nav-link:hover .nav-tooltip,
+.shell.sidebar-collapsed .nav-link:focus-visible .nav-tooltip {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0);
 }
 
 /* ── CLIENT EXPORT MODE ── */
@@ -475,6 +517,7 @@ body { font-family: Arial, sans-serif; background: #D8DDE3; color: var(--text); 
   border: 1px solid var(--rule); border-top: 3px solid transparent;
   padding: 16px 18px; position: relative; overflow: hidden;
 }
+.kc.has-spark { min-height: 148px; }
 .kc.blue   { border-top-color: var(--blue); }
 .kc.orange { border-top-color: var(--orange); }
 .kc.teal   { border-top-color: var(--teal); }
@@ -485,9 +528,11 @@ body { font-family: Arial, sans-serif; background: #D8DDE3; color: var(--text); 
 .kc-value  { font-family: 'Arial Black', Arial, sans-serif; font-size: 34px; font-weight: 900; color: var(--text); line-height: 1; letter-spacing: -0.5px; }
 .kc-value .u { font-size: 14px; font-weight: 400; color: var(--text-3); font-family: Arial, sans-serif; }
 .kc-delta  { font-size: 10px; color: var(--text-3); margin-top: 8px; }
+.kc.has-spark .kc-delta { max-width: calc(100% - 98px); }
 .kc-delta.up   { color: var(--green); }
 .kc-delta.dn   { color: var(--red); }
-.kc-spark { position: absolute; bottom: 10px; right: 12px; opacity: 0.18; }
+.kc-spark { position: absolute; bottom: 12px; right: 14px; width: 84px; height: 30px; opacity: 0.95; pointer-events: none; }
+.kc-spark svg { width: 100%; height: 100%; overflow: visible; }
 
 /* ── BLOCK ── */
 .block { border: 1px solid var(--rule); margin-bottom: 20px; overflow: hidden; }
@@ -807,6 +852,53 @@ body { font-family: Arial, sans-serif; background: #D8DDE3; color: var(--text); 
 .gantt-empty-btn.primary:hover { background: #d96d00; border-color: #d96d00; color: #fff; }
 .gantt-empty-note { margin-top: 12px; font-size: 11px; color: var(--text-3); }
 
+.summary-shell { position: relative; padding: 34px 38px 30px; border: 1px solid var(--rule); background: linear-gradient(180deg, rgba(245,125,0,0.05) 0%, rgba(255,255,255,0.98) 18%, rgba(0,82,146,0.03) 100%); overflow: hidden; }
+.summary-shell::before { content: ""; position: absolute; inset: 0 auto auto 0; width: 100%; height: 6px; background: linear-gradient(90deg, var(--orange) 0%, var(--blue) 100%); }
+.summary-ribbon { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 999px; background: rgba(0,82,146,0.08); color: var(--blue); font-size: 10px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; }
+.summary-header { margin-top: 20px; display: flex; gap: 18px; justify-content: space-between; align-items: flex-start; }
+.summary-title { font-family: 'Arial Black', Arial, sans-serif; font-size: 36px; line-height: 1.05; color: var(--text); letter-spacing: -0.5px; margin: 0; max-width: 760px; }
+.summary-sub { margin-top: 10px; max-width: 720px; color: var(--text-2); font-size: 15px; line-height: 1.7; }
+.summary-controls { display: flex; align-items: center; justify-content: flex-end; min-width: 160px; }
+.summary-meta-row { margin-top: 18px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.summary-state-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: 0.7px; text-transform: uppercase; }
+.summary-state-badge.explicit { background: rgba(0,82,146,0.08); color: var(--blue); }
+.summary-state-badge.carried-forward { background: rgba(245,125,0,0.12); color: var(--orange); }
+.summary-state-badge.empty { background: rgba(169,169,170,0.14); color: var(--text-3); }
+.summary-state-badge.demo-readonly { background: rgba(33,157,152,0.12); color: var(--teal); }
+.summary-updated { font-size: 11px; color: var(--text-3); }
+.summary-layout { margin-top: 26px; display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 24px; align-items: start; }
+.summary-aside { padding: 18px 18px 16px; border: 1px solid rgba(0,82,146,0.12); background: rgba(255,255,255,0.75); }
+.summary-aside-label { font-size: 10px; font-weight: 700; letter-spacing: 0.9px; text-transform: uppercase; color: var(--orange); }
+.summary-aside-value { margin-top: 10px; font-family: 'Arial Black', Arial, sans-serif; font-size: 24px; color: var(--text); line-height: 1.15; }
+.summary-aside-copy { margin-top: 10px; font-size: 12px; line-height: 1.6; color: var(--text-2); }
+.summary-prose { min-height: 220px; font-size: 16px; color: var(--text); line-height: 1.8; }
+.summary-prose h2, .summary-prose h3 { margin: 0 0 12px; font-family: 'Arial Black', Arial, sans-serif; color: var(--blue); line-height: 1.18; }
+.summary-prose h2 { font-size: 24px; }
+.summary-prose h3 { font-size: 18px; color: var(--orange); }
+.summary-prose p { margin: 0 0 16px; }
+.summary-prose strong { font-weight: 700; color: var(--text); }
+.summary-prose ul, .summary-prose ol { margin: 0 0 18px 22px; padding: 0; }
+.summary-prose li { margin: 0 0 10px; }
+.summary-prose a { color: var(--blue); font-weight: 700; text-decoration: none; }
+.summary-prose a:hover { color: var(--orange); }
+.summary-empty-state { display: none; padding: 26px; border: 1px dashed rgba(0,82,146,0.22); background: rgba(255,255,255,0.76); }
+.summary-empty-state.active { display: block; }
+.summary-empty-title { font-family: 'Arial Black', Arial, sans-serif; font-size: 24px; color: var(--text); margin-bottom: 10px; }
+.summary-empty-copy { font-size: 14px; line-height: 1.7; color: var(--text-2); max-width: 620px; }
+.summary-editor-shell { display: grid; gap: 12px; }
+.summary-editor-toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
+.summary-editor-btn, .summary-action-btn { display: inline-flex; align-items: center; justify-content: center; padding: 9px 14px; border-radius: 6px; border: 1px solid rgba(0,82,146,0.16); background: #fff; color: var(--blue); font-size: 11px; font-weight: 700; letter-spacing: 0.5px; cursor: pointer; transition: all 0.15s; }
+.summary-editor-btn:hover, .summary-action-btn:hover { border-color: var(--orange); color: var(--orange); }
+.summary-action-btn.primary { background: var(--orange); border-color: var(--orange); color: #fff; }
+.summary-action-btn.primary:hover { background: #d96d00; border-color: #d96d00; color: #fff; }
+.summary-action-btn.secondary { background: rgba(0,82,146,0.05); }
+.summary-editor { min-height: 320px; padding: 18px 20px; border: 1px solid rgba(0,82,146,0.16); background: #fff; font-size: 16px; color: var(--text); line-height: 1.8; outline: none; }
+.summary-editor:focus { border-color: rgba(245,125,0,0.45); box-shadow: 0 0 0 3px rgba(245,125,0,0.12); }
+.summary-editor-actions { display: flex; gap: 10px; justify-content: flex-end; }
+.summary-readonly-pill { display: inline-flex; align-items: center; padding: 7px 10px; border-radius: 999px; background: rgba(33,157,152,0.12); color: var(--teal); font-size: 10px; font-weight: 700; letter-spacing: 0.7px; text-transform: uppercase; }
+.summary-shell.summary-is-editing #summary-content,
+.summary-shell.summary-is-editing #summary-empty-state { display: none !important; }
+
 /* ── UTIL ── */
 .divider { height: 1px; background: var(--rule); margin: 20px 0; }
 .mt-0 { margin-top: 0; }
@@ -829,19 +921,20 @@ __REPORT_OVERRIDES__
   </div>
   <div class="sidebar-group" id="sidebar-period-slot"></div>
   <div class="nav-section">Report Sections</div>
-  <div class="nav-link active" data-page-id="p-exec" title="Executive Scorecard" onclick="showPage('p-exec',this)"><div class="nav-icon"><span class="nav-icon-label">EX</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="4" height="4" rx="1"></rect><rect x="10" y="2" width="4" height="4" rx="1"></rect><rect x="2" y="10" width="4" height="4" rx="1"></rect><rect x="10" y="10" width="4" height="4" rx="1"></rect></svg></div><span class="nav-text">Executive Scorecard</span></div>
-  <div class="nav-link" data-page-id="p-avail" title="Service Availability" onclick="showPage('p-avail',this)"><div class="nav-icon"><span class="nav-icon-label">SA</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 11.5h11"></path><path d="M4 10V6.5"></path><path d="M8 10V4.5"></path><path d="M12 10V7.5"></path></svg></div><span class="nav-text">Service Availability</span></div>
-  <div class="nav-link" data-page-id="p-network" title="Network &amp; Offices" onclick="showPage('p-network',this)"><div class="nav-icon"><span class="nav-icon-label">NW</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="4" r="1.5"></circle><circle cx="13" cy="4" r="1.5"></circle><circle cx="8" cy="12" r="1.5"></circle><path d="M4.4 4.8 7 10.6"></path><path d="M11.6 4.8 9 10.6"></path><path d="M4.7 4h6.6"></path></svg></div><span class="nav-text">Network &amp; Offices</span></div>
-  <div class="nav-link" data-page-id="p-support" title="Support Operations" onclick="showPage('p-support',this)"><div class="nav-icon"><span class="nav-icon-label">SU</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8a4.5 4.5 0 0 1 9 0"></path><path d="M3.5 8v2.5c0 .8.7 1.5 1.5 1.5h1V8H3.5Z"></path><path d="M12.5 8v2.5c0 .8-.7 1.5-1.5 1.5h-1V8h2.5Z"></path><path d="M8 13.5h1.5"></path></svg></div><span class="nav-text">Support Operations</span></div>
-  <div class="nav-link" data-page-id="p-security" title="Security &amp; Patching" onclick="showPage('p-security',this)"><div class="nav-icon"><span class="nav-icon-label">SC</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.2 12.5 4v3.6c0 3-1.8 4.9-4.5 6.2-2.7-1.3-4.5-3.2-4.5-6.2V4L8 2.2Z"></path><path d="m5.8 8 1.4 1.4L10.4 6"></path></svg></div><span class="nav-text">Security &amp; Patching</span></div>
-  <div class="nav-link" data-page-id="p-assets" title="Assets &amp; Lifecycle" onclick="showPage('p-assets',this)"><div class="nav-icon"><span class="nav-icon-label">AS</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="8" rx="1.5"></rect><path d="M6 13h4"></path><path d="M8 11v2"></path></svg></div><span class="nav-text">Assets &amp; Lifecycle</span></div>
-  <div class="nav-link" data-page-id="p-change" title="Change &amp; Release" onclick="showPage('p-change',this)"><div class="nav-icon"><span class="nav-icon-label">CH</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 4H13"></path><path d="m10.5 1.5 2.5 2.5-2.5 2.5"></path><path d="M11 12H3"></path><path d="M5.5 9.5 3 12l2.5 2.5"></path></svg></div><span class="nav-text">Change &amp; Release</span></div>
-  <div class="nav-link" data-page-id="p-dev" title="Development &amp; Delivery" onclick="showPage('p-dev',this)"><div class="nav-icon"><span class="nav-icon-label">DV</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><path d="m6 4-3 4 3 4"></path><path d="m10 4 3 4-3 4"></path><path d="M9 2.5 7 13.5"></path></svg></div><span class="nav-text">Development &amp; Delivery</span></div>
-  <div class="nav-link" data-page-id="p-projects" title="Project Portfolio" onclick="showPage('p-projects',this)"><div class="nav-icon"><span class="nav-icon-label">PF</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 5.5h12"></path><path d="M6 3.5h4l1 2H5l1-2Z"></path><rect x="2" y="5.5" width="12" height="7" rx="1.5"></rect></svg></div><span class="nav-text">Project Portfolio</span></div>
-  <div class="nav-link" data-page-id="p-roadmap" title="Rolling Roadmap" onclick="showPage('p-roadmap',this)"><div class="nav-icon"><span class="nav-icon-label">RM</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="12" r="1.2"></circle><circle cx="7" cy="8" r="1.2"></circle><circle cx="13" cy="4" r="1.2"></circle><path d="M4 11.2 6.1 8.8"></path><path d="M7.9 7.2 12 4.8"></path></svg></div><span class="nav-text">Rolling Roadmap</span></div>
-  <div class="nav-link" data-page-id="p-gantt" title="Portfolio Gantt" onclick="showPage('p-gantt',this)"><div class="nav-icon"><span class="nav-icon-label">GT</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4.5h3"></path><path d="M3 8h6"></path><path d="M3 11.5h10"></path><path d="M7 3.5h6v2H7z"></path><path d="M10 7h3v2h-3z"></path></svg></div><span class="nav-text">Portfolio Gantt</span></div>
-  <div class="nav-link" data-page-id="p-budget" title="Budget &amp; Commercials" onclick="showPage('p-budget',this)"><div class="nav-icon"><span class="nav-icon-label">BD</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v11"></path><path d="M10.8 4.5C10.2 3.6 9.2 3 8 3c-1.7 0-3 .9-3 2.2 0 3 6 1.5 6 4.3 0 1.4-1.3 2.5-3.2 2.5-1.4 0-2.6-.5-3.4-1.5"></path></svg></div><span class="nav-text">Budget &amp; Commercials</span></div>
-  <div class="nav-link" data-page-id="p-risks" title="Risks &amp; Decisions" onclick="showPage('p-risks',this)"><div class="nav-icon"><span class="nav-icon-label">RK</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5 14 13H2L8 2.5Z"></path><path d="M8 6v3.3"></path><circle cx="8" cy="11.6" r=".8" fill="currentColor" stroke="none"></circle></svg></div><span class="nav-text">Risks &amp; Decisions</span></div>
+  <div class="nav-link active" data-page-id="p-summary" title="Exec Summary" onclick="showPage('p-summary',this)"><div class="nav-icon"><span class="nav-icon-label">ES</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5h6l2 2v9H4z"></path><path d="M10 2.5v2h2"></path><path d="M6 7h4"></path><path d="M6 10h5"></path></svg></div><span class="nav-text">Exec Summary</span><span class="nav-tooltip" role="tooltip">Exec Summary</span></div>
+  <div class="nav-link" data-page-id="p-exec" title="Executive Scorecard" onclick="showPage('p-exec',this)"><div class="nav-icon"><span class="nav-icon-label">EX</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="4" height="4" rx="1"></rect><rect x="10" y="2" width="4" height="4" rx="1"></rect><rect x="2" y="10" width="4" height="4" rx="1"></rect><rect x="10" y="10" width="4" height="4" rx="1"></rect></svg></div><span class="nav-text">Executive Scorecard</span><span class="nav-tooltip" role="tooltip">Executive Scorecard</span></div>
+  <div class="nav-link" data-page-id="p-avail" title="Service Availability" onclick="showPage('p-avail',this)"><div class="nav-icon"><span class="nav-icon-label">SA</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 11.5h11"></path><path d="M4 10V6.5"></path><path d="M8 10V4.5"></path><path d="M12 10V7.5"></path></svg></div><span class="nav-text">Service Availability</span><span class="nav-tooltip" role="tooltip">Service Availability</span></div>
+  <div class="nav-link" data-page-id="p-network" title="Network &amp; Offices" onclick="showPage('p-network',this)"><div class="nav-icon"><span class="nav-icon-label">NW</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="4" r="1.5"></circle><circle cx="13" cy="4" r="1.5"></circle><circle cx="8" cy="12" r="1.5"></circle><path d="M4.4 4.8 7 10.6"></path><path d="M11.6 4.8 9 10.6"></path><path d="M4.7 4h6.6"></path></svg></div><span class="nav-text">Network &amp; Offices</span><span class="nav-tooltip" role="tooltip">Network &amp; Offices</span></div>
+  <div class="nav-link" data-page-id="p-support" title="Support Operations" onclick="showPage('p-support',this)"><div class="nav-icon"><span class="nav-icon-label">SU</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8a4.5 4.5 0 0 1 9 0"></path><path d="M3.5 8v2.5c0 .8.7 1.5 1.5 1.5h1V8H3.5Z"></path><path d="M12.5 8v2.5c0 .8-.7 1.5-1.5 1.5h-1V8h2.5Z"></path><path d="M8 13.5h1.5"></path></svg></div><span class="nav-text">Support Operations</span><span class="nav-tooltip" role="tooltip">Support Operations</span></div>
+  <div class="nav-link" data-page-id="p-security" title="Security &amp; Patching" onclick="showPage('p-security',this)"><div class="nav-icon"><span class="nav-icon-label">SC</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.2 12.5 4v3.6c0 3-1.8 4.9-4.5 6.2-2.7-1.3-4.5-3.2-4.5-6.2V4L8 2.2Z"></path><path d="m5.8 8 1.4 1.4L10.4 6"></path></svg></div><span class="nav-text">Security &amp; Patching</span><span class="nav-tooltip" role="tooltip">Security &amp; Patching</span></div>
+  <div class="nav-link" data-page-id="p-assets" title="Assets &amp; Lifecycle" onclick="showPage('p-assets',this)"><div class="nav-icon"><span class="nav-icon-label">AS</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="8" rx="1.5"></rect><path d="M6 13h4"></path><path d="M8 11v2"></path></svg></div><span class="nav-text">Assets &amp; Lifecycle</span><span class="nav-tooltip" role="tooltip">Assets &amp; Lifecycle</span></div>
+  <div class="nav-link" data-page-id="p-change" title="Change &amp; Release" onclick="showPage('p-change',this)"><div class="nav-icon"><span class="nav-icon-label">CH</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 4H13"></path><path d="m10.5 1.5 2.5 2.5-2.5 2.5"></path><path d="M11 12H3"></path><path d="M5.5 9.5 3 12l2.5 2.5"></path></svg></div><span class="nav-text">Change &amp; Release</span><span class="nav-tooltip" role="tooltip">Change &amp; Release</span></div>
+  <div class="nav-link" data-page-id="p-dev" title="Development &amp; Delivery" onclick="showPage('p-dev',this)"><div class="nav-icon"><span class="nav-icon-label">DV</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><path d="m6 4-3 4 3 4"></path><path d="m10 4 3 4-3 4"></path><path d="M9 2.5 7 13.5"></path></svg></div><span class="nav-text">Development &amp; Delivery</span><span class="nav-tooltip" role="tooltip">Development &amp; Delivery</span></div>
+  <div class="nav-link" data-page-id="p-projects" title="Project Portfolio" onclick="showPage('p-projects',this)"><div class="nav-icon"><span class="nav-icon-label">PF</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 5.5h12"></path><path d="M6 3.5h4l1 2H5l1-2Z"></path><rect x="2" y="5.5" width="12" height="7" rx="1.5"></rect></svg></div><span class="nav-text">Project Portfolio</span><span class="nav-tooltip" role="tooltip">Project Portfolio</span></div>
+  <div class="nav-link" data-page-id="p-roadmap" title="Rolling Roadmap" onclick="showPage('p-roadmap',this)"><div class="nav-icon"><span class="nav-icon-label">RM</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="12" r="1.2"></circle><circle cx="7" cy="8" r="1.2"></circle><circle cx="13" cy="4" r="1.2"></circle><path d="M4 11.2 6.1 8.8"></path><path d="M7.9 7.2 12 4.8"></path></svg></div><span class="nav-text">Rolling Roadmap</span><span class="nav-tooltip" role="tooltip">Rolling Roadmap</span></div>
+  <div class="nav-link" data-page-id="p-gantt" title="Portfolio Gantt" onclick="showPage('p-gantt',this)"><div class="nav-icon"><span class="nav-icon-label">GT</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4.5h3"></path><path d="M3 8h6"></path><path d="M3 11.5h10"></path><path d="M7 3.5h6v2H7z"></path><path d="M10 7h3v2h-3z"></path></svg></div><span class="nav-text">Portfolio Gantt</span><span class="nav-tooltip" role="tooltip">Portfolio Gantt</span></div>
+  <div class="nav-link" data-page-id="p-budget" title="Budget &amp; Commercials" onclick="showPage('p-budget',this)"><div class="nav-icon"><span class="nav-icon-label">BD</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v11"></path><path d="M10.8 4.5C10.2 3.6 9.2 3 8 3c-1.7 0-3 .9-3 2.2 0 3 6 1.5 6 4.3 0 1.4-1.3 2.5-3.2 2.5-1.4 0-2.6-.5-3.4-1.5"></path></svg></div><span class="nav-text">Budget &amp; Commercials</span><span class="nav-tooltip" role="tooltip">Budget &amp; Commercials</span></div>
+  <div class="nav-link" data-page-id="p-risks" title="Risks &amp; Decisions" onclick="showPage('p-risks',this)"><div class="nav-icon"><span class="nav-icon-label">RK</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5 14 13H2L8 2.5Z"></path><path d="M8 6v3.3"></path><circle cx="8" cy="11.6" r=".8" fill="currentColor" stroke="none"></circle></svg></div><span class="nav-text">Risks &amp; Decisions</span><span class="nav-tooltip" role="tooltip">Risks &amp; Decisions</span></div>
   <div class="nav-section">App Utilities</div>
   <div class="sidebar-group" id="sidebar-app-utilities-slot"></div>
   <div class="nav-section">Saved Reports</div>
@@ -852,8 +945,51 @@ __REPORT_OVERRIDES__
 <!-- ════════════════════════════════════════ MAIN ════════════ -->
 <main class="main">
 
-<!-- ══════════════════════════════════ PAGE 1: EXEC SCORECARD ══ -->
-<div class="report-page active" id="p-exec">
+<!-- ══════════════════════════════════ PAGE 1: EXEC SUMMARY ══ -->
+<div class="report-page active" id="p-summary">
+  <div class="ph">
+    <div class="ph-brand"><div class="ph-mark">TA</div><div><div class="ph-org">TeacherActive</div><div class="ph-dept">Information Technology</div></div></div>
+    <div class="ph-meta">
+      <div><div class="ph-title">Exec Summary</div><div class="ph-sub">Leadership narrative for the current reporting period</div></div>
+      <div><div class="ph-period-label">Reporting Period</div><div class="ph-period-val">June 2026</div></div>
+    </div>
+  </div>
+  <div class="pb">
+    <div class="summary-shell" id="summary-content-block" data-export-id="summary-content-block" data-export-label="Exec summary">
+      <div class="summary-ribbon">Executive narrative · front-end authored</div>
+      <div class="summary-header">
+        <div>
+          <h1 class="summary-title">Executive summary for the period</h1>
+          <div class="summary-sub">Capture the board-ready story in one place: what matters this month, what is changing, and what needs leadership attention next.</div>
+        </div>
+        <div id="summary-controls-slot"></div>
+      </div>
+      <div class="summary-meta-row">
+        <div class="summary-state-badge empty" id="summary-state-badge">Loading</div>
+        <div class="summary-updated" id="summary-updated-at"></div>
+      </div>
+      <div class="summary-layout">
+        <div>
+          <div id="summary-editor-slot"></div>
+          <div class="summary-empty-state" id="summary-empty-state">
+            <div class="summary-empty-title">No exec summary has been written yet</div>
+            <div class="summary-empty-copy">Use this page to add a concise leadership narrative for the selected month. This text is stored in the app, not the workbook, so you can keep the operational data structured while making the executive story clearer.</div>
+          </div>
+          <div class="summary-prose" id="summary-content"></div>
+        </div>
+        <aside class="summary-aside">
+          <div class="summary-aside-label">Narrative intent</div>
+          <div class="summary-aside-value">Clear, executive-ready reporting.</div>
+          <div class="summary-aside-copy">Use this page to summarise performance, decisions, risk posture, delivery confidence, and the next leadership asks in plain language.</div>
+        </aside>
+      </div>
+    </div>
+  </div>
+  <div class="pf"><div class="pf-source">Source: Executive narrative layer · Stored per report and reporting month</div><div class="pf-page">EXEC SUMMARY · PAGE 1 OF 14</div></div>
+</div>
+
+<!-- ══════════════════════════════════ PAGE 2: EXEC SCORECARD ══ -->
+<div class="report-page" id="p-exec">
   <div class="ph">
     <div class="ph-brand"><div class="ph-mark">TA</div><div><div class="ph-org">TeacherActive</div><div class="ph-dept">Information Technology</div></div></div>
     <div class="ph-meta">

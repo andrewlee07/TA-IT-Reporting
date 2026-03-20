@@ -10,7 +10,7 @@ export function initReportApp(root, options) {
   var Chart = options.ChartLib || window.Chart;
   var D = options.data;
   var ACTIVE_MONTH = options.activeMonth;
-  var INITIAL_PAGE_ID = options.initialPageId || "p-exec";
+  var INITIAL_PAGE_ID = options.initialPageId || "p-summary";
   var SHOW_ALL_PAGES = Boolean(options.showAllPages);
   var document = {
     getElementById: function getElementById(id) {
@@ -166,6 +166,151 @@ export function initReportApp(root, options) {
     });
   }
 
+  function toMetricNumber(value) {
+    if (value === null || typeof value === "undefined" || value === "") {
+      return null;
+    }
+
+    if (typeof value === "number") {
+      return Number.isFinite(value) ? value : null;
+    }
+
+    var normalized = parseFloat(String(value).replace(/[^0-9.-]+/g, ""));
+    return Number.isFinite(normalized) ? normalized : null;
+  }
+
+  function numericMonthSeries(rows, metric) {
+    return monthSeries(rows, metric)
+      .map(function mapMetric(value) {
+        return toMetricNumber(value);
+      })
+      .filter(function filterMetric(value) {
+        return value !== null;
+      });
+  }
+
+  function sparkSegmentColor(value, baseColor, cfg) {
+    if (!cfg) {
+      return baseColor;
+    }
+
+    if (cfg.dir === "up") {
+      if (value >= cfg.good) {
+        return COLORS.teal;
+      }
+      if (value >= cfg.warn) {
+        return COLORS.orange;
+      }
+      return "#C0392B";
+    }
+
+    if (value <= cfg.good) {
+      return COLORS.teal;
+    }
+    if (value <= cfg.warn) {
+      return COLORS.orange;
+    }
+    return "#C0392B";
+  }
+
+  function renderSparkline(values, baseColor, cfg, width, height) {
+    if (!values || values.length < 2) {
+      return "";
+    }
+
+    var numericValues = values
+      .map(function mapValue(value) {
+        return toMetricNumber(value);
+      })
+      .filter(function filterValue(value) {
+        return value !== null;
+      });
+
+    if (numericValues.length < 2) {
+      return "";
+    }
+
+    var minValue = Math.min.apply(null, numericValues);
+    var maxValue = Math.max.apply(null, numericValues);
+    var range = maxValue - minValue || 1;
+    var innerWidth = width || 84;
+    var innerHeight = height || 30;
+    var points = numericValues.map(function mapPoint(value, index) {
+      return {
+        x: numericValues.length === 1 ? innerWidth / 2 : (index / (numericValues.length - 1)) * innerWidth,
+        y: innerHeight - ((value - minValue) / range) * (innerHeight - 4) - 2,
+        value: value,
+      };
+    });
+
+    var segments = "";
+    for (var index = 0; index < points.length - 1; index += 1) {
+      var point = points[index];
+      var nextPoint = points[index + 1];
+      var averageValue = (point.value + nextPoint.value) / 2;
+      segments +=
+        '<line x1="' +
+        point.x.toFixed(1) +
+        '" y1="' +
+        point.y.toFixed(1) +
+        '" x2="' +
+        nextPoint.x.toFixed(1) +
+        '" y2="' +
+        nextPoint.y.toFixed(1) +
+        '" stroke="' +
+        sparkSegmentColor(averageValue, baseColor, cfg) +
+        '" stroke-width="2.4" stroke-linecap="round"/>';
+    }
+
+    var dots = points
+      .map(function mapDot(point) {
+        return (
+          '<circle cx="' +
+          point.x.toFixed(1) +
+          '" cy="' +
+          point.y.toFixed(1) +
+          '" r="1.65" fill="' +
+          sparkSegmentColor(point.value, baseColor, cfg) +
+          '"/>'
+        );
+      })
+      .join("");
+
+    return (
+      '<div class="kc-spark" aria-hidden="true"><svg viewBox="0 0 ' +
+      innerWidth +
+      " " +
+      innerHeight +
+      '" preserveAspectRatio="none">' +
+      segments +
+      dots +
+      "</svg></div>"
+    );
+  }
+
+  var KPI_SPARK_CONFIG = {
+    resolutionSLA: { dir: "up", good: 98.5, warn: 95 },
+    csat: { dir: "up", good: 4.6, warn: 4.3 },
+    critVulns: { dir: "down", good: 1, warn: 3 },
+    changeSuccess: { dir: "up", good: 94, warn: 90 },
+    devBacklog: { dir: "down", good: 22, warn: 30 },
+    supportOpened: null,
+    supportClosed: null,
+    supportBacklog: { dir: "down", good: 25, warn: 35 },
+    supportResolutionDays: { dir: "down", good: 1.4, warn: 1.7 },
+    securityPatch: { dir: "up", good: 95, warn: 92 },
+    securityMfa: { dir: "up", good: 99, warn: 97 },
+    securityOverdue: { dir: "down", good: 18, warn: 28 },
+    assetLifecycle: { dir: "up", good: 82, warn: 78 },
+    assetIncidents: { dir: "down", good: 9, warn: 13 },
+    changeReleases: { dir: "up", good: 7, warn: 5 },
+    changeFailures: { dir: "down", good: 1, warn: 3 },
+    changeIncidents: { dir: "down", good: 0, warn: 1 },
+    devClosed: { dir: "up", good: 8, warn: 5 },
+    devBlocked: { dir: "down", good: 4, warn: 6 },
+    devCsat: { dir: "up", good: 4.6, warn: 4.2 },
+  };
+
   function slugify(value) {
     return String(value)
       .trim()
@@ -223,10 +368,11 @@ export function initReportApp(root, options) {
     return ' id="' + escapeAttr(id) + '" data-export-id="' + escapeAttr(id) + '" data-export-label="' + escapeAttr(label) + '"';
   }
 
-  function renderKpiCard(id, tone, label, valueHtml, deltaHtml, deltaClass) {
+  function renderKpiCard(id, tone, label, valueHtml, deltaHtml, deltaClass, sparkHtml) {
     return (
       '<div class="kc ' +
       tone +
+      (sparkHtml ? " has-spark" : "") +
       '"' +
       exportAttrs(id, label) +
       '><div class="kc-label">' +
@@ -237,7 +383,9 @@ export function initReportApp(root, options) {
       (deltaClass ? " " + deltaClass : "") +
       '">' +
       deltaHtml +
-      "</div></div>"
+      "</div>" +
+      (sparkHtml || "") +
+      "</div>"
     );
   }
 
@@ -317,6 +465,9 @@ export function initReportApp(root, options) {
 
   function rebuildVisiblePage(id) {
     switch (id) {
+      case "p-summary":
+        buildSummaryPage();
+        break;
       case "p-exec":
         buildExecutivePage();
         break;
@@ -359,6 +510,94 @@ export function initReportApp(root, options) {
       default:
         break;
     }
+  }
+
+  function buildSummaryPage() {
+    var summary = D.execSummary || {
+      mode: "empty",
+      contentHtml: "",
+      excerpt: "",
+      updatedAt: null,
+      sourceReportId: null,
+    };
+    var stateBadge = document.getElementById("summary-state-badge");
+    var updatedAt = document.getElementById("summary-updated-at");
+    var content = document.getElementById("summary-content");
+    var emptyState = document.getElementById("summary-empty-state");
+
+    if (!stateBadge || !updatedAt || !content || !emptyState) {
+      return;
+    }
+
+    var emptyTitle = emptyState.querySelector(".summary-empty-title");
+    var emptyCopy = emptyState.querySelector(".summary-empty-copy");
+    var badgeLabel = "Saved summary";
+    var updatedLabel = "";
+    var showContent = false;
+    var showEmptyState = false;
+
+    stateBadge.className = "summary-state-badge " + summary.mode;
+
+    if (summary.mode === "loading") {
+      badgeLabel = "Loading";
+      showEmptyState = true;
+      if (emptyTitle) {
+        emptyTitle.textContent = "Loading exec summary";
+      }
+      if (emptyCopy) {
+        emptyCopy.textContent = "Fetching the latest narrative for this report and reporting month.";
+      }
+    } else if (summary.mode === "empty") {
+      badgeLabel = "No summary yet";
+      showEmptyState = true;
+      if (emptyTitle) {
+        emptyTitle.textContent = "No exec summary has been written yet";
+      }
+      if (emptyCopy) {
+        emptyCopy.textContent =
+          "Use this page to add a concise leadership narrative for the selected month. This text is stored in the app, not the workbook, so you can keep the structured reporting model intact.";
+      }
+    } else if (summary.mode === "carried-forward") {
+      badgeLabel = "Inherited draft";
+      showContent = true;
+      if (summary.updatedAt) {
+        updatedLabel = "Inherited from a prior report · last updated " + new Date(summary.updatedAt).toLocaleString("en-GB", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      }
+    } else if (summary.mode === "demo-readonly") {
+      badgeLabel = "Bundled example";
+      showContent = true;
+      if (summary.updatedAt) {
+        updatedLabel = "Read-only demo narrative · refreshed " + new Date(summary.updatedAt).toLocaleDateString("en-GB", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        });
+      }
+    } else {
+      badgeLabel = "Saved summary";
+      showContent = true;
+      if (summary.updatedAt) {
+        updatedLabel = "Last updated " + new Date(summary.updatedAt).toLocaleString("en-GB", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      }
+    }
+
+    stateBadge.textContent = badgeLabel;
+    updatedAt.textContent = updatedLabel;
+    content.innerHTML = showContent ? summary.contentHtml || "" : "";
+    content.style.display = showContent ? "block" : "none";
+    emptyState.classList.toggle("active", showEmptyState);
   }
 
   function showPage(id, el, runtimeOptions) {
@@ -446,6 +685,11 @@ export function initReportApp(root, options) {
     var changePrev = previous(D.change);
     var dev = latest(D.dev);
     var devPrev = previous(D.dev);
+    var execSupportSlaSpark = renderSparkline(numericMonthSeries(D.support, "ResolutionSLA"), COLORS.blue, KPI_SPARK_CONFIG.resolutionSLA);
+    var execCsatSpark = renderSparkline(numericMonthSeries(D.support, "CSAT"), COLORS.teal, KPI_SPARK_CONFIG.csat);
+    var execCriticalVulnSpark = renderSparkline(numericMonthSeries(D.security, "CritVulns"), COLORS.teal, KPI_SPARK_CONFIG.critVulns);
+    var execChangeSpark = renderSparkline(numericMonthSeries(D.change, "SuccessRate"), COLORS.orange, KPI_SPARK_CONFIG.changeSuccess);
+    var execBacklogSpark = renderSparkline(numericMonthSeries(D.dev, "BacklogEnd"), COLORS.grey, KPI_SPARK_CONFIG.devBacklog);
 
     buildSvcTiles("exec-svc-grid", services);
 
@@ -459,6 +703,7 @@ export function initReportApp(root, options) {
           support.ResolutionSLA,
           "▲ " + (pctNum(support.ResolutionSLA) - pctNum(supportPrev.ResolutionSLA)).toFixed(1) + " pts vs prior month",
           "up",
+          execSupportSlaSpark,
         ) +
         renderKpiCard(
           "exec-kpi-user-csat",
@@ -467,6 +712,7 @@ export function initReportApp(root, options) {
           support.CSAT,
           "▲ " + (pctNum(support.CSAT) - pctNum(supportPrev.CSAT)).toFixed(1) + " vs prior month",
           "up",
+          execCsatSpark,
         ) +
         renderKpiCard(
           "exec-kpi-critical-vulns",
@@ -475,6 +721,7 @@ export function initReportApp(root, options) {
           security.CritVulns,
           security.CritVulns <= securityPrev.CritVulns ? "▼ reduced backlog" : "▲ increased backlog",
           "up",
+          execCriticalVulnSpark,
         ) +
         renderKpiCard(
           "exec-kpi-change-success",
@@ -483,6 +730,7 @@ export function initReportApp(root, options) {
           change.SuccessRate.replace("%", "") + '<span class="u">%</span>',
           "▲ " + (pctNum(change.SuccessRate) - pctNum(changePrev.SuccessRate)).toFixed(1) + " pts vs prior month",
           "up",
+          execChangeSpark,
         ) +
         renderKpiCard(
           "exec-kpi-dev-backlog",
@@ -491,6 +739,7 @@ export function initReportApp(root, options) {
           dev.BacklogEnd,
           dev.BacklogEnd <= devPrev.BacklogEnd ? "▼ reduced backlog" : "▲ increased backlog",
           "up",
+          execBacklogSpark,
         );
     }
 
@@ -893,7 +1142,15 @@ export function initReportApp(root, options) {
       .join("");
 
     document.getElementById("support-kpis").innerHTML =
-      renderKpiCard("support-kpi-opened", "blue", "Opened", support.Opened.toLocaleString(), "tickets this month") +
+      renderKpiCard(
+        "support-kpi-opened",
+        "blue",
+        "Opened",
+        support.Opened.toLocaleString(),
+        "tickets this month",
+        "",
+        renderSparkline(numericMonthSeries(D.support, "Opened"), COLORS.blue, KPI_SPARK_CONFIG.supportOpened),
+      ) +
       renderKpiCard(
         "support-kpi-closed",
         "orange",
@@ -901,6 +1158,7 @@ export function initReportApp(root, options) {
         support.Closed.toLocaleString(),
         support.Closed >= support.Opened ? "▲ net positive flow" : "▼ net negative flow",
         "up",
+        renderSparkline(numericMonthSeries(D.support, "Closed"), COLORS.orange, KPI_SPARK_CONFIG.supportClosed),
       ) +
       renderKpiCard(
         "support-kpi-backlog",
@@ -909,6 +1167,7 @@ export function initReportApp(root, options) {
         support.Backlog,
         support.Backlog <= supportPrev.Backlog ? "▼ lower than prior month" : "▲ higher than prior month",
         "up",
+        renderSparkline(numericMonthSeries(D.support, "Backlog"), COLORS.teal, KPI_SPARK_CONFIG.supportBacklog),
       ) +
       renderKpiCard(
         "support-kpi-avg-resolution",
@@ -917,6 +1176,7 @@ export function initReportApp(root, options) {
         support.AvgResolution + '<span class="u"> days</span>',
         support.AvgResolution <= supportPrev.AvgResolution ? "▲ improved turnaround" : "▼ slower turnaround",
         "up",
+        renderSparkline(numericMonthSeries(D.support, "AvgResolution"), COLORS.teal, KPI_SPARK_CONFIG.supportResolutionDays),
       ) +
       renderKpiCard(
         "support-kpi-major-incidents",
@@ -1014,6 +1274,7 @@ export function initReportApp(root, options) {
         security.CritVulns,
         security.CritVulns <= previousSecurity.CritVulns ? "▼ reduced backlog" : "▲ increased backlog",
         "up",
+        renderSparkline(numericMonthSeries(D.security, "CritVulns"), COLORS.teal, KPI_SPARK_CONFIG.critVulns),
       ) +
       renderKpiCard(
         "sec-kpi-workstation-patch",
@@ -1022,6 +1283,7 @@ export function initReportApp(root, options) {
         security.WkstationPatch.replace("%", "") + '<span class="u">%</span>',
         pctNum(security.WkstationPatch) >= pctNum(previousSecurity.WkstationPatch) ? "▲ improving" : "▼ lower than prior month",
         "up",
+        renderSparkline(numericMonthSeries(D.security, "WkstationPatch"), COLORS.blue, KPI_SPARK_CONFIG.securityPatch),
       ) +
       renderKpiCard(
         "sec-kpi-mfa-coverage",
@@ -1030,6 +1292,7 @@ export function initReportApp(root, options) {
         security.MFACoverage.replace("%", "") + '<span class="u">%</span>',
         "▲ near full coverage",
         "up",
+        renderSparkline(numericMonthSeries(D.security, "MFACoverage"), COLORS.teal, KPI_SPARK_CONFIG.securityMfa),
       ) +
       renderKpiCard(
         "sec-kpi-overdue-remediation",
@@ -1038,6 +1301,7 @@ export function initReportApp(root, options) {
         security.OverdueRemediation,
         security.OverdueRemediation <= previousSecurity.OverdueRemediation ? "▼ reduced backlog" : "▲ higher than prior month",
         "up",
+        renderSparkline(numericMonthSeries(D.security, "OverdueRemediation"), COLORS.orange, KPI_SPARK_CONFIG.securityOverdue),
       );
 
     document.getElementById("sec-compliance-bars").innerHTML = [
@@ -1122,8 +1386,36 @@ export function initReportApp(root, options) {
         (laptop.ActiveDevices + mobile.ActiveDevices + monitor.ActiveDevices).toLocaleString(),
         "Laptop · Mobile · Monitor",
       ) +
-      renderKpiCard("asset-kpi-laptops-in-lifecycle", "teal", "Laptops in Lifecycle", laptop.PctWithin, "▲ lifecycle coverage", "up") +
-      renderKpiCard("asset-kpi-laptop-incidents", "orange", "Laptop Incidents", laptop.IncidentsLinked, "▼ linked hardware incidents", "up") +
+      renderKpiCard(
+        "asset-kpi-laptops-in-lifecycle",
+        "teal",
+        "Laptops in Lifecycle",
+        laptop.PctWithin,
+        "▲ lifecycle coverage",
+        "up",
+        renderSparkline(
+          laptopSeries.map(function mapLifecycle(asset) {
+            return asset.PctWithin;
+          }),
+          COLORS.teal,
+          KPI_SPARK_CONFIG.assetLifecycle,
+        ),
+      ) +
+      renderKpiCard(
+        "asset-kpi-laptop-incidents",
+        "orange",
+        "Laptop Incidents",
+        laptop.IncidentsLinked,
+        "▼ linked hardware incidents",
+        "up",
+        renderSparkline(
+          laptopSeries.map(function mapIncident(asset) {
+            return asset.IncidentsLinked;
+          }),
+          COLORS.orange,
+          KPI_SPARK_CONFIG.assetIncidents,
+        ),
+      ) +
       renderKpiCard("asset-kpi-stock-cover", "grey", "Stock Cover", laptop.StockOnHand + '<span class="u"> units</span>', "Ready to deploy");
 
     document.getElementById("asset-tiles").innerHTML = [laptop, mobile, monitor]
@@ -1259,6 +1551,7 @@ export function initReportApp(root, options) {
         change.ReleasesDeployed,
         change.ReleasesDeployed >= changePrev.ReleasesDeployed ? "▲ release throughput" : "▼ release throughput",
         "up",
+        renderSparkline(numericMonthSeries(D.change, "ReleasesDeployed"), COLORS.teal, KPI_SPARK_CONFIG.changeReleases),
       ) +
       renderKpiCard(
         "change-kpi-failed-changes",
@@ -1267,6 +1560,7 @@ export function initReportApp(root, options) {
         change.FailedChanges,
         change.FailedChanges <= changePrev.FailedChanges ? "▼ improved" : "▲ worsened",
         "up",
+        renderSparkline(numericMonthSeries(D.change, "FailedChanges"), COLORS.orange, KPI_SPARK_CONFIG.changeFailures),
       ) +
       renderKpiCard(
         "change-kpi-incidents",
@@ -1275,6 +1569,7 @@ export function initReportApp(root, options) {
         change.ChangesIncidents,
         change.ChangesIncidents === 0 ? "no service impact" : "service impact recorded",
         "up",
+        renderSparkline(numericMonthSeries(D.change, "ChangesIncidents"), COLORS.teal, KPI_SPARK_CONFIG.changeIncidents),
       );
 
     registerChart("c-change-breakdown", function createChangeBreakdownChart() {
@@ -1310,6 +1605,7 @@ export function initReportApp(root, options) {
         dev.BacklogEnd,
         dev.BacklogEnd <= devPrev.BacklogEnd ? "▼ reduced backlog" : "▲ higher backlog",
         "up",
+        renderSparkline(numericMonthSeries(D.dev, "BacklogEnd"), COLORS.blue, KPI_SPARK_CONFIG.devBacklog),
       ) +
       renderKpiCard(
         "dev-kpi-tasks-closed",
@@ -1318,6 +1614,7 @@ export function initReportApp(root, options) {
         dev.Closed,
         dev.Closed >= devPrev.Closed ? "▲ improved throughput" : "▼ lower throughput",
         "up",
+        renderSparkline(numericMonthSeries(D.dev, "Closed"), COLORS.teal, KPI_SPARK_CONFIG.devClosed),
       ) +
       renderKpiCard(
         "dev-kpi-blocked-items",
@@ -1326,6 +1623,7 @@ export function initReportApp(root, options) {
         dev.Blocked,
         dev.Blocked <= devPrev.Blocked ? "▼ fewer blockers" : "▲ more blockers",
         "up",
+        renderSparkline(numericMonthSeries(D.dev, "Blocked"), COLORS.orange, KPI_SPARK_CONFIG.devBlocked),
       ) +
       renderKpiCard(
         "dev-kpi-csat",
@@ -1334,6 +1632,7 @@ export function initReportApp(root, options) {
         dev.CSAT,
         pctNum(dev.CSAT) >= pctNum(devPrev.CSAT) ? "▲ sponsor sentiment improving" : "▼ sponsor sentiment lower",
         "up",
+        renderSparkline(numericMonthSeries(D.dev, "CSAT"), COLORS.teal, KPI_SPARK_CONFIG.devCsat),
       );
 
     registerChart("c-dev-pipeline", function createDevelopmentPipelineChart() {
@@ -2305,6 +2604,7 @@ export function initReportApp(root, options) {
   }
 
   updateStaticChrome();
+  buildSummaryPage();
   buildExecutivePage();
   buildAvailabilityPage();
   buildNetworkPage();

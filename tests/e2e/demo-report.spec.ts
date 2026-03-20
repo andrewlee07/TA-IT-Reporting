@@ -40,6 +40,22 @@ async function seedLegacyV2Report() {
   return report.id;
 }
 
+async function seedV3Report(originalFilename = "IT_Exec_Reporting_Ingestion_Template_v3_dummy_data.xlsx") {
+  const snapshot = JSON.parse(readFileSync(DEMO_SNAPSHOT_PATH, "utf8")) as NormalizedReportSnapshot;
+  const report = await createLocalReport({
+    title: `${originalFilename.replace(/\.xlsx$/, "")} · ${snapshot.currentMonth}`,
+    originalFilename,
+    templateKey: snapshot.metadata.templateKey,
+    templateVersion: snapshot.metadata.templateVersion,
+    currentMonth: snapshot.currentMonth,
+    availableMonths: snapshot.availableMonths,
+    snapshot,
+    workbookObjectKey: `workbooks/${originalFilename}`,
+  });
+
+  return report.id;
+}
+
 test("bundled demo report renders directly in the app shell", async ({ page }) => {
   await page.goto("/?report=demo&month=2026-06&page=p-exec");
 
@@ -49,6 +65,7 @@ test("bundled demo report renders directly in the app shell", async ({ page }) =
   await expect(page.locator(".nav-link.active")).toContainText("Executive Scorecard");
   await expect(page.locator(".report-page.active .ph-title")).toHaveText("Executive IT Scorecard");
   await expect(page.locator("#exec-svc-grid .svc-tile")).toHaveCount(6);
+  await expect(page.locator("#exec-kpis .kc-spark")).toHaveCount(5);
 
   const sidebarWidth = await page.locator(".sidebar").evaluate((element) => Math.round(element.getBoundingClientRect().width));
   expect(sidebarWidth).toBeGreaterThanOrEqual(372);
@@ -57,13 +74,76 @@ test("bundled demo report renders directly in the app shell", async ({ page }) =
   expect(boxShadow).toBe("none");
 });
 
+test("major KPI strips render sparkline trends derived from workbook history", async ({ page }) => {
+  await page.goto("/?report=demo&month=2026-06&page=p-support");
+
+  await expect(page.locator("#support-kpis .kc-spark")).toHaveCount(4);
+  expect(await page.locator("#support-kpi-backlog .kc-spark line").count()).toBeGreaterThan(0);
+
+  await page.goto("/?report=demo&month=2026-06&page=p-security");
+  await expect(page.locator("#sec-kpis .kc-spark")).toHaveCount(4);
+});
+
 test("root route prefers demo or newer reports over a legacy v2 saved upload", async ({ page }) => {
   const legacyReportId = await seedLegacyV2Report();
 
   await page.goto("/");
   await expect(page).not.toHaveURL(new RegExp(`report=${legacyReportId}$`));
   await expect(page).not.toHaveURL(new RegExp(`report=${legacyReportId}&`));
-  await expect(page.locator(".report-page.active .ph-title")).toHaveText("Executive IT Scorecard");
+  await expect(page.locator(".report-page.active .ph-title")).toHaveText("Exec Summary");
+  await expect(page.locator(".nav-link.active")).toContainText("Exec Summary");
+});
+
+test("bundled demo renders a read-only exec summary as the first page", async ({ page }) => {
+  await page.goto("/?report=demo&month=2026-06&page=p-summary");
+
+  await expect(page.locator(".report-page.active .ph-title")).toHaveText("Exec Summary");
+  await expect(page.locator("#summary-state-badge")).toContainText("Bundled example");
+  await expect(page.locator("#summary-content")).toContainText("executive narrative");
+  await expect(page.locator(".summary-readonly-pill")).toContainText("read only");
+});
+
+test("saved reports can add and persist an exec summary through the UI", async ({ page }) => {
+  const reportId = await seedV3Report(`exec-summary-ui-seed-${Date.now()}.xlsx`);
+
+  await page.goto(`/?report=${reportId}&month=2026-06&page=p-summary`);
+
+  const actionButton = page
+    .getByRole("button", { name: /Add exec summary|Review inherited draft|Edit summary/ })
+    .first();
+  await actionButton.click();
+  await page.locator(".summary-editor").click();
+  await page.keyboard.press("Meta+A");
+  await page.keyboard.press("Backspace");
+  await page.keyboard.type("Executive summary drafted in the app.");
+  await page.getByRole("button", { name: "Save" }).click();
+
+  await expect(page.locator("#summary-content")).toContainText("Executive summary drafted in the app.");
+  await expect(page.locator("#summary-state-badge")).toContainText("Saved summary");
+
+  await page.reload();
+  await expect(page.locator("#summary-content")).toContainText("Executive summary drafted in the app.");
+});
+
+test("exec summaries carry forward for refreshed uploads in the same report family", async ({ request }) => {
+  const originalFilename = "carry-forward-pack.xlsx";
+  const reportId = await seedV3Report(originalFilename);
+
+  const saveResponse = await request.put(`/api/reports/${reportId}/exec-summary?month=2026-06`, {
+    data: {
+      contentHtml: "<p><strong>Carry-forward</strong> candidate narrative.</p>",
+    },
+  });
+
+  expect(saveResponse.ok()).toBeTruthy();
+
+  const refreshedReportId = await seedV3Report(originalFilename);
+  const summaryResponse = await request.get(`/api/reports/${refreshedReportId}/exec-summary?month=2026-06`);
+
+  expect(summaryResponse.ok()).toBeTruthy();
+  const payload = (await summaryResponse.json()) as { summary: { mode: string; contentHtml: string } };
+  expect(payload.summary.mode).toBe("carried-forward");
+  expect(payload.summary.contentHtml).toContain("Carry-forward");
 });
 
 test("sidebar collapses into an icon rail and persists across refresh", async ({ page }) => {
@@ -82,6 +162,9 @@ test("sidebar collapses into an icon rail and persists across refresh", async ({
   await expect(page.locator(".shell")).toHaveClass(/sidebar-use-icons/);
   await expect(page.locator(".nav-link.active .nav-icon-glyph")).toBeVisible();
   await expect(page.locator(".nav-link.active .nav-icon-label")).toBeHidden();
+  await page.locator(".nav-link.active").hover();
+  await expect(page.locator(".nav-link.active .nav-tooltip")).toBeVisible();
+  await expect(page.locator(".nav-link.active .nav-tooltip")).toHaveText("Network & Offices");
 
   await page.getByRole("button", { name: "Expand sidebar" }).click();
   await page.getByRole("button", { name: "Initials" }).click();
