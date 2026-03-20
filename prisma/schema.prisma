@@ -1,0 +1,49 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ReportValidationStatus {
+  VALID
+  INVALID
+}
+
+model Report {
+  id                String                 @id @default(cuid())
+  title             String
+  originalFilename  String
+  templateKey       String
+  templateVersion   Int
+  validationStatus  ReportValidationStatus @default(VALID)
+  workbookObjectKey String
+  availableMonths   Json                   @db.JsonB
+  currentMonth      String
+  metadata          Json                   @db.JsonB
+  snapshot          Json                   @db.JsonB
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  exports           ReportExport[]
+
+  @@index([createdAt(sort: Desc)])
+}
+
+model ReportExport {
+  id          String   @id @default(cuid())
+  reportId    String
+  exportType  String
+  objectKey   String
+  contentType String
+  month       String?
+  pageId      String?
+  blockId     String?
+  metadata    Json?    @db.JsonB
+  createdAt   DateTime @default(now())
+  report      Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId, exportType])
+  @@index([createdAt(sort: Desc)])
+}

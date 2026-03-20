@@ -1,36 +1,136 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# TeacherActive Exec Reporting App v1
+
+Internal Next.js app for workbook-driven executive IT reporting. The app ingests a locked Excel template, validates it against the `v2` contract, stores the uploaded workbook and normalized snapshot, renders the 12-page exec pack, and exports report assets as PNG or PDF.
+
+## Stack
+
+- `Next.js 16` + `React 19` + `TypeScript`
+- `Prisma 7` + PostgreSQL JSONB snapshots
+- Local or S3 object storage for uploaded workbooks and generated exports
+- `Playwright` for pixel-matched PNG/PDF export generation
+- `xlsx`, `jszip`, and XML inspection for workbook ingestion and contract validation
+
+## Workbook Contract
+
+The app only accepts the locked `v2` template.
+
+- `Template Key = IT_EXEC_TEMPLATE_V2`
+- `Template Version = 2`
+
+### Required parsed sheets
+
+- `Periods`
+- `Entities`
+- `Office_Locations`
+- `INPUT_Office_Network_Avail`
+- `INPUT_Service_Availability`
+- `INPUT_Support_Operations`
+- `INPUT_Top_Oldest_Tickets`
+- `INPUT_Security_Patching`
+- `INPUT_Assets_Lifecycle`
+- `INPUT_Change_Release`
+- `INPUT_Dev_Delivery`
+- `INPUT_Project_Portfolio`
+- `INPUT_Rolling_Roadmap`
+- `INPUT_Budget_Commercials`
+- `INPUT_Top_Risks`
+- `INPUT_Narrative_Notes`
+
+### Office network additions in v2
+
+- `Office_Locations` must contain table `TOfficeLocations`
+- `INPUT_Office_Network_Avail` must contain table `TOfficeNetworkAvailability`
+- `INPUT_Service_Availability` must not contain manual `Network` rows
+
+Overall Network performance is derived from office rows per reporting month:
+
+- `Availability %` = arithmetic mean of in-scope office availability
+- `Outage Minutes` = sum of office outage minutes
+- `Major Incidents` = sum of office major incidents
+- Derived office metrics also include `perfectOffices`, `below99_9Offices`, `below99Offices`, and `worstOffice`
 
 ## Getting Started
 
-First, run the development server:
+1. Install dependencies:
+
+```bash
+npm install
+```
+
+2. Copy env vars:
+
+```bash
+cp .env.example .env
+```
+
+3. Start PostgreSQL and set `DATABASE_URL`.
+
+4. Generate the Prisma client and run migrations:
+
+```bash
+npm run db:generate
+npm run db:migrate
+```
+
+5. Start the app:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Template Files
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- Bundled v2 fixture: [fixtures/IT_Exec_Reporting_Ingestion_Template_v2_dummy_data.xlsx](/Users/andrewlee/GitHub/TA-IT Reporting Claude/fixtures/IT_Exec_Reporting_Ingestion_Template_v2_dummy_data.xlsx)
+- Downloadable template: [public/templates/IT_Exec_Reporting_Ingestion_Template_v2_dummy_data.xlsx](/Users/andrewlee/GitHub/TA-IT Reporting Claude/public/templates/IT_Exec_Reporting_Ingestion_Template_v2_dummy_data.xlsx)
 
-## Learn More
+To regenerate the workbook after changing the upgrade script:
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm run template:upgrade
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+To generate a JSON snapshot from the bundled workbook:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm run snapshot:demo
+```
 
-## Deploy on Vercel
+## API
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- `POST /api/reports`
+  - Upload a workbook, validate it, parse it, persist the workbook, and store the normalized snapshot
+- `GET /api/reports/:id`
+  - Load report metadata and its stored snapshot
+- `POST /api/reports/:id/exports`
+  - Generate:
+    - `page-png`
+    - `block-png`
+    - `full-pdf`
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Verification
+
+Typecheck:
+
+```bash
+npm run typecheck
+```
+
+Lint:
+
+```bash
+npm run lint
+```
+
+Unit tests:
+
+```bash
+npm test
+```
+
+E2E smoke tests:
+
+```bash
+npm run test:e2e
+```

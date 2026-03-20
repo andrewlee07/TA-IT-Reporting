@@ -1,0 +1,3694 @@
+[
+  {
+    "id": "MtHwQrxiVhEQm7jrkHOlc",
+    "title": "IT_Exec_Reporting_Ingestion_Template_v2_dummy_data · 2026-06",
+    "originalFilename": "IT_Exec_Reporting_Ingestion_Template_v2_dummy_data.xlsx",
+    "templateKey": "IT_EXEC_TEMPLATE_V2",
+    "templateVersion": 2,
+    "currentMonth": "2026-06",
+    "availableMonths": [
+      "2026-01",
+      "2026-02",
+      "2026-03",
+      "2026-04",
+      "2026-05",
+      "2026-06"
+    ],
+    "createdAt": "2026-03-20T05:48:23.142Z",
+    "updatedAt": "2026-03-20T05:48:23.142Z",
+    "snapshot": {
+      "metadata": {
+        "templateKey": "IT_EXEC_TEMPLATE_V2",
+        "templateVersion": 2,
+        "sourceFilename": "IT_Exec_Reporting_Ingestion_Template_v2_dummy_data.xlsx",
+        "tableMap": {
+          "README": [],
+          "Reporting_Framework": [
+            "FrameworkTable"
+          ],
+          "Metric_Catalogue": [
+            "MetricCatalogue"
+          ],
+          "Validation_Lists": [],
+          "Periods": [
+            "PeriodsTable"
+          ],
+          "Entities": [
+            "EntitiesTable"
+          ],
+          "Office_Locations": [
+            "TOfficeLocations"
+          ],
+          "INPUT_Office_Network_Avail": [
+            "TOfficeNetworkAvailability"
+          ],
+          "INPUT_Service_Availability": [
+            "TServiceAvailability"
+          ],
+          "INPUT_Support_Operations": [
+            "TSupportOperations"
+          ],
+          "INPUT_Top_Oldest_Tickets": [
+            "TTopOldestTickets"
+          ],
+          "INPUT_Security_Patching": [
+            "TSecurityPatching"
+          ],
+          "INPUT_Assets_Lifecycle": [
+            "TAssetsLifecycle"
+          ],
+          "INPUT_Change_Release": [
+            "TChangeRelease"
+          ],
+          "INPUT_Dev_Delivery": [
+            "TDevDelivery"
+          ],
+          "INPUT_Project_Portfolio": [
+            "TProjectPortfolio"
+          ],
+          "INPUT_Rolling_Roadmap": [
+            "TRollingRoadmap"
+          ],
+          "INPUT_Budget_Commercials": [
+            "TBudgetCommercials"
+          ],
+          "INPUT_Top_Risks": [
+            "TTopRisks"
+          ],
+          "INPUT_Narrative_Notes": [
+            "TNarrativeNotes"
+          ]
+        }
+      },
+      "availableMonths": [
+        "2026-01",
+        "2026-02",
+        "2026-03",
+        "2026-04",
+        "2026-05",
+        "2026-06"
+      ],
+      "currentMonth": "2026-06",
+      "periods": [
+        {
+          "reportingMonth": "2026-01",
+          "monthEndDate": "2026-01-31",
+          "quarter": "2026 Q1",
+          "financialYear": "FY2025/26",
+          "isCurrentPeriod": false
+        },
+        {
+          "reportingMonth": "2026-02",
+          "monthEndDate": "2026-02-28",
+          "quarter": "2026 Q1",
+          "financialYear": "FY2025/26",
+          "isCurrentPeriod": false
+        },
+        {
+          "reportingMonth": "2026-03",
+          "monthEndDate": "2026-03-31",
+          "quarter": "2026 Q1",
+          "financialYear": "FY2025/26",
+          "isCurrentPeriod": false
+        },
+        {
+          "reportingMonth": "2026-04",
+          "monthEndDate": "2026-04-30",
+          "quarter": "2026 Q2",
+          "financialYear": "FY2026/27",
+          "isCurrentPeriod": false
+        },
+        {
+          "reportingMonth": "2026-05",
+          "monthEndDate": "2026-05-31",
+          "quarter": "2026 Q2",
+          "financialYear": "FY2026/27",
+          "isCurrentPeriod": false
+        },
+        {
+          "reportingMonth": "2026-06",
+          "monthEndDate": "2026-06-30",
+          "quarter": "2026 Q2",
+          "financialYear": "FY2026/27",
+          "isCurrentPeriod": true
+        }
+      ],
+      "entities": [
+        {
+          "entityType": "Service",
+          "entityName": "Network",
+          "grouping": "Core services",
+          "inScope": true,
+          "notes": "Corporate network and connectivity"
+        },
+        {
+          "entityType": "Service",
+          "entityName": "AWS",
+          "grouping": "Cloud platforms",
+          "inScope": true,
+          "notes": "Core workloads and integrations"
+        },
+        {
+          "entityType": "Service",
+          "entityName": "Azure",
+          "grouping": "Cloud platforms",
+          "inScope": true,
+          "notes": "Identity and Microsoft estate"
+        },
+        {
+          "entityType": "Service",
+          "entityName": "Private Cloud",
+          "grouping": "Cloud platforms",
+          "inScope": true,
+          "notes": "Legacy hosted estate"
+        },
+        {
+          "entityType": "Application",
+          "entityName": "TABS / TAMS",
+          "grouping": "Critical applications",
+          "inScope": true,
+          "notes": "Core business platform"
+        },
+        {
+          "entityType": "Application",
+          "entityName": "Microsoft 365",
+          "grouping": "Critical applications",
+          "inScope": true,
+          "notes": "Collaboration and productivity"
+        },
+        {
+          "entityType": "Application",
+          "entityName": "Website / SharePoint",
+          "grouping": "Business applications",
+          "inScope": true,
+          "notes": "External and internal content"
+        },
+        {
+          "entityType": "Application",
+          "entityName": "Telephony",
+          "grouping": "Business applications",
+          "inScope": true,
+          "notes": "Voice and contact channels"
+        },
+        {
+          "entityType": "Supplier",
+          "entityName": "Microsoft",
+          "grouping": "Strategic suppliers",
+          "inScope": true,
+          "notes": ""
+        },
+        {
+          "entityType": "Supplier",
+          "entityName": "AWS",
+          "grouping": "Strategic suppliers",
+          "inScope": true,
+          "notes": ""
+        },
+        {
+          "entityType": "Supplier",
+          "entityName": "HP",
+          "grouping": "Strategic suppliers",
+          "inScope": true,
+          "notes": ""
+        }
+      ],
+      "officeLocations": [
+        {
+          "officeName": "Birmingham",
+          "region": "Midlands",
+          "inScope": true,
+          "displayOrder": 1,
+          "mapX": 238,
+          "mapY": 255
+        },
+        {
+          "officeName": "Manchester",
+          "region": "North West",
+          "inScope": true,
+          "displayOrder": 2,
+          "mapX": 196,
+          "mapY": 195
+        },
+        {
+          "officeName": "Leeds",
+          "region": "Yorkshire",
+          "inScope": true,
+          "displayOrder": 3,
+          "mapX": 228,
+          "mapY": 185
+        },
+        {
+          "officeName": "London City",
+          "region": "London",
+          "inScope": true,
+          "displayOrder": 4,
+          "mapX": 298,
+          "mapY": 355
+        },
+        {
+          "officeName": "London East",
+          "region": "London",
+          "inScope": true,
+          "displayOrder": 5,
+          "mapX": 308,
+          "mapY": 360
+        },
+        {
+          "officeName": "Bristol",
+          "region": "South West",
+          "inScope": true,
+          "displayOrder": 6,
+          "mapX": 148,
+          "mapY": 375
+        },
+        {
+          "officeName": "Sheffield",
+          "region": "Yorkshire",
+          "inScope": true,
+          "displayOrder": 7,
+          "mapX": 228,
+          "mapY": 198
+        },
+        {
+          "officeName": "Nottingham",
+          "region": "East Midlands",
+          "inScope": true,
+          "displayOrder": 8,
+          "mapX": 242,
+          "mapY": 232
+        },
+        {
+          "officeName": "Leicester",
+          "region": "East Midlands",
+          "inScope": true,
+          "displayOrder": 9,
+          "mapX": 244,
+          "mapY": 248
+        },
+        {
+          "officeName": "Cardiff",
+          "region": "Wales",
+          "inScope": true,
+          "displayOrder": 10,
+          "mapX": 128,
+          "mapY": 378
+        },
+        {
+          "officeName": "Swansea",
+          "region": "Wales",
+          "inScope": true,
+          "displayOrder": 11,
+          "mapX": 102,
+          "mapY": 370
+        },
+        {
+          "officeName": "Liverpool",
+          "region": "North West",
+          "inScope": true,
+          "displayOrder": 12,
+          "mapX": 182,
+          "mapY": 208
+        },
+        {
+          "officeName": "Newcastle",
+          "region": "North East",
+          "inScope": true,
+          "displayOrder": 13,
+          "mapX": 228,
+          "mapY": 108
+        },
+        {
+          "officeName": "Derby",
+          "region": "East Midlands",
+          "inScope": true,
+          "displayOrder": 14,
+          "mapX": 238,
+          "mapY": 238
+        },
+        {
+          "officeName": "Coventry",
+          "region": "Midlands",
+          "inScope": true,
+          "displayOrder": 15,
+          "mapX": 248,
+          "mapY": 262
+        },
+        {
+          "officeName": "Worcester",
+          "region": "Midlands",
+          "inScope": true,
+          "displayOrder": 16,
+          "mapX": 218,
+          "mapY": 272
+        },
+        {
+          "officeName": "Oxford",
+          "region": "South East",
+          "inScope": true,
+          "displayOrder": 17,
+          "mapX": 248,
+          "mapY": 308
+        },
+        {
+          "officeName": "Cambridge",
+          "region": "East",
+          "inScope": true,
+          "displayOrder": 18,
+          "mapX": 292,
+          "mapY": 295
+        },
+        {
+          "officeName": "Southampton",
+          "region": "South",
+          "inScope": true,
+          "displayOrder": 19,
+          "mapX": 228,
+          "mapY": 398
+        },
+        {
+          "officeName": "Plymouth",
+          "region": "South West",
+          "inScope": true,
+          "displayOrder": 20,
+          "mapX": 105,
+          "mapY": 455
+        },
+        {
+          "officeName": "Norwich",
+          "region": "East",
+          "inScope": true,
+          "displayOrder": 21,
+          "mapX": 328,
+          "mapY": 295
+        },
+        {
+          "officeName": "Exeter",
+          "region": "South West",
+          "inScope": true,
+          "displayOrder": 22,
+          "mapX": 128,
+          "mapY": 448
+        }
+      ],
+      "officeNetworkAvailability": [
+        {
+          "reportingMonth": "2026-01",
+          "officeName": "Birmingham",
+          "availabilityPct": 99.92,
+          "outageMinutes": 36,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-01",
+          "officeName": "Manchester",
+          "availabilityPct": 99.88,
+          "outageMinutes": 54,
+          "majorIncidents": 0,
+          "commentary": "Monitored connectivity issue."
+        },
+        {
+          "reportingMonth": "2026-01",
+          "officeName": "Leeds",
+          "availabilityPct": 99.75,
+          "outageMinutes": 112,
+          "majorIncidents": 0,
+          "commentary": "Monitored connectivity issue."
+        },
+        {
+          "reportingMonth": "2026-01",
+          "officeName": "London City",
+          "availabilityPct": 99.95,
+          "outageMinutes": 22,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-01",
+          "officeName": "London East",
+          "availabilityPct": 99.9,
+          "outageMinutes": 45,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-01",
+          "officeName": "Bristol",
+          "availabilityPct": 99.85,
+          "outageMinutes": 67,
+          "majorIncidents": 0,
+          "commentary": "Monitored connectivity issue."
+        },
+        {
+          "reportingMonth": "2026-01",
+          "officeName": "Sheffield",
+          "availabilityPct": 99.7,
+          "outageMinutes": 134,
+          "majorIncidents": 0,
+          "commentary": "Monitored connectivity issue."
+        },
+        {
+          "reportingMonth": "2026-01",
+          "officeName": "Nottingham",
+          "availabilityPct": 99.8,
+          "outageMinutes": 89,
+          "majorIncidents": 0,
+          "commentary": "Monitored connectivity issue."
+        },
+        {
+          "reportingMonth": "2026-01",
+          "officeName": "Leicester",
+          "availabilityPct": 99.88,
+          "outageMinutes": 54,
+          "majorIncidents": 0,
+          "commentary": "Monitored connectivity issue."
+        },
+        {
+          "reportingMonth": "2026-01",
+          "officeName": "Cardiff",
+          "availabilityPct": 97.8,
+          "outageMinutes": 982,
+          "majorIncidents": 1,
+          "commentary": "User-impacting outage recorded."
+        },
+        {
+          "reportingMonth": "2026-01",
+          "officeName": "Swansea",
+          "availabilityPct": 98.1,
+          "outageMinutes": 848,
+          "majorIncidents": 1,
+          "commentary": "User-impacting outage recorded."
+        },
+        {
+          "reportingMonth": "2026-01",
+          "officeName": "Liverpool",
+          "availabilityPct": 99.82,
+          "outageMinutes": 80,
+          "majorIncidents": 0,
+          "commentary": "Monitored connectivity issue."
+        },
+        {
+          "reportingMonth": "2026-01",
+          "officeName": "Newcastle",
+          "availabilityPct": 99.78,
+          "outageMinutes": 98,
+          "majorIncidents": 0,
+          "commentary": "Monitored connectivity issue."
+        },
+        {
+          "reportingMonth": "2026-01",
+          "officeName": "Derby",
+          "availabilityPct": 99.83,
+          "outageMinutes": 76,
+          "majorIncidents": 0,
+          "commentary": "Monitored connectivity issue."
+        },
+        {
+          "reportingMonth": "2026-01",
+          "officeName": "Coventry",
+          "availabilityPct": 99.87,
+          "outageMinutes": 58,
+          "majorIncidents": 0,
+          "commentary": "Monitored connectivity issue."
+        },
+        {
+          "reportingMonth": "2026-01",
+          "officeName": "Worcester",
+          "availabilityPct": 99.91,
+          "outageMinutes": 40,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-01",
+          "officeName": "Oxford",
+          "availabilityPct": 99.93,
+          "outageMinutes": 31,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-01",
+          "officeName": "Cambridge",
+          "availabilityPct": 99.89,
+          "outageMinutes": 49,
+          "majorIncidents": 0,
+          "commentary": "Monitored connectivity issue."
+        },
+        {
+          "reportingMonth": "2026-01",
+          "officeName": "Southampton",
+          "availabilityPct": 99.85,
+          "outageMinutes": 67,
+          "majorIncidents": 0,
+          "commentary": "Monitored connectivity issue."
+        },
+        {
+          "reportingMonth": "2026-01",
+          "officeName": "Plymouth",
+          "availabilityPct": 99.76,
+          "outageMinutes": 107,
+          "majorIncidents": 0,
+          "commentary": "Monitored connectivity issue."
+        },
+        {
+          "reportingMonth": "2026-01",
+          "officeName": "Norwich",
+          "availabilityPct": 99.8,
+          "outageMinutes": 89,
+          "majorIncidents": 0,
+          "commentary": "Monitored connectivity issue."
+        },
+        {
+          "reportingMonth": "2026-01",
+          "officeName": "Exeter",
+          "availabilityPct": 99.81,
+          "outageMinutes": 85,
+          "majorIncidents": 0,
+          "commentary": "Monitored connectivity issue."
+        },
+        {
+          "reportingMonth": "2026-02",
+          "officeName": "Birmingham",
+          "availabilityPct": 99.95,
+          "outageMinutes": 20,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-02",
+          "officeName": "Manchester",
+          "availabilityPct": 99.93,
+          "outageMinutes": 28,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-02",
+          "officeName": "Leeds",
+          "availabilityPct": 99.8,
+          "outageMinutes": 81,
+          "majorIncidents": 0,
+          "commentary": "Monitored connectivity issue."
+        },
+        {
+          "reportingMonth": "2026-02",
+          "officeName": "London City",
+          "availabilityPct": 99.97,
+          "outageMinutes": 12,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-02",
+          "officeName": "London East",
+          "availabilityPct": 99.93,
+          "outageMinutes": 28,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-02",
+          "officeName": "Bristol",
+          "availabilityPct": 99.9,
+          "outageMinutes": 40,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-02",
+          "officeName": "Sheffield",
+          "availabilityPct": 99.78,
+          "outageMinutes": 89,
+          "majorIncidents": 0,
+          "commentary": "Monitored connectivity issue."
+        },
+        {
+          "reportingMonth": "2026-02",
+          "officeName": "Nottingham",
+          "availabilityPct": 99.85,
+          "outageMinutes": 60,
+          "majorIncidents": 0,
+          "commentary": "Monitored connectivity issue."
+        },
+        {
+          "reportingMonth": "2026-02",
+          "officeName": "Leicester",
+          "availabilityPct": 99.91,
+          "outageMinutes": 36,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-02",
+          "officeName": "Cardiff",
+          "availabilityPct": 98.5,
+          "outageMinutes": 605,
+          "majorIncidents": 1,
+          "commentary": "User-impacting outage recorded."
+        },
+        {
+          "reportingMonth": "2026-02",
+          "officeName": "Swansea",
+          "availabilityPct": 98.6,
+          "outageMinutes": 564,
+          "majorIncidents": 1,
+          "commentary": "User-impacting outage recorded."
+        },
+        {
+          "reportingMonth": "2026-02",
+          "officeName": "Liverpool",
+          "availabilityPct": 99.88,
+          "outageMinutes": 48,
+          "majorIncidents": 0,
+          "commentary": "Monitored connectivity issue."
+        },
+        {
+          "reportingMonth": "2026-02",
+          "officeName": "Newcastle",
+          "availabilityPct": 99.84,
+          "outageMinutes": 65,
+          "majorIncidents": 0,
+          "commentary": "Monitored connectivity issue."
+        },
+        {
+          "reportingMonth": "2026-02",
+          "officeName": "Derby",
+          "availabilityPct": 99.89,
+          "outageMinutes": 44,
+          "majorIncidents": 0,
+          "commentary": "Monitored connectivity issue."
+        },
+        {
+          "reportingMonth": "2026-02",
+          "officeName": "Coventry",
+          "availabilityPct": 99.91,
+          "outageMinutes": 36,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-02",
+          "officeName": "Worcester",
+          "availabilityPct": 99.94,
+          "outageMinutes": 24,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-02",
+          "officeName": "Oxford",
+          "availabilityPct": 99.96,
+          "outageMinutes": 16,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-02",
+          "officeName": "Cambridge",
+          "availabilityPct": 99.93,
+          "outageMinutes": 28,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-02",
+          "officeName": "Southampton",
+          "availabilityPct": 99.89,
+          "outageMinutes": 44,
+          "majorIncidents": 0,
+          "commentary": "Monitored connectivity issue."
+        },
+        {
+          "reportingMonth": "2026-02",
+          "officeName": "Plymouth",
+          "availabilityPct": 99.82,
+          "outageMinutes": 73,
+          "majorIncidents": 0,
+          "commentary": "Monitored connectivity issue."
+        },
+        {
+          "reportingMonth": "2026-02",
+          "officeName": "Norwich",
+          "availabilityPct": 99.86,
+          "outageMinutes": 56,
+          "majorIncidents": 0,
+          "commentary": "Monitored connectivity issue."
+        },
+        {
+          "reportingMonth": "2026-02",
+          "officeName": "Exeter",
+          "availabilityPct": 99.87,
+          "outageMinutes": 52,
+          "majorIncidents": 0,
+          "commentary": "Monitored connectivity issue."
+        },
+        {
+          "reportingMonth": "2026-03",
+          "officeName": "Birmingham",
+          "availabilityPct": 100,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "commentary": "No incidents."
+        },
+        {
+          "reportingMonth": "2026-03",
+          "officeName": "Manchester",
+          "availabilityPct": 99.97,
+          "outageMinutes": 13,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-03",
+          "officeName": "Leeds",
+          "availabilityPct": 99.9,
+          "outageMinutes": 45,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-03",
+          "officeName": "London City",
+          "availabilityPct": 100,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "commentary": "No incidents."
+        },
+        {
+          "reportingMonth": "2026-03",
+          "officeName": "London East",
+          "availabilityPct": 99.96,
+          "outageMinutes": 18,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-03",
+          "officeName": "Bristol",
+          "availabilityPct": 99.93,
+          "outageMinutes": 31,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-03",
+          "officeName": "Sheffield",
+          "availabilityPct": 99.88,
+          "outageMinutes": 54,
+          "majorIncidents": 0,
+          "commentary": "Monitored connectivity issue."
+        },
+        {
+          "reportingMonth": "2026-03",
+          "officeName": "Nottingham",
+          "availabilityPct": 99.92,
+          "outageMinutes": 36,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-03",
+          "officeName": "Leicester",
+          "availabilityPct": 99.95,
+          "outageMinutes": 22,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-03",
+          "officeName": "Cardiff",
+          "availabilityPct": 99.2,
+          "outageMinutes": 357,
+          "majorIncidents": 0,
+          "commentary": "Monitored connectivity issue."
+        },
+        {
+          "reportingMonth": "2026-03",
+          "officeName": "Swansea",
+          "availabilityPct": 99.1,
+          "outageMinutes": 402,
+          "majorIncidents": 0,
+          "commentary": "Monitored connectivity issue."
+        },
+        {
+          "reportingMonth": "2026-03",
+          "officeName": "Liverpool",
+          "availabilityPct": 99.93,
+          "outageMinutes": 31,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-03",
+          "officeName": "Newcastle",
+          "availabilityPct": 99.91,
+          "outageMinutes": 40,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-03",
+          "officeName": "Derby",
+          "availabilityPct": 99.94,
+          "outageMinutes": 27,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-03",
+          "officeName": "Coventry",
+          "availabilityPct": 99.96,
+          "outageMinutes": 18,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-03",
+          "officeName": "Worcester",
+          "availabilityPct": 99.97,
+          "outageMinutes": 13,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-03",
+          "officeName": "Oxford",
+          "availabilityPct": 99.98,
+          "outageMinutes": 9,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-03",
+          "officeName": "Cambridge",
+          "availabilityPct": 99.96,
+          "outageMinutes": 18,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-03",
+          "officeName": "Southampton",
+          "availabilityPct": 99.94,
+          "outageMinutes": 27,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-03",
+          "officeName": "Plymouth",
+          "availabilityPct": 99.89,
+          "outageMinutes": 49,
+          "majorIncidents": 0,
+          "commentary": "Monitored connectivity issue."
+        },
+        {
+          "reportingMonth": "2026-03",
+          "officeName": "Norwich",
+          "availabilityPct": 99.92,
+          "outageMinutes": 36,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-03",
+          "officeName": "Exeter",
+          "availabilityPct": 99.92,
+          "outageMinutes": 36,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-04",
+          "officeName": "Birmingham",
+          "availabilityPct": 100,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "commentary": "No incidents."
+        },
+        {
+          "reportingMonth": "2026-04",
+          "officeName": "Manchester",
+          "availabilityPct": 100,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "commentary": "No incidents."
+        },
+        {
+          "reportingMonth": "2026-04",
+          "officeName": "Leeds",
+          "availabilityPct": 99.95,
+          "outageMinutes": 22,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-04",
+          "officeName": "London City",
+          "availabilityPct": 100,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "commentary": "No incidents."
+        },
+        {
+          "reportingMonth": "2026-04",
+          "officeName": "London East",
+          "availabilityPct": 99.98,
+          "outageMinutes": 9,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-04",
+          "officeName": "Bristol",
+          "availabilityPct": 99.97,
+          "outageMinutes": 13,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-04",
+          "officeName": "Sheffield",
+          "availabilityPct": 99.92,
+          "outageMinutes": 35,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-04",
+          "officeName": "Nottingham",
+          "availabilityPct": 99.96,
+          "outageMinutes": 17,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-04",
+          "officeName": "Leicester",
+          "availabilityPct": 99.98,
+          "outageMinutes": 9,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-04",
+          "officeName": "Cardiff",
+          "availabilityPct": 99.42,
+          "outageMinutes": 251,
+          "majorIncidents": 0,
+          "commentary": "Monitored connectivity issue."
+        },
+        {
+          "reportingMonth": "2026-04",
+          "officeName": "Swansea",
+          "availabilityPct": 99.4,
+          "outageMinutes": 259,
+          "majorIncidents": 0,
+          "commentary": "Monitored connectivity issue."
+        },
+        {
+          "reportingMonth": "2026-04",
+          "officeName": "Liverpool",
+          "availabilityPct": 99.97,
+          "outageMinutes": 13,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-04",
+          "officeName": "Newcastle",
+          "availabilityPct": 99.95,
+          "outageMinutes": 22,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-04",
+          "officeName": "Derby",
+          "availabilityPct": 99.97,
+          "outageMinutes": 13,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-04",
+          "officeName": "Coventry",
+          "availabilityPct": 99.98,
+          "outageMinutes": 9,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-04",
+          "officeName": "Worcester",
+          "availabilityPct": 99.99,
+          "outageMinutes": 4,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-04",
+          "officeName": "Oxford",
+          "availabilityPct": 100,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "commentary": "No incidents."
+        },
+        {
+          "reportingMonth": "2026-04",
+          "officeName": "Cambridge",
+          "availabilityPct": 99.99,
+          "outageMinutes": 4,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-04",
+          "officeName": "Southampton",
+          "availabilityPct": 99.97,
+          "outageMinutes": 13,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-04",
+          "officeName": "Plymouth",
+          "availabilityPct": 99.94,
+          "outageMinutes": 26,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-04",
+          "officeName": "Norwich",
+          "availabilityPct": 99.96,
+          "outageMinutes": 17,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-04",
+          "officeName": "Exeter",
+          "availabilityPct": 99.96,
+          "outageMinutes": 17,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-05",
+          "officeName": "Birmingham",
+          "availabilityPct": 99.98,
+          "outageMinutes": 9,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-05",
+          "officeName": "Manchester",
+          "availabilityPct": 100,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "commentary": "No incidents."
+        },
+        {
+          "reportingMonth": "2026-05",
+          "officeName": "Leeds",
+          "availabilityPct": 99.98,
+          "outageMinutes": 9,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-05",
+          "officeName": "London City",
+          "availabilityPct": 100,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "commentary": "No incidents."
+        },
+        {
+          "reportingMonth": "2026-05",
+          "officeName": "London East",
+          "availabilityPct": 100,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "commentary": "No incidents."
+        },
+        {
+          "reportingMonth": "2026-05",
+          "officeName": "Bristol",
+          "availabilityPct": 100,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "commentary": "No incidents."
+        },
+        {
+          "reportingMonth": "2026-05",
+          "officeName": "Sheffield",
+          "availabilityPct": 99.96,
+          "outageMinutes": 18,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-05",
+          "officeName": "Nottingham",
+          "availabilityPct": 99.99,
+          "outageMinutes": 4,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-05",
+          "officeName": "Leicester",
+          "availabilityPct": 100,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "commentary": "No incidents."
+        },
+        {
+          "reportingMonth": "2026-05",
+          "officeName": "Cardiff",
+          "availabilityPct": 99.55,
+          "outageMinutes": 201,
+          "majorIncidents": 0,
+          "commentary": "Monitored connectivity issue."
+        },
+        {
+          "reportingMonth": "2026-05",
+          "officeName": "Swansea",
+          "availabilityPct": 99.58,
+          "outageMinutes": 187,
+          "majorIncidents": 0,
+          "commentary": "Monitored connectivity issue."
+        },
+        {
+          "reportingMonth": "2026-05",
+          "officeName": "Liverpool",
+          "availabilityPct": 100,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "commentary": "No incidents."
+        },
+        {
+          "reportingMonth": "2026-05",
+          "officeName": "Newcastle",
+          "availabilityPct": 99.98,
+          "outageMinutes": 9,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-05",
+          "officeName": "Derby",
+          "availabilityPct": 99.99,
+          "outageMinutes": 4,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-05",
+          "officeName": "Coventry",
+          "availabilityPct": 100,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "commentary": "No incidents."
+        },
+        {
+          "reportingMonth": "2026-05",
+          "officeName": "Worcester",
+          "availabilityPct": 100,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "commentary": "No incidents."
+        },
+        {
+          "reportingMonth": "2026-05",
+          "officeName": "Oxford",
+          "availabilityPct": 100,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "commentary": "No incidents."
+        },
+        {
+          "reportingMonth": "2026-05",
+          "officeName": "Cambridge",
+          "availabilityPct": 100,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "commentary": "No incidents."
+        },
+        {
+          "reportingMonth": "2026-05",
+          "officeName": "Southampton",
+          "availabilityPct": 100,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "commentary": "No incidents."
+        },
+        {
+          "reportingMonth": "2026-05",
+          "officeName": "Plymouth",
+          "availabilityPct": 99.97,
+          "outageMinutes": 13,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-05",
+          "officeName": "Norwich",
+          "availabilityPct": 99.98,
+          "outageMinutes": 9,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-05",
+          "officeName": "Exeter",
+          "availabilityPct": 99.99,
+          "outageMinutes": 4,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "officeName": "Birmingham",
+          "availabilityPct": 100,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "commentary": "No incidents."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "officeName": "Manchester",
+          "availabilityPct": 100,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "commentary": "No incidents."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "officeName": "Leeds",
+          "availabilityPct": 100,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "commentary": "No incidents."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "officeName": "London City",
+          "availabilityPct": 100,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "commentary": "No incidents."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "officeName": "London East",
+          "availabilityPct": 100,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "commentary": "No incidents."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "officeName": "Bristol",
+          "availabilityPct": 100,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "commentary": "No incidents."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "officeName": "Sheffield",
+          "availabilityPct": 99.98,
+          "outageMinutes": 9,
+          "majorIncidents": 0,
+          "commentary": "Minor transient disruption."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "officeName": "Nottingham",
+          "availabilityPct": 100,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "commentary": "No incidents."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "officeName": "Leicester",
+          "availabilityPct": 100,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "commentary": "No incidents."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "officeName": "Cardiff",
+          "availabilityPct": 99.62,
+          "outageMinutes": 164,
+          "majorIncidents": 0,
+          "commentary": "Monitored connectivity issue."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "officeName": "Swansea",
+          "availabilityPct": 99.7,
+          "outageMinutes": 130,
+          "majorIncidents": 0,
+          "commentary": "Monitored connectivity issue."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "officeName": "Liverpool",
+          "availabilityPct": 100,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "commentary": "No incidents."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "officeName": "Newcastle",
+          "availabilityPct": 100,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "commentary": "No incidents."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "officeName": "Derby",
+          "availabilityPct": 100,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "commentary": "No incidents."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "officeName": "Coventry",
+          "availabilityPct": 100,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "commentary": "No incidents."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "officeName": "Worcester",
+          "availabilityPct": 100,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "commentary": "No incidents."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "officeName": "Oxford",
+          "availabilityPct": 100,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "commentary": "No incidents."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "officeName": "Cambridge",
+          "availabilityPct": 100,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "commentary": "No incidents."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "officeName": "Southampton",
+          "availabilityPct": 100,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "commentary": "No incidents."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "officeName": "Plymouth",
+          "availabilityPct": 100,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "commentary": "No incidents."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "officeName": "Norwich",
+          "availabilityPct": 100,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "commentary": "No incidents."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "officeName": "Exeter",
+          "availabilityPct": 100,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "commentary": "No incidents."
+        }
+      ],
+      "serviceAvailability": [
+        {
+          "reportingMonth": "2026-01",
+          "serviceName": "AWS",
+          "serviceType": "Cloud",
+          "availabilityPct": 99.98,
+          "targetPct": 99.9,
+          "outageMinutes": 9,
+          "majorIncidents": 0,
+          "backupSuccessPct": null,
+          "restoreTestStatus": "",
+          "commentary": "No material outage."
+        },
+        {
+          "reportingMonth": "2026-01",
+          "serviceName": "Azure",
+          "serviceType": "Cloud",
+          "availabilityPct": 99.99,
+          "targetPct": 99.9,
+          "outageMinutes": 4,
+          "majorIncidents": 0,
+          "backupSuccessPct": null,
+          "restoreTestStatus": "",
+          "commentary": "Identity services stable."
+        },
+        {
+          "reportingMonth": "2026-01",
+          "serviceName": "Private Cloud",
+          "serviceType": "Cloud",
+          "availabilityPct": 97.8,
+          "targetPct": 99.5,
+          "outageMinutes": 982,
+          "majorIncidents": 1,
+          "backupSuccessPct": 97.9,
+          "restoreTestStatus": "Fail",
+          "commentary": "Legacy platform outage impacted hosted services."
+        },
+        {
+          "reportingMonth": "2026-01",
+          "serviceName": "TABS / TAMS",
+          "serviceType": "Critical Application",
+          "availabilityPct": 99.7,
+          "targetPct": 99.5,
+          "outageMinutes": 134,
+          "majorIncidents": 1,
+          "backupSuccessPct": null,
+          "restoreTestStatus": "",
+          "commentary": "Impact linked to private cloud incident."
+        },
+        {
+          "reportingMonth": "2026-01",
+          "serviceName": "Microsoft 365",
+          "serviceType": "Critical Application",
+          "availabilityPct": 99.99,
+          "targetPct": 99.9,
+          "outageMinutes": 5,
+          "majorIncidents": 0,
+          "backupSuccessPct": null,
+          "restoreTestStatus": "",
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-01",
+          "serviceName": "Network",
+          "serviceType": "Network",
+          "availabilityPct": 99.67,
+          "targetPct": 99.9,
+          "outageMinutes": 3223,
+          "majorIncidents": 2,
+          "backupSuccessPct": null,
+          "restoreTestStatus": "",
+          "commentary": "0 offices at 100%. Worst office: Cardiff (97.80%)."
+        },
+        {
+          "reportingMonth": "2026-02",
+          "serviceName": "AWS",
+          "serviceType": "Cloud",
+          "availabilityPct": 99.99,
+          "targetPct": 99.9,
+          "outageMinutes": 7,
+          "majorIncidents": 0,
+          "backupSuccessPct": null,
+          "restoreTestStatus": "",
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-02",
+          "serviceName": "Azure",
+          "serviceType": "Cloud",
+          "availabilityPct": 100,
+          "targetPct": 99.9,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "backupSuccessPct": null,
+          "restoreTestStatus": "",
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-02",
+          "serviceName": "Private Cloud",
+          "serviceType": "Cloud",
+          "availabilityPct": 98,
+          "targetPct": 99.5,
+          "outageMinutes": 864,
+          "majorIncidents": 1,
+          "backupSuccessPct": 98.5,
+          "restoreTestStatus": "Fail",
+          "commentary": "Single platform outage affected hosted service."
+        },
+        {
+          "reportingMonth": "2026-02",
+          "serviceName": "TABS / TAMS",
+          "serviceType": "Critical Application",
+          "availabilityPct": 99.74,
+          "targetPct": 99.5,
+          "outageMinutes": 112,
+          "majorIncidents": 0,
+          "backupSuccessPct": null,
+          "restoreTestStatus": "",
+          "commentary": "Recovered after platform remediation."
+        },
+        {
+          "reportingMonth": "2026-02",
+          "serviceName": "Microsoft 365",
+          "serviceType": "Critical Application",
+          "availabilityPct": 99.98,
+          "targetPct": 99.9,
+          "outageMinutes": 9,
+          "majorIncidents": 0,
+          "backupSuccessPct": null,
+          "restoreTestStatus": "",
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-02",
+          "serviceName": "Network",
+          "serviceType": "Network",
+          "availabilityPct": 99.77,
+          "targetPct": 99.9,
+          "outageMinutes": 2049,
+          "majorIncidents": 2,
+          "backupSuccessPct": null,
+          "restoreTestStatus": "",
+          "commentary": "0 offices at 100%. Worst office: Cardiff (98.50%)."
+        },
+        {
+          "reportingMonth": "2026-03",
+          "serviceName": "AWS",
+          "serviceType": "Cloud",
+          "availabilityPct": 99.99,
+          "targetPct": 99.9,
+          "outageMinutes": 6,
+          "majorIncidents": 0,
+          "backupSuccessPct": null,
+          "restoreTestStatus": "",
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-03",
+          "serviceName": "Azure",
+          "serviceType": "Cloud",
+          "availabilityPct": 100,
+          "targetPct": 99.9,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "backupSuccessPct": null,
+          "restoreTestStatus": "",
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-03",
+          "serviceName": "Private Cloud",
+          "serviceType": "Cloud",
+          "availabilityPct": 99.1,
+          "targetPct": 99.5,
+          "outageMinutes": 402,
+          "majorIncidents": 0,
+          "backupSuccessPct": 99,
+          "restoreTestStatus": "Pass",
+          "commentary": "Stability improved after February fix."
+        },
+        {
+          "reportingMonth": "2026-03",
+          "serviceName": "TABS / TAMS",
+          "serviceType": "Critical Application",
+          "availabilityPct": 99.88,
+          "targetPct": 99.5,
+          "outageMinutes": 38,
+          "majorIncidents": 0,
+          "backupSuccessPct": null,
+          "restoreTestStatus": "",
+          "commentary": "Improved underlying hosting stability."
+        },
+        {
+          "reportingMonth": "2026-03",
+          "serviceName": "Microsoft 365",
+          "serviceType": "Critical Application",
+          "availabilityPct": 99.99,
+          "targetPct": 99.9,
+          "outageMinutes": 3,
+          "majorIncidents": 0,
+          "backupSuccessPct": null,
+          "restoreTestStatus": "",
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-03",
+          "serviceName": "Network",
+          "serviceType": "Network",
+          "availabilityPct": 99.87,
+          "targetPct": 99.9,
+          "outageMinutes": 1282,
+          "majorIncidents": 0,
+          "backupSuccessPct": null,
+          "restoreTestStatus": "",
+          "commentary": "2 offices at 100%. Worst office: Swansea (99.10%)."
+        },
+        {
+          "reportingMonth": "2026-04",
+          "serviceName": "AWS",
+          "serviceType": "Cloud",
+          "availabilityPct": 99.99,
+          "targetPct": 99.9,
+          "outageMinutes": 5,
+          "majorIncidents": 0,
+          "backupSuccessPct": null,
+          "restoreTestStatus": "",
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-04",
+          "serviceName": "Azure",
+          "serviceType": "Cloud",
+          "availabilityPct": 99.99,
+          "targetPct": 99.9,
+          "outageMinutes": 2,
+          "majorIncidents": 0,
+          "backupSuccessPct": null,
+          "restoreTestStatus": "",
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-04",
+          "serviceName": "Private Cloud",
+          "serviceType": "Cloud",
+          "availabilityPct": 99.4,
+          "targetPct": 99.5,
+          "outageMinutes": 261,
+          "majorIncidents": 0,
+          "backupSuccessPct": 99.4,
+          "restoreTestStatus": "Pass",
+          "commentary": "Now within expected tolerance."
+        },
+        {
+          "reportingMonth": "2026-04",
+          "serviceName": "TABS / TAMS",
+          "serviceType": "Critical Application",
+          "availabilityPct": 99.92,
+          "targetPct": 99.5,
+          "outageMinutes": 24,
+          "majorIncidents": 0,
+          "backupSuccessPct": null,
+          "restoreTestStatus": "",
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-04",
+          "serviceName": "Microsoft 365",
+          "serviceType": "Critical Application",
+          "availabilityPct": 99.99,
+          "targetPct": 99.9,
+          "outageMinutes": 3,
+          "majorIncidents": 0,
+          "backupSuccessPct": null,
+          "restoreTestStatus": "",
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-04",
+          "serviceName": "Network",
+          "serviceType": "Network",
+          "availabilityPct": 99.92,
+          "targetPct": 99.9,
+          "outageMinutes": 753,
+          "majorIncidents": 0,
+          "backupSuccessPct": null,
+          "restoreTestStatus": "",
+          "commentary": "4 offices at 100%. Worst office: Swansea (99.40%)."
+        },
+        {
+          "reportingMonth": "2026-05",
+          "serviceName": "AWS",
+          "serviceType": "Cloud",
+          "availabilityPct": 100,
+          "targetPct": 99.9,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "backupSuccessPct": null,
+          "restoreTestStatus": "",
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-05",
+          "serviceName": "Azure",
+          "serviceType": "Cloud",
+          "availabilityPct": 99.99,
+          "targetPct": 99.9,
+          "outageMinutes": 2,
+          "majorIncidents": 0,
+          "backupSuccessPct": null,
+          "restoreTestStatus": "",
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-05",
+          "serviceName": "Private Cloud",
+          "serviceType": "Cloud",
+          "availabilityPct": 99.55,
+          "targetPct": 99.5,
+          "outageMinutes": 131,
+          "majorIncidents": 0,
+          "backupSuccessPct": 99.6,
+          "restoreTestStatus": "Pass",
+          "commentary": "Legacy estate now stable but still monitored."
+        },
+        {
+          "reportingMonth": "2026-05",
+          "serviceName": "TABS / TAMS",
+          "serviceType": "Critical Application",
+          "availabilityPct": 99.95,
+          "targetPct": 99.5,
+          "outageMinutes": 12,
+          "majorIncidents": 0,
+          "backupSuccessPct": null,
+          "restoreTestStatus": "",
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-05",
+          "serviceName": "Microsoft 365",
+          "serviceType": "Critical Application",
+          "availabilityPct": 99.99,
+          "targetPct": 99.9,
+          "outageMinutes": 2,
+          "majorIncidents": 0,
+          "backupSuccessPct": null,
+          "restoreTestStatus": "",
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-05",
+          "serviceName": "Network",
+          "serviceType": "Network",
+          "availabilityPct": 99.95,
+          "targetPct": 99.9,
+          "outageMinutes": 467,
+          "majorIncidents": 0,
+          "backupSuccessPct": null,
+          "restoreTestStatus": "",
+          "commentary": "11 offices at 100%. Worst office: Cardiff (99.55%)."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "serviceName": "AWS",
+          "serviceType": "Cloud",
+          "availabilityPct": 100,
+          "targetPct": 99.9,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "backupSuccessPct": null,
+          "restoreTestStatus": "",
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-06",
+          "serviceName": "Azure",
+          "serviceType": "Cloud",
+          "availabilityPct": 100,
+          "targetPct": 99.9,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "backupSuccessPct": null,
+          "restoreTestStatus": "",
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-06",
+          "serviceName": "Private Cloud",
+          "serviceType": "Cloud",
+          "availabilityPct": 99.62,
+          "targetPct": 99.5,
+          "outageMinutes": 98,
+          "majorIncidents": 0,
+          "backupSuccessPct": 99.8,
+          "restoreTestStatus": "Pass",
+          "commentary": "Residual issues remain low."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "serviceName": "TABS / TAMS",
+          "serviceType": "Critical Application",
+          "availabilityPct": 99.97,
+          "targetPct": 99.5,
+          "outageMinutes": 8,
+          "majorIncidents": 0,
+          "backupSuccessPct": null,
+          "restoreTestStatus": "",
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-06",
+          "serviceName": "Microsoft 365",
+          "serviceType": "Critical Application",
+          "availabilityPct": 100,
+          "targetPct": 99.9,
+          "outageMinutes": 0,
+          "majorIncidents": 0,
+          "backupSuccessPct": null,
+          "restoreTestStatus": "",
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-06",
+          "serviceName": "Network",
+          "serviceType": "Network",
+          "availabilityPct": 99.97,
+          "targetPct": 99.9,
+          "outageMinutes": 303,
+          "majorIncidents": 0,
+          "backupSuccessPct": null,
+          "restoreTestStatus": "",
+          "commentary": "19 offices at 100%. Worst office: Cardiff (99.62%)."
+        }
+      ],
+      "supportOperations": [
+        {
+          "reportingMonth": "2026-01",
+          "ticketsOpened": 1080,
+          "ticketsClosed": 1082,
+          "backlogEnd": 39,
+          "averageAgeOpenDays": 4.4,
+          "averageResolutionDays": 1.6,
+          "firstResponseSlaPct": 98,
+          "resolutionSlaPct": 98.5,
+          "reopenRatePct": 2.3,
+          "majorIncidents": 0,
+          "ticketCsatScore": 4.6,
+          "csatResponseRatePct": 17,
+          "topCategory": "Email Related",
+          "commentary": "January carry-over remained controlled despite elevated intake."
+        },
+        {
+          "reportingMonth": "2026-02",
+          "ticketsOpened": 949,
+          "ticketsClosed": 957,
+          "backlogEnd": 31,
+          "averageAgeOpenDays": 4.2,
+          "averageResolutionDays": 1.5,
+          "firstResponseSlaPct": 98.1,
+          "resolutionSlaPct": 98.7,
+          "reopenRatePct": 2.1,
+          "majorIncidents": 0,
+          "ticketCsatScore": 4.7,
+          "csatResponseRatePct": 18,
+          "topCategory": "Email Related",
+          "commentary": "Volumes returned to expected seasonal levels."
+        },
+        {
+          "reportingMonth": "2026-03",
+          "ticketsOpened": 1015,
+          "ticketsClosed": 1004,
+          "backlogEnd": 42,
+          "averageAgeOpenDays": 4.5,
+          "averageResolutionDays": 1.6,
+          "firstResponseSlaPct": 97.8,
+          "resolutionSlaPct": 98.2,
+          "reopenRatePct": 2.2,
+          "majorIncidents": 1,
+          "ticketCsatScore": 4.5,
+          "csatResponseRatePct": 16,
+          "topCategory": "Permissions",
+          "commentary": "One incident month but service metrics remained within tolerance."
+        },
+        {
+          "reportingMonth": "2026-04",
+          "ticketsOpened": 923,
+          "ticketsClosed": 948,
+          "backlogEnd": 17,
+          "averageAgeOpenDays": 3.8,
+          "averageResolutionDays": 1.3,
+          "firstResponseSlaPct": 98.6,
+          "resolutionSlaPct": 99,
+          "reopenRatePct": 1.9,
+          "majorIncidents": 0,
+          "ticketCsatScore": 4.8,
+          "csatResponseRatePct": 19,
+          "topCategory": "Email Related",
+          "commentary": "Backlog reduced materially after workflow tidy-up."
+        },
+        {
+          "reportingMonth": "2026-05",
+          "ticketsOpened": 978,
+          "ticketsClosed": 962,
+          "backlogEnd": 33,
+          "averageAgeOpenDays": 4,
+          "averageResolutionDays": 1.4,
+          "firstResponseSlaPct": 98.3,
+          "resolutionSlaPct": 98.8,
+          "reopenRatePct": 2,
+          "majorIncidents": 0,
+          "ticketCsatScore": 4.7,
+          "csatResponseRatePct": 17.5,
+          "topCategory": "New User Setup",
+          "commentary": "Seasonal onboarding volumes increased but service stayed strong."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "ticketsOpened": 1008,
+          "ticketsClosed": 1016,
+          "backlogEnd": 25,
+          "averageAgeOpenDays": 3.6,
+          "averageResolutionDays": 1.2,
+          "firstResponseSlaPct": 98.9,
+          "resolutionSlaPct": 99.1,
+          "reopenRatePct": 1.8,
+          "majorIncidents": 0,
+          "ticketCsatScore": 4.8,
+          "csatResponseRatePct": 20,
+          "topCategory": "Email Related",
+          "commentary": "Best combined service and CSAT month in the period."
+        }
+      ],
+      "oldestTickets": [
+        {
+          "reportingMonth": "2026-06",
+          "ticketId": "INC-003871",
+          "title": "Laptop replacement for branch manager",
+          "category": "Hardware",
+          "ownerQueue": "Service Desk",
+          "currentStatus": "In Progress",
+          "ageDays": 67,
+          "businessCritical": true,
+          "blockerReason": "Awaiting device arrival from supplier",
+          "targetResolutionDate": "2026-07-08",
+          "nextAction": "Escalate expedited shipment with HP"
+        },
+        {
+          "reportingMonth": "2026-06",
+          "ticketId": "INC-003844",
+          "title": "Historic mailbox permission mismatch",
+          "category": "Permissions",
+          "ownerQueue": "Applications",
+          "currentStatus": "In Progress",
+          "ageDays": 59,
+          "businessCritical": false,
+          "blockerReason": "Requires joint M365 and app review",
+          "targetResolutionDate": "2026-07-05",
+          "nextAction": "Complete technical review and test"
+        },
+        {
+          "reportingMonth": "2026-06",
+          "ticketId": "INC-003811",
+          "title": "Private cloud report export failure",
+          "category": "Software",
+          "ownerQueue": "Applications",
+          "currentStatus": "Pending Change",
+          "ageDays": 54,
+          "businessCritical": true,
+          "blockerReason": "Change window required",
+          "targetResolutionDate": "2026-07-03",
+          "nextAction": "Implement approved fix in next window"
+        },
+        {
+          "reportingMonth": "2026-06",
+          "ticketId": "INC-003799",
+          "title": "Telephony handsets intermittent in Cardiff",
+          "category": "Telephony",
+          "ownerQueue": "Infrastructure",
+          "currentStatus": "In Progress",
+          "ageDays": 49,
+          "businessCritical": false,
+          "blockerReason": "Carrier diagnostics outstanding",
+          "targetResolutionDate": "2026-07-01",
+          "nextAction": "Obtain carrier trace results"
+        },
+        {
+          "reportingMonth": "2026-06",
+          "ticketId": "INC-003772",
+          "title": "Shared mailbox delivery delay",
+          "category": "Email",
+          "ownerQueue": "Service Desk",
+          "currentStatus": "Monitoring",
+          "ageDays": 45,
+          "businessCritical": false,
+          "blockerReason": "Issue intermittent; monitoring in place",
+          "targetResolutionDate": "2026-06-30",
+          "nextAction": "Review message trace outcomes"
+        },
+        {
+          "reportingMonth": "2026-06",
+          "ticketId": "INC-003741",
+          "title": "Network printer authentication loop",
+          "category": "Hardware",
+          "ownerQueue": "Service Desk",
+          "currentStatus": "In Progress",
+          "ageDays": 41,
+          "businessCritical": false,
+          "blockerReason": "Firmware compatibility check needed",
+          "targetResolutionDate": "2026-06-28",
+          "nextAction": "Apply firmware patch and retest"
+        },
+        {
+          "reportingMonth": "2026-06",
+          "ticketId": "INC-003735",
+          "title": "Candidate attachment size failure",
+          "category": "Software",
+          "ownerQueue": "Applications",
+          "currentStatus": "In Progress",
+          "ageDays": 39,
+          "businessCritical": false,
+          "blockerReason": "Vendor support ticket open",
+          "targetResolutionDate": "2026-06-27",
+          "nextAction": "Chase vendor response"
+        },
+        {
+          "reportingMonth": "2026-06",
+          "ticketId": "INC-003726",
+          "title": "Permissions sync mismatch for finance users",
+          "category": "Permissions",
+          "ownerQueue": "Applications",
+          "currentStatus": "In Progress",
+          "ageDays": 36,
+          "businessCritical": true,
+          "blockerReason": "Dependent on identity sync change",
+          "targetResolutionDate": "2026-06-26",
+          "nextAction": "Complete dependency change"
+        },
+        {
+          "reportingMonth": "2026-06",
+          "ticketId": "INC-003714",
+          "title": "Meeting room panel offline",
+          "category": "Hardware",
+          "ownerQueue": "Service Desk",
+          "currentStatus": "Awaiting Parts",
+          "ageDays": 34,
+          "businessCritical": false,
+          "blockerReason": "Replacement panel on order",
+          "targetResolutionDate": "2026-06-25",
+          "nextAction": "Fit replacement panel"
+        },
+        {
+          "reportingMonth": "2026-06",
+          "ticketId": "INC-003703",
+          "title": "Data extract delayed for payroll audit",
+          "category": "Data request",
+          "ownerQueue": "Service Desk",
+          "currentStatus": "In Progress",
+          "ageDays": 32,
+          "businessCritical": true,
+          "blockerReason": "Awaiting business confirmation of fields",
+          "targetResolutionDate": "2026-06-24",
+          "nextAction": "Confirm final field list with payroll"
+        }
+      ],
+      "securityPatching": [
+        {
+          "reportingMonth": "2026-01",
+          "workstationPatchCompliancePct": 92.8,
+          "serverPatchCompliancePct": 95.2,
+          "criticalPatchCompliancePct": 89.4,
+          "devicesOutsidePolicy": 53,
+          "criticalVulns": 4,
+          "highVulns": 91,
+          "mediumVulns": 49,
+          "lowVulns": 3,
+          "securityIncidents": 0,
+          "mfaCoveragePct": 98.7,
+          "endpointCoveragePct": 99.9,
+          "overdueRemediationItems": 15,
+          "commentary": "Private cloud issue increased remediation queue."
+        },
+        {
+          "reportingMonth": "2026-02",
+          "workstationPatchCompliancePct": 93.5,
+          "serverPatchCompliancePct": 96,
+          "criticalPatchCompliancePct": 91,
+          "devicesOutsidePolicy": 42,
+          "criticalVulns": 2,
+          "highVulns": 86,
+          "mediumVulns": 34,
+          "lowVulns": 3,
+          "securityIncidents": 0,
+          "mfaCoveragePct": 99,
+          "endpointCoveragePct": 100,
+          "overdueRemediationItems": 11,
+          "commentary": "Critical patching within tolerance but remediation queue still elevated."
+        },
+        {
+          "reportingMonth": "2026-03",
+          "workstationPatchCompliancePct": 94.4,
+          "serverPatchCompliancePct": 96.8,
+          "criticalPatchCompliancePct": 92.2,
+          "devicesOutsidePolicy": 37,
+          "criticalVulns": 2,
+          "highVulns": 78,
+          "mediumVulns": 31,
+          "lowVulns": 2,
+          "securityIncidents": 1,
+          "mfaCoveragePct": 99.1,
+          "endpointCoveragePct": 100,
+          "overdueRemediationItems": 10,
+          "commentary": "One security incident closed without material impact."
+        },
+        {
+          "reportingMonth": "2026-04",
+          "workstationPatchCompliancePct": 95.8,
+          "serverPatchCompliancePct": 97.1,
+          "criticalPatchCompliancePct": 94,
+          "devicesOutsidePolicy": 29,
+          "criticalVulns": 1,
+          "highVulns": 64,
+          "mediumVulns": 27,
+          "lowVulns": 2,
+          "securityIncidents": 0,
+          "mfaCoveragePct": 99.2,
+          "endpointCoveragePct": 100,
+          "overdueRemediationItems": 8,
+          "commentary": "Patching trend improving month on month."
+        },
+        {
+          "reportingMonth": "2026-05",
+          "workstationPatchCompliancePct": 96.3,
+          "serverPatchCompliancePct": 97.6,
+          "criticalPatchCompliancePct": 95.1,
+          "devicesOutsidePolicy": 24,
+          "criticalVulns": 1,
+          "highVulns": 58,
+          "mediumVulns": 24,
+          "lowVulns": 2,
+          "securityIncidents": 0,
+          "mfaCoveragePct": 99.4,
+          "endpointCoveragePct": 100,
+          "overdueRemediationItems": 7,
+          "commentary": "Estate moving towards target state."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "workstationPatchCompliancePct": 97.1,
+          "serverPatchCompliancePct": 98,
+          "criticalPatchCompliancePct": 96.5,
+          "devicesOutsidePolicy": 18,
+          "criticalVulns": 0,
+          "highVulns": 49,
+          "mediumVulns": 19,
+          "lowVulns": 2,
+          "securityIncidents": 0,
+          "mfaCoveragePct": 99.5,
+          "endpointCoveragePct": 100,
+          "overdueRemediationItems": 5,
+          "commentary": "Best compliance month in period; no critical backlog."
+        }
+      ],
+      "assetsLifecycle": [
+        {
+          "reportingMonth": "2026-01",
+          "assetType": "Laptop",
+          "activeDevices": 418,
+          "averageAgeMonths": 32.8,
+          "withinLifecyclePct": 76,
+          "outOfLifecyclePct": 24,
+          "stockOnHand": 28,
+          "monthsStockCover": 1.4,
+          "awaitingDeployment": 11,
+          "awaitingDisposal": 10,
+          "refreshSpend": 14200,
+          "incidentsLinkedToAgedKit": 17,
+          "commentary": "Refresh had started but ageing cohort remained large."
+        },
+        {
+          "reportingMonth": "2026-01",
+          "assetType": "Mobile",
+          "activeDevices": 266,
+          "averageAgeMonths": 22.5,
+          "withinLifecyclePct": 90,
+          "outOfLifecyclePct": 10,
+          "stockOnHand": 14,
+          "monthsStockCover": 1.8,
+          "awaitingDeployment": 4,
+          "awaitingDisposal": 6,
+          "refreshSpend": 0,
+          "incidentsLinkedToAgedKit": 2,
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-01",
+          "assetType": "Monitor",
+          "activeDevices": 455,
+          "averageAgeMonths": 38.2,
+          "withinLifecyclePct": 71,
+          "outOfLifecyclePct": 29,
+          "stockOnHand": 26,
+          "monthsStockCover": 3.2,
+          "awaitingDeployment": 2,
+          "awaitingDisposal": 8,
+          "refreshSpend": 0,
+          "incidentsLinkedToAgedKit": 5,
+          "commentary": "Monitor estate ageing but lower support impact than laptops."
+        },
+        {
+          "reportingMonth": "2026-02",
+          "assetType": "Laptop",
+          "activeDevices": 412,
+          "averageAgeMonths": 31.4,
+          "withinLifecyclePct": 78,
+          "outOfLifecyclePct": 22,
+          "stockOnHand": 34,
+          "monthsStockCover": 1.8,
+          "awaitingDeployment": 7,
+          "awaitingDisposal": 12,
+          "refreshSpend": 18500,
+          "incidentsLinkedToAgedKit": 14,
+          "commentary": "Refresh progressing but ageing cohort still visible."
+        },
+        {
+          "reportingMonth": "2026-02",
+          "assetType": "Mobile",
+          "activeDevices": 268,
+          "averageAgeMonths": 22.1,
+          "withinLifecyclePct": 91,
+          "outOfLifecyclePct": 9,
+          "stockOnHand": 16,
+          "monthsStockCover": 2.1,
+          "awaitingDeployment": 3,
+          "awaitingDisposal": 5,
+          "refreshSpend": 0,
+          "incidentsLinkedToAgedKit": 2,
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-02",
+          "assetType": "Monitor",
+          "activeDevices": 454,
+          "averageAgeMonths": 37.9,
+          "withinLifecyclePct": 72,
+          "outOfLifecyclePct": 28,
+          "stockOnHand": 24,
+          "monthsStockCover": 3,
+          "awaitingDeployment": 2,
+          "awaitingDisposal": 8,
+          "refreshSpend": 0,
+          "incidentsLinkedToAgedKit": 4,
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-03",
+          "assetType": "Laptop",
+          "activeDevices": 409,
+          "averageAgeMonths": 30.6,
+          "withinLifecyclePct": 80,
+          "outOfLifecyclePct": 20,
+          "stockOnHand": 29,
+          "monthsStockCover": 1.5,
+          "awaitingDeployment": 8,
+          "awaitingDisposal": 14,
+          "refreshSpend": 12400,
+          "incidentsLinkedToAgedKit": 12,
+          "commentary": "Refresh wave 2 started to reduce aged estate."
+        },
+        {
+          "reportingMonth": "2026-03",
+          "assetType": "Mobile",
+          "activeDevices": 269,
+          "averageAgeMonths": 21.8,
+          "withinLifecyclePct": 92,
+          "outOfLifecyclePct": 8,
+          "stockOnHand": 18,
+          "monthsStockCover": 2.3,
+          "awaitingDeployment": 2,
+          "awaitingDisposal": 5,
+          "refreshSpend": 0,
+          "incidentsLinkedToAgedKit": 2,
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-03",
+          "assetType": "Monitor",
+          "activeDevices": 454,
+          "averageAgeMonths": 37.5,
+          "withinLifecyclePct": 73,
+          "outOfLifecyclePct": 27,
+          "stockOnHand": 23,
+          "monthsStockCover": 2.8,
+          "awaitingDeployment": 1,
+          "awaitingDisposal": 9,
+          "refreshSpend": 0,
+          "incidentsLinkedToAgedKit": 4,
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-04",
+          "assetType": "Laptop",
+          "activeDevices": 406,
+          "averageAgeMonths": 29.9,
+          "withinLifecyclePct": 82,
+          "outOfLifecyclePct": 18,
+          "stockOnHand": 31,
+          "monthsStockCover": 1.6,
+          "awaitingDeployment": 6,
+          "awaitingDisposal": 10,
+          "refreshSpend": 15600,
+          "incidentsLinkedToAgedKit": 10,
+          "commentary": "Incident drag from old devices is reducing."
+        },
+        {
+          "reportingMonth": "2026-04",
+          "assetType": "Mobile",
+          "activeDevices": 270,
+          "averageAgeMonths": 21.2,
+          "withinLifecyclePct": 93,
+          "outOfLifecyclePct": 7,
+          "stockOnHand": 17,
+          "monthsStockCover": 2.2,
+          "awaitingDeployment": 2,
+          "awaitingDisposal": 4,
+          "refreshSpend": 0,
+          "incidentsLinkedToAgedKit": 1,
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-04",
+          "assetType": "Monitor",
+          "activeDevices": 453,
+          "averageAgeMonths": 37,
+          "withinLifecyclePct": 74,
+          "outOfLifecyclePct": 26,
+          "stockOnHand": 22,
+          "monthsStockCover": 2.7,
+          "awaitingDeployment": 1,
+          "awaitingDisposal": 7,
+          "refreshSpend": 0,
+          "incidentsLinkedToAgedKit": 4,
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-05",
+          "assetType": "Laptop",
+          "activeDevices": 404,
+          "averageAgeMonths": 29.1,
+          "withinLifecyclePct": 84,
+          "outOfLifecyclePct": 16,
+          "stockOnHand": 35,
+          "monthsStockCover": 1.8,
+          "awaitingDeployment": 5,
+          "awaitingDisposal": 8,
+          "refreshSpend": 9200,
+          "incidentsLinkedToAgedKit": 8,
+          "commentary": "Stock position healthy ahead of Q3 refresh."
+        },
+        {
+          "reportingMonth": "2026-05",
+          "assetType": "Mobile",
+          "activeDevices": 270,
+          "averageAgeMonths": 20.9,
+          "withinLifecyclePct": 94,
+          "outOfLifecyclePct": 6,
+          "stockOnHand": 18,
+          "monthsStockCover": 2.4,
+          "awaitingDeployment": 2,
+          "awaitingDisposal": 4,
+          "refreshSpend": 0,
+          "incidentsLinkedToAgedKit": 1,
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-05",
+          "assetType": "Monitor",
+          "activeDevices": 452,
+          "averageAgeMonths": 36.7,
+          "withinLifecyclePct": 75,
+          "outOfLifecyclePct": 25,
+          "stockOnHand": 21,
+          "monthsStockCover": 2.6,
+          "awaitingDeployment": 1,
+          "awaitingDisposal": 7,
+          "refreshSpend": 0,
+          "incidentsLinkedToAgedKit": 3,
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-06",
+          "assetType": "Laptop",
+          "activeDevices": 401,
+          "averageAgeMonths": 28.3,
+          "withinLifecyclePct": 86,
+          "outOfLifecyclePct": 14,
+          "stockOnHand": 38,
+          "monthsStockCover": 2,
+          "awaitingDeployment": 4,
+          "awaitingDisposal": 6,
+          "refreshSpend": 11800,
+          "incidentsLinkedToAgedKit": 7,
+          "commentary": "Strongest lifecycle position in the half-year."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "assetType": "Mobile",
+          "activeDevices": 271,
+          "averageAgeMonths": 20.4,
+          "withinLifecyclePct": 95,
+          "outOfLifecyclePct": 5,
+          "stockOnHand": 19,
+          "monthsStockCover": 2.5,
+          "awaitingDeployment": 1,
+          "awaitingDisposal": 3,
+          "refreshSpend": 0,
+          "incidentsLinkedToAgedKit": 1,
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-06",
+          "assetType": "Monitor",
+          "activeDevices": 451,
+          "averageAgeMonths": 36.3,
+          "withinLifecyclePct": 76,
+          "outOfLifecyclePct": 24,
+          "stockOnHand": 20,
+          "monthsStockCover": 2.5,
+          "awaitingDeployment": 1,
+          "awaitingDisposal": 6,
+          "refreshSpend": 0,
+          "incidentsLinkedToAgedKit": 3,
+          "commentary": ""
+        }
+      ],
+      "changeRelease": [
+        {
+          "reportingMonth": "2026-01",
+          "totalChanges": 48,
+          "standardChanges": 20,
+          "normalChanges": 22,
+          "emergencyChanges": 6,
+          "successfulChanges": 44,
+          "failedChanges": 3,
+          "rolledBackChanges": 1,
+          "changeSuccessRatePct": 91.7,
+          "changesCausingIncidents": 1,
+          "releasesDeployed": 6,
+          "plannedMaintenanceCompleted": 4,
+          "commentary": "January change load elevated but broadly controlled."
+        },
+        {
+          "reportingMonth": "2026-02",
+          "totalChanges": 42,
+          "standardChanges": 18,
+          "normalChanges": 20,
+          "emergencyChanges": 4,
+          "successfulChanges": 39,
+          "failedChanges": 2,
+          "rolledBackChanges": 1,
+          "changeSuccessRatePct": 92.9,
+          "changesCausingIncidents": 1,
+          "releasesDeployed": 7,
+          "plannedMaintenanceCompleted": 5,
+          "commentary": "One emergency change caused minor user disruption."
+        },
+        {
+          "reportingMonth": "2026-03",
+          "totalChanges": 45,
+          "standardChanges": 19,
+          "normalChanges": 22,
+          "emergencyChanges": 4,
+          "successfulChanges": 42,
+          "failedChanges": 2,
+          "rolledBackChanges": 1,
+          "changeSuccessRatePct": 93.3,
+          "changesCausingIncidents": 0,
+          "releasesDeployed": 8,
+          "plannedMaintenanceCompleted": 6,
+          "commentary": "Release quality improved after CAB tightening."
+        },
+        {
+          "reportingMonth": "2026-04",
+          "totalChanges": 39,
+          "standardChanges": 17,
+          "normalChanges": 19,
+          "emergencyChanges": 3,
+          "successfulChanges": 37,
+          "failedChanges": 1,
+          "rolledBackChanges": 1,
+          "changeSuccessRatePct": 94.9,
+          "changesCausingIncidents": 0,
+          "releasesDeployed": 6,
+          "plannedMaintenanceCompleted": 5,
+          "commentary": "No major user impact from change activity."
+        },
+        {
+          "reportingMonth": "2026-05",
+          "totalChanges": 41,
+          "standardChanges": 18,
+          "normalChanges": 20,
+          "emergencyChanges": 3,
+          "successfulChanges": 39,
+          "failedChanges": 1,
+          "rolledBackChanges": 1,
+          "changeSuccessRatePct": 95.1,
+          "changesCausingIncidents": 0,
+          "releasesDeployed": 7,
+          "plannedMaintenanceCompleted": 5,
+          "commentary": "Operational discipline remained good."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "totalChanges": 44,
+          "standardChanges": 19,
+          "normalChanges": 21,
+          "emergencyChanges": 4,
+          "successfulChanges": 42,
+          "failedChanges": 1,
+          "rolledBackChanges": 1,
+          "changeSuccessRatePct": 95.5,
+          "changesCausingIncidents": 0,
+          "releasesDeployed": 9,
+          "plannedMaintenanceCompleted": 7,
+          "commentary": "Strongest release month with controlled failure rate."
+        }
+      ],
+      "devDelivery": [
+        {
+          "reportingMonth": "2026-01",
+          "devTasksOpened": 2,
+          "devTasksClosed": 7,
+          "devBacklogEnd": 21,
+          "averageDevTaskAgeDays": 133,
+          "oldestOpenDevTaskDays": 1027,
+          "blockedItems": 5,
+          "defectsDelivered": 2,
+          "enhancementsDelivered": 2,
+          "techDebtDelivered": 1,
+          "bauDelivered": 2,
+          "devCsatScore": 4.3,
+          "commentary": "Backlog reduced but oldest item still distorting picture."
+        },
+        {
+          "reportingMonth": "2026-02",
+          "devTasksOpened": 5,
+          "devTasksClosed": 2,
+          "devBacklogEnd": 24,
+          "averageDevTaskAgeDays": 146,
+          "oldestOpenDevTaskDays": 1027,
+          "blockedItems": 6,
+          "defectsDelivered": 1,
+          "enhancementsDelivered": 1,
+          "techDebtDelivered": 0,
+          "bauDelivered": 0,
+          "devCsatScore": 4.2,
+          "commentary": "Backlog reduction slowed; oldest items still need governance focus."
+        },
+        {
+          "reportingMonth": "2026-03",
+          "devTasksOpened": 7,
+          "devTasksClosed": 5,
+          "devBacklogEnd": 26,
+          "averageDevTaskAgeDays": 141,
+          "oldestOpenDevTaskDays": 1056,
+          "blockedItems": 7,
+          "defectsDelivered": 1,
+          "enhancementsDelivered": 2,
+          "techDebtDelivered": 1,
+          "bauDelivered": 1,
+          "devCsatScore": 4.1,
+          "commentary": "New demand rose faster than throughput this month."
+        },
+        {
+          "reportingMonth": "2026-04",
+          "devTasksOpened": 9,
+          "devTasksClosed": 11,
+          "devBacklogEnd": 23,
+          "averageDevTaskAgeDays": 128,
+          "oldestOpenDevTaskDays": 1086,
+          "blockedItems": 5,
+          "defectsDelivered": 2,
+          "enhancementsDelivered": 4,
+          "techDebtDelivered": 1,
+          "bauDelivered": 1,
+          "devCsatScore": 4.4,
+          "commentary": "Throughput improved after prioritisation reset."
+        },
+        {
+          "reportingMonth": "2026-05",
+          "devTasksOpened": 8,
+          "devTasksClosed": 10,
+          "devBacklogEnd": 21,
+          "averageDevTaskAgeDays": 119,
+          "oldestOpenDevTaskDays": 1117,
+          "blockedItems": 4,
+          "defectsDelivered": 2,
+          "enhancementsDelivered": 3,
+          "techDebtDelivered": 2,
+          "bauDelivered": 1,
+          "devCsatScore": 4.5,
+          "commentary": "Backlog and age profile both improved."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "devTasksOpened": 10,
+          "devTasksClosed": 12,
+          "devBacklogEnd": 18,
+          "averageDevTaskAgeDays": 104,
+          "oldestOpenDevTaskDays": 1147,
+          "blockedItems": 3,
+          "defectsDelivered": 3,
+          "enhancementsDelivered": 4,
+          "techDebtDelivered": 2,
+          "bauDelivered": 1,
+          "devCsatScore": 4.6,
+          "commentary": "Best delivery month in the period with fewer blocked items."
+        }
+      ],
+      "projectPortfolio": [
+        {
+          "reportingMonth": "2026-01",
+          "projectName": "Estate Refresh Wave 2",
+          "projectSponsor": "COO",
+          "statusRag": "Amber",
+          "deliveryConfidencePct": 75,
+          "budgetStatus": "Within budget",
+          "milestoneNext": "Roll-out complete",
+          "milestoneDate": "2026-04-15",
+          "projectCsatScore": 4.5,
+          "benefitsValueDelivered": "Older kit retired in 4 branches",
+          "blockersDependencies": "Supplier lead times",
+          "decisionNeeded": false,
+          "commentary": "Execution underway with supply constraint."
+        },
+        {
+          "reportingMonth": "2026-01",
+          "projectName": "Identity Modernisation",
+          "projectSponsor": "CEO",
+          "statusRag": "Green",
+          "deliveryConfidencePct": 88,
+          "budgetStatus": "Within budget",
+          "milestoneNext": "MFA finalisation",
+          "milestoneDate": "2026-03-31",
+          "projectCsatScore": 4.8,
+          "benefitsValueDelivered": "Security uplift and lower admin overhead",
+          "blockersDependencies": "",
+          "decisionNeeded": false,
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-01",
+          "projectName": "Data & Reporting Uplift",
+          "projectSponsor": "CFO",
+          "statusRag": "Amber",
+          "deliveryConfidencePct": 70,
+          "budgetStatus": "Watch",
+          "milestoneNext": "Design sign-off",
+          "milestoneDate": "2026-02-20",
+          "projectCsatScore": 4.2,
+          "benefitsValueDelivered": "Improved management information foundation",
+          "blockersDependencies": "Business capacity",
+          "decisionNeeded": true,
+          "commentary": "Need agreement on final scope."
+        },
+        {
+          "reportingMonth": "2026-02",
+          "projectName": "Estate Refresh Wave 2",
+          "projectSponsor": "COO",
+          "statusRag": "Amber",
+          "deliveryConfidencePct": 75,
+          "budgetStatus": "Within budget",
+          "milestoneNext": "Roll-out complete",
+          "milestoneDate": "2026-04-15",
+          "projectCsatScore": 4.5,
+          "benefitsValueDelivered": "Older kit retired in 4 branches",
+          "blockersDependencies": "Supplier lead times",
+          "decisionNeeded": false,
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-02",
+          "projectName": "Identity Modernisation",
+          "projectSponsor": "CEO",
+          "statusRag": "Green",
+          "deliveryConfidencePct": 88,
+          "budgetStatus": "Within budget",
+          "milestoneNext": "MFA finalisation",
+          "milestoneDate": "2026-03-31",
+          "projectCsatScore": 4.8,
+          "benefitsValueDelivered": "Security uplift and lower admin overhead",
+          "blockersDependencies": "",
+          "decisionNeeded": false,
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-02",
+          "projectName": "Data & Reporting Uplift",
+          "projectSponsor": "CFO",
+          "statusRag": "Amber",
+          "deliveryConfidencePct": 72,
+          "budgetStatus": "Watch",
+          "milestoneNext": "Prototype review",
+          "milestoneDate": "2026-03-18",
+          "projectCsatScore": 4.3,
+          "benefitsValueDelivered": "Better exec reporting structure",
+          "blockersDependencies": "Competing priorities",
+          "decisionNeeded": true,
+          "commentary": "Need design and data-model decision."
+        },
+        {
+          "reportingMonth": "2026-03",
+          "projectName": "Estate Refresh Wave 2",
+          "projectSponsor": "COO",
+          "statusRag": "Green",
+          "deliveryConfidencePct": 84,
+          "budgetStatus": "Within budget",
+          "milestoneNext": "Roll-out complete",
+          "milestoneDate": "2026-04-15",
+          "projectCsatScore": 4.6,
+          "benefitsValueDelivered": "Reduced support drag in targeted branches",
+          "blockersDependencies": "",
+          "decisionNeeded": false,
+          "commentary": "Supplier constraint eased."
+        },
+        {
+          "reportingMonth": "2026-03",
+          "projectName": "Identity Modernisation",
+          "projectSponsor": "CEO",
+          "statusRag": "Green",
+          "deliveryConfidencePct": 92,
+          "budgetStatus": "Within budget",
+          "milestoneNext": "Hypercare exit",
+          "milestoneDate": "2026-04-30",
+          "projectCsatScore": 4.9,
+          "benefitsValueDelivered": "Security and admin benefits realised",
+          "blockersDependencies": "",
+          "decisionNeeded": false,
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-03",
+          "projectName": "Data & Reporting Uplift",
+          "projectSponsor": "CFO",
+          "statusRag": "Amber",
+          "deliveryConfidencePct": 74,
+          "budgetStatus": "Watch",
+          "milestoneNext": "Design sign-off",
+          "milestoneDate": "2026-04-12",
+          "projectCsatScore": 4.4,
+          "benefitsValueDelivered": "Clearer reporting vision agreed",
+          "blockersDependencies": "Need ownership model",
+          "decisionNeeded": true,
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-04",
+          "projectName": "Estate Refresh Wave 2",
+          "projectSponsor": "COO",
+          "statusRag": "Green",
+          "deliveryConfidencePct": 95,
+          "budgetStatus": "Within budget",
+          "milestoneNext": "Project closure",
+          "milestoneDate": "2026-05-15",
+          "projectCsatScore": 4.7,
+          "benefitsValueDelivered": "Refresh completed in wave 2 scope",
+          "blockersDependencies": "",
+          "decisionNeeded": false,
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-04",
+          "projectName": "Identity Modernisation",
+          "projectSponsor": "CEO",
+          "statusRag": "Green",
+          "deliveryConfidencePct": 95,
+          "budgetStatus": "Within budget",
+          "milestoneNext": "Project closure",
+          "milestoneDate": "2026-05-30",
+          "projectCsatScore": 4.9,
+          "benefitsValueDelivered": "Identity control uplift embedded",
+          "blockersDependencies": "",
+          "decisionNeeded": false,
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-04",
+          "projectName": "Data & Reporting Uplift",
+          "projectSponsor": "CFO",
+          "statusRag": "Amber",
+          "deliveryConfidencePct": 76,
+          "budgetStatus": "Within budget",
+          "milestoneNext": "Component design",
+          "milestoneDate": "2026-05-20",
+          "projectCsatScore": 4.4,
+          "benefitsValueDelivered": "Reporting prototype progressed",
+          "blockersDependencies": "Data readiness",
+          "decisionNeeded": true,
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-05",
+          "projectName": "Laptop Refresh Phase 3",
+          "projectSponsor": "COO",
+          "statusRag": "Amber",
+          "deliveryConfidencePct": 78,
+          "budgetStatus": "Within budget",
+          "milestoneNext": "Mobilisation",
+          "milestoneDate": "2026-06-21",
+          "projectCsatScore": 4.4,
+          "benefitsValueDelivered": "Next wave scoped and costed",
+          "blockersDependencies": "Budget release",
+          "decisionNeeded": true,
+          "commentary": "Needs funding confirmation."
+        },
+        {
+          "reportingMonth": "2026-05",
+          "projectName": "Data & Reporting Uplift",
+          "projectSponsor": "CFO",
+          "statusRag": "Green",
+          "deliveryConfidencePct": 82,
+          "budgetStatus": "Within budget",
+          "milestoneNext": "Template pilot",
+          "milestoneDate": "2026-06-18",
+          "projectCsatScore": 4.5,
+          "benefitsValueDelivered": "Core ingestion model in pilot",
+          "blockersDependencies": "None",
+          "decisionNeeded": false,
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-05",
+          "projectName": "Security Remediation Sprint",
+          "projectSponsor": "CEO",
+          "statusRag": "Green",
+          "deliveryConfidencePct": 86,
+          "budgetStatus": "Within budget",
+          "milestoneNext": "Critical backlog clear-down",
+          "milestoneDate": "2026-06-10",
+          "projectCsatScore": 4.6,
+          "benefitsValueDelivered": "Reduced high and critical exposure",
+          "blockersDependencies": "",
+          "decisionNeeded": false,
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-06",
+          "projectName": "Laptop Refresh Phase 3",
+          "projectSponsor": "COO",
+          "statusRag": "Green",
+          "deliveryConfidencePct": 85,
+          "budgetStatus": "Within budget",
+          "milestoneNext": "Deployment start",
+          "milestoneDate": "2026-07-15",
+          "projectCsatScore": 4.5,
+          "benefitsValueDelivered": "Q3 refresh ready to launch",
+          "blockersDependencies": "Supplier delivery dates",
+          "decisionNeeded": false,
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-06",
+          "projectName": "Data & Reporting Uplift",
+          "projectSponsor": "CFO",
+          "statusRag": "Green",
+          "deliveryConfidencePct": 88,
+          "budgetStatus": "Within budget",
+          "milestoneNext": "Visual design pack",
+          "milestoneDate": "2026-07-22",
+          "projectCsatScore": 4.6,
+          "benefitsValueDelivered": "Management reporting foundation established",
+          "blockersDependencies": "",
+          "decisionNeeded": false,
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-06",
+          "projectName": "Security Remediation Sprint",
+          "projectSponsor": "CEO",
+          "statusRag": "Green",
+          "deliveryConfidencePct": 93,
+          "budgetStatus": "Within budget",
+          "milestoneNext": "Closure and handover",
+          "milestoneDate": "2026-07-05",
+          "projectCsatScore": 4.7,
+          "benefitsValueDelivered": "Material compliance improvement delivered",
+          "blockersDependencies": "",
+          "decisionNeeded": false,
+          "commentary": ""
+        }
+      ],
+      "rollingRoadmap": [
+        {
+          "roadmapQuarter": "2026 Q2",
+          "lane": "Infrastructure & cloud",
+          "initiative": "WAN resilience uplift",
+          "statusRag": "Amber",
+          "outcomeGoal": "Reduce single points of failure",
+          "owner": "Head of IT",
+          "dependency": "Carrier lead time",
+          "decisionRequired": false,
+          "notes": "Secondary path design agreed; implementation underway."
+        },
+        {
+          "roadmapQuarter": "2026 Q2",
+          "lane": "Security & compliance",
+          "initiative": "Patch compliance uplift",
+          "statusRag": "Green",
+          "outcomeGoal": "Meet critical patch target",
+          "owner": "Infrastructure Manager",
+          "dependency": "",
+          "decisionRequired": false,
+          "notes": "Trajectory positive and on plan."
+        },
+        {
+          "roadmapQuarter": "2026 Q2",
+          "lane": "Applications & data",
+          "initiative": "Exec reporting ingestion model",
+          "statusRag": "Amber",
+          "outcomeGoal": "Standardise reporting inputs",
+          "owner": "IT Director",
+          "dependency": "Data owner alignment",
+          "decisionRequired": true,
+          "notes": "Agree ownership and sign-off model."
+        },
+        {
+          "roadmapQuarter": "2026 Q3",
+          "lane": "End-user computing",
+          "initiative": "Laptop refresh phase 3",
+          "statusRag": "Green",
+          "outcomeGoal": "Reduce out-of-lifecycle estate",
+          "owner": "IT Operations",
+          "dependency": "Budget approval",
+          "decisionRequired": true,
+          "notes": "Spend envelope needed before bulk order."
+        },
+        {
+          "roadmapQuarter": "2026 Q3",
+          "lane": "Product / development",
+          "initiative": "TABS prioritisation reset",
+          "statusRag": "Amber",
+          "outcomeGoal": "Reduce oldest dev backlog",
+          "owner": "IT Director",
+          "dependency": "Business prioritisation",
+          "decisionRequired": true,
+          "notes": "Agree scope and sequencing."
+        },
+        {
+          "roadmapQuarter": "2026 Q3",
+          "lane": "Business transformation",
+          "initiative": "Project portfolio governance refresh",
+          "statusRag": "Green",
+          "outcomeGoal": "Improve prioritisation discipline",
+          "owner": "CIO",
+          "dependency": "",
+          "decisionRequired": false,
+          "notes": "Steering cadence defined."
+        },
+        {
+          "roadmapQuarter": "2026 Q4",
+          "lane": "Security & compliance",
+          "initiative": "Access control rationalisation",
+          "statusRag": "Amber",
+          "outcomeGoal": "Reduce legacy permissions risk",
+          "owner": "Security Lead",
+          "dependency": "Business testing windows",
+          "decisionRequired": false,
+          "notes": "Cross-functional dependency to schedule."
+        },
+        {
+          "roadmapQuarter": "2026 Q4",
+          "lane": "Infrastructure & cloud",
+          "initiative": "Private cloud rationalisation",
+          "statusRag": "Amber",
+          "outcomeGoal": "Reduce hosted legacy risk",
+          "owner": "Head of IT",
+          "dependency": "Commercial options review",
+          "decisionRequired": true,
+          "notes": "Need decision on medium-term hosting target."
+        },
+        {
+          "roadmapQuarter": "2026 Q4",
+          "lane": "Applications & data",
+          "initiative": "Management information self-service",
+          "statusRag": "Green",
+          "outcomeGoal": "Improve reporting speed and consistency",
+          "owner": "Data Lead",
+          "dependency": "",
+          "decisionRequired": false,
+          "notes": "Dependent on ingestion model maturation."
+        },
+        {
+          "roadmapQuarter": "2027 Q1",
+          "lane": "Core IT operations",
+          "initiative": "Service desk workflow optimisation",
+          "statusRag": "Green",
+          "outcomeGoal": "Cut avoidable handling effort",
+          "owner": "Service Desk Manager",
+          "dependency": "",
+          "decisionRequired": false,
+          "notes": "Automation opportunities identified."
+        },
+        {
+          "roadmapQuarter": "2027 Q1",
+          "lane": "Product / development",
+          "initiative": "Dev backlog quality reset",
+          "statusRag": "Amber",
+          "outcomeGoal": "Retire stale demand and focus throughput",
+          "owner": "IT Director",
+          "dependency": "Business sign-off",
+          "decisionRequired": true,
+          "notes": "Need agreement on archive/close criteria."
+        },
+        {
+          "roadmapQuarter": "2027 Q2",
+          "lane": "Business transformation",
+          "initiative": "Digital workplace enhancement",
+          "statusRag": "Green",
+          "outcomeGoal": "Improve collaboration and productivity",
+          "owner": "CIO",
+          "dependency": "Licensing decision",
+          "decisionRequired": true,
+          "notes": "Dependent on M365 roadmap choice."
+        }
+      ],
+      "budgetCommercials": [
+        {
+          "reportingMonth": "2026-01",
+          "budgetLine": "Cloud services",
+          "budgetAmount": 25000,
+          "actualAmount": 24620,
+          "forecastAmount": 24800,
+          "variance": -380,
+          "cloudLicensingSpend": 24620,
+          "assetRefreshSpend": 0,
+          "savingsAchieved": 0,
+          "avoidableCostRisk": 900,
+          "vendorContract": "AWS Support",
+          "renewalDueDate": "2026-06-30",
+          "renewalValue": 18000,
+          "owner": "CIO",
+          "commentary": "Spend broadly on plan."
+        },
+        {
+          "reportingMonth": "2026-01",
+          "budgetLine": "Licensing",
+          "budgetAmount": 41000,
+          "actualAmount": 41980,
+          "forecastAmount": 42200,
+          "variance": 980,
+          "cloudLicensingSpend": 41980,
+          "assetRefreshSpend": 0,
+          "savingsAchieved": 300,
+          "avoidableCostRisk": 2200,
+          "vendorContract": "Microsoft EA / CSP",
+          "renewalDueDate": "2026-11-30",
+          "renewalValue": 510000,
+          "owner": "CIO",
+          "commentary": "Slight licence growth pressure emerging."
+        },
+        {
+          "reportingMonth": "2026-01",
+          "budgetLine": "Hardware / refresh",
+          "budgetAmount": 20000,
+          "actualAmount": 14200,
+          "forecastAmount": 19500,
+          "variance": -5800,
+          "cloudLicensingSpend": 0,
+          "assetRefreshSpend": 14200,
+          "savingsAchieved": 0,
+          "avoidableCostRisk": 0,
+          "vendorContract": "HP Device Refresh",
+          "renewalDueDate": "2026-09-15",
+          "renewalValue": 76000,
+          "owner": "IT Ops",
+          "commentary": "Refresh spend behind profile due to supply timing."
+        },
+        {
+          "reportingMonth": "2026-01",
+          "budgetLine": "Connectivity",
+          "budgetAmount": 14000,
+          "actualAmount": 14120,
+          "forecastAmount": 14100,
+          "variance": 120,
+          "cloudLicensingSpend": 0,
+          "assetRefreshSpend": 0,
+          "savingsAchieved": 0,
+          "avoidableCostRisk": 500,
+          "vendorContract": "WAN / ISP Services",
+          "renewalDueDate": "2026-08-31",
+          "renewalValue": 168000,
+          "owner": "Head of IT",
+          "commentary": "Carrier costs slightly above budget."
+        },
+        {
+          "reportingMonth": "2026-02",
+          "budgetLine": "Cloud services",
+          "budgetAmount": 25000,
+          "actualAmount": 23850,
+          "forecastAmount": 24800,
+          "variance": -1150,
+          "cloudLicensingSpend": 23850,
+          "assetRefreshSpend": 0,
+          "savingsAchieved": 0,
+          "avoidableCostRisk": 900,
+          "vendorContract": "AWS Support",
+          "renewalDueDate": "2026-06-30",
+          "renewalValue": 18000,
+          "owner": "CIO",
+          "commentary": "Spend under budget this month."
+        },
+        {
+          "reportingMonth": "2026-02",
+          "budgetLine": "Licensing",
+          "budgetAmount": 41000,
+          "actualAmount": 42150,
+          "forecastAmount": 42400,
+          "variance": 1150,
+          "cloudLicensingSpend": 42150,
+          "assetRefreshSpend": 0,
+          "savingsAchieved": 500,
+          "avoidableCostRisk": 2500,
+          "vendorContract": "Microsoft EA / CSP",
+          "renewalDueDate": "2026-11-30",
+          "renewalValue": 510000,
+          "owner": "CIO",
+          "commentary": "Slight overspend from licence growth."
+        },
+        {
+          "reportingMonth": "2026-02",
+          "budgetLine": "Hardware / refresh",
+          "budgetAmount": 20000,
+          "actualAmount": 18500,
+          "forecastAmount": 19600,
+          "variance": -1500,
+          "cloudLicensingSpend": 0,
+          "assetRefreshSpend": 18500,
+          "savingsAchieved": 0,
+          "avoidableCostRisk": 0,
+          "vendorContract": "HP Device Refresh",
+          "renewalDueDate": "2026-09-15",
+          "renewalValue": 76000,
+          "owner": "IT Ops",
+          "commentary": "Refresh spend tracking to plan."
+        },
+        {
+          "reportingMonth": "2026-02",
+          "budgetLine": "Connectivity",
+          "budgetAmount": 14000,
+          "actualAmount": 13960,
+          "forecastAmount": 14050,
+          "variance": -40,
+          "cloudLicensingSpend": 0,
+          "assetRefreshSpend": 0,
+          "savingsAchieved": 0,
+          "avoidableCostRisk": 500,
+          "vendorContract": "WAN / ISP Services",
+          "renewalDueDate": "2026-08-31",
+          "renewalValue": 168000,
+          "owner": "Head of IT",
+          "commentary": "Connectivity stable and near budget."
+        },
+        {
+          "reportingMonth": "2026-03",
+          "budgetLine": "Cloud services",
+          "budgetAmount": 25000,
+          "actualAmount": 24120,
+          "forecastAmount": 24700,
+          "variance": -880,
+          "cloudLicensingSpend": 24120,
+          "assetRefreshSpend": 0,
+          "savingsAchieved": 0,
+          "avoidableCostRisk": 850,
+          "vendorContract": "AWS Support",
+          "renewalDueDate": "2026-06-30",
+          "renewalValue": 18000,
+          "owner": "CIO",
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-03",
+          "budgetLine": "Licensing",
+          "budgetAmount": 41000,
+          "actualAmount": 42340,
+          "forecastAmount": 42500,
+          "variance": 1340,
+          "cloudLicensingSpend": 42340,
+          "assetRefreshSpend": 0,
+          "savingsAchieved": 700,
+          "avoidableCostRisk": 2500,
+          "vendorContract": "Microsoft EA / CSP",
+          "renewalDueDate": "2026-11-30",
+          "renewalValue": 510000,
+          "owner": "CIO",
+          "commentary": "Optimisation action identified."
+        },
+        {
+          "reportingMonth": "2026-03",
+          "budgetLine": "Hardware / refresh",
+          "budgetAmount": 20000,
+          "actualAmount": 12400,
+          "forecastAmount": 18700,
+          "variance": -7600,
+          "cloudLicensingSpend": 0,
+          "assetRefreshSpend": 12400,
+          "savingsAchieved": 0,
+          "avoidableCostRisk": 0,
+          "vendorContract": "HP Device Refresh",
+          "renewalDueDate": "2026-09-15",
+          "renewalValue": 76000,
+          "owner": "IT Ops",
+          "commentary": "Spend timing deferred into Q2."
+        },
+        {
+          "reportingMonth": "2026-03",
+          "budgetLine": "Connectivity",
+          "budgetAmount": 14000,
+          "actualAmount": 13880,
+          "forecastAmount": 13990,
+          "variance": -120,
+          "cloudLicensingSpend": 0,
+          "assetRefreshSpend": 0,
+          "savingsAchieved": 0,
+          "avoidableCostRisk": 500,
+          "vendorContract": "WAN / ISP Services",
+          "renewalDueDate": "2026-08-31",
+          "renewalValue": 168000,
+          "owner": "Head of IT",
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-04",
+          "budgetLine": "Cloud services",
+          "budgetAmount": 25000,
+          "actualAmount": 23940,
+          "forecastAmount": 24600,
+          "variance": -1060,
+          "cloudLicensingSpend": 23940,
+          "assetRefreshSpend": 0,
+          "savingsAchieved": 0,
+          "avoidableCostRisk": 800,
+          "vendorContract": "AWS Support",
+          "renewalDueDate": "2026-06-30",
+          "renewalValue": 18000,
+          "owner": "CIO",
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-04",
+          "budgetLine": "Licensing",
+          "budgetAmount": 41000,
+          "actualAmount": 41890,
+          "forecastAmount": 42100,
+          "variance": 890,
+          "cloudLicensingSpend": 41890,
+          "assetRefreshSpend": 0,
+          "savingsAchieved": 900,
+          "avoidableCostRisk": 2100,
+          "vendorContract": "Microsoft EA / CSP",
+          "renewalDueDate": "2026-11-30",
+          "renewalValue": 510000,
+          "owner": "CIO",
+          "commentary": "Optimisation starting to land."
+        },
+        {
+          "reportingMonth": "2026-04",
+          "budgetLine": "Hardware / refresh",
+          "budgetAmount": 20000,
+          "actualAmount": 15600,
+          "forecastAmount": 19800,
+          "variance": -4400,
+          "cloudLicensingSpend": 0,
+          "assetRefreshSpend": 15600,
+          "savingsAchieved": 0,
+          "avoidableCostRisk": 0,
+          "vendorContract": "HP Device Refresh",
+          "renewalDueDate": "2026-09-15",
+          "renewalValue": 76000,
+          "owner": "IT Ops",
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-04",
+          "budgetLine": "Connectivity",
+          "budgetAmount": 14000,
+          "actualAmount": 13910,
+          "forecastAmount": 13980,
+          "variance": -90,
+          "cloudLicensingSpend": 0,
+          "assetRefreshSpend": 0,
+          "savingsAchieved": 0,
+          "avoidableCostRisk": 400,
+          "vendorContract": "WAN / ISP Services",
+          "renewalDueDate": "2026-08-31",
+          "renewalValue": 168000,
+          "owner": "Head of IT",
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-05",
+          "budgetLine": "Cloud services",
+          "budgetAmount": 25000,
+          "actualAmount": 24280,
+          "forecastAmount": 24750,
+          "variance": -720,
+          "cloudLicensingSpend": 24280,
+          "assetRefreshSpend": 0,
+          "savingsAchieved": 150,
+          "avoidableCostRisk": 700,
+          "vendorContract": "AWS Support",
+          "renewalDueDate": "2026-06-30",
+          "renewalValue": 18000,
+          "owner": "CIO",
+          "commentary": "Usage stable."
+        },
+        {
+          "reportingMonth": "2026-05",
+          "budgetLine": "Licensing",
+          "budgetAmount": 41000,
+          "actualAmount": 41520,
+          "forecastAmount": 41800,
+          "variance": 520,
+          "cloudLicensingSpend": 41520,
+          "assetRefreshSpend": 0,
+          "savingsAchieved": 1200,
+          "avoidableCostRisk": 1800,
+          "vendorContract": "Microsoft EA / CSP",
+          "renewalDueDate": "2026-11-30",
+          "renewalValue": 510000,
+          "owner": "CIO",
+          "commentary": "Savings from licence clean-up beginning to show."
+        },
+        {
+          "reportingMonth": "2026-05",
+          "budgetLine": "Hardware / refresh",
+          "budgetAmount": 20000,
+          "actualAmount": 9200,
+          "forecastAmount": 18100,
+          "variance": -10800,
+          "cloudLicensingSpend": 0,
+          "assetRefreshSpend": 9200,
+          "savingsAchieved": 0,
+          "avoidableCostRisk": 0,
+          "vendorContract": "HP Device Refresh",
+          "renewalDueDate": "2026-09-15",
+          "renewalValue": 76000,
+          "owner": "IT Ops",
+          "commentary": "Q3 ordering not yet started."
+        },
+        {
+          "reportingMonth": "2026-05",
+          "budgetLine": "Connectivity",
+          "budgetAmount": 14000,
+          "actualAmount": 13870,
+          "forecastAmount": 13920,
+          "variance": -130,
+          "cloudLicensingSpend": 0,
+          "assetRefreshSpend": 0,
+          "savingsAchieved": 0,
+          "avoidableCostRisk": 400,
+          "vendorContract": "WAN / ISP Services",
+          "renewalDueDate": "2026-08-31",
+          "renewalValue": 168000,
+          "owner": "Head of IT",
+          "commentary": ""
+        },
+        {
+          "reportingMonth": "2026-06",
+          "budgetLine": "Cloud services",
+          "budgetAmount": 25000,
+          "actualAmount": 24410,
+          "forecastAmount": 24800,
+          "variance": -590,
+          "cloudLicensingSpend": 24410,
+          "assetRefreshSpend": 0,
+          "savingsAchieved": 200,
+          "avoidableCostRisk": 650,
+          "vendorContract": "AWS Support",
+          "renewalDueDate": "2026-06-30",
+          "renewalValue": 18000,
+          "owner": "CIO",
+          "commentary": "Renewal prep under way."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "budgetLine": "Licensing",
+          "budgetAmount": 41000,
+          "actualAmount": 41280,
+          "forecastAmount": 41600,
+          "variance": 280,
+          "cloudLicensingSpend": 41280,
+          "assetRefreshSpend": 0,
+          "savingsAchieved": 1500,
+          "avoidableCostRisk": 1600,
+          "vendorContract": "Microsoft EA / CSP",
+          "renewalDueDate": "2026-11-30",
+          "renewalValue": 510000,
+          "owner": "CIO",
+          "commentary": "Best variance in the half-year."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "budgetLine": "Hardware / refresh",
+          "budgetAmount": 20000,
+          "actualAmount": 11800,
+          "forecastAmount": 18950,
+          "variance": -8200,
+          "cloudLicensingSpend": 0,
+          "assetRefreshSpend": 11800,
+          "savingsAchieved": 0,
+          "avoidableCostRisk": 0,
+          "vendorContract": "HP Device Refresh",
+          "renewalDueDate": "2026-09-15",
+          "renewalValue": 76000,
+          "owner": "IT Ops",
+          "commentary": "Budget held for Q3 wave mobilisation."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "budgetLine": "Connectivity",
+          "budgetAmount": 14000,
+          "actualAmount": 13840,
+          "forecastAmount": 13900,
+          "variance": -160,
+          "cloudLicensingSpend": 0,
+          "assetRefreshSpend": 0,
+          "savingsAchieved": 0,
+          "avoidableCostRisk": 350,
+          "vendorContract": "WAN / ISP Services",
+          "renewalDueDate": "2026-08-31",
+          "renewalValue": 168000,
+          "owner": "Head of IT",
+          "commentary": ""
+        }
+      ],
+      "topRisks": [
+        {
+          "reportingMonth": "2026-06",
+          "riskIssue": "Ageing laptop estate could still drive avoidable incidents if Q3 refresh slips",
+          "type": "Operational",
+          "owner": "IT Operations",
+          "impact": "High",
+          "likelihood": "Likely",
+          "ratingRag": "Amber",
+          "currentControlMitigation": "Prepare order and protect budget envelope",
+          "targetDate": "2026-07-15",
+          "decisionRequired": true,
+          "commentary": "Needs timely funding and supplier slot."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "riskIssue": "Microsoft renewal remains a material H2 commercial event",
+          "type": "Commercial",
+          "owner": "CIO",
+          "impact": "High",
+          "likelihood": "Possible",
+          "ratingRag": "Amber",
+          "currentControlMitigation": "Early market engagement and optimisation work",
+          "targetDate": "2026-09-30",
+          "decisionRequired": true,
+          "commentary": "Decision needed on commercial route and term."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "riskIssue": "Historic development backlog may continue to distort confidence and stakeholder trust",
+          "type": "Delivery",
+          "owner": "IT Director",
+          "impact": "High",
+          "likelihood": "Likely",
+          "ratingRag": "Amber",
+          "currentControlMitigation": "Prioritisation reset and stale-item governance",
+          "targetDate": "2026-08-31",
+          "decisionRequired": true,
+          "commentary": "Requires business sponsorship and close criteria."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "riskIssue": "Private cloud remains a residual resilience concern despite recent improvement",
+          "type": "Operational",
+          "owner": "Head of IT",
+          "impact": "Medium",
+          "likelihood": "Possible",
+          "ratingRag": "Amber",
+          "currentControlMitigation": "Monitor, harden and review rationalisation options",
+          "targetDate": "2026-10-31",
+          "decisionRequired": false,
+          "commentary": "Improved but still not target-state."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "riskIssue": "Data ownership inconsistency could slow exec reporting maturity",
+          "type": "Governance",
+          "owner": "CIO",
+          "impact": "Medium",
+          "likelihood": "Likely",
+          "ratingRag": "Amber",
+          "currentControlMitigation": "Define named data owners by domain",
+          "targetDate": "2026-07-31",
+          "decisionRequired": true,
+          "commentary": "Needed for sustainable reporting process."
+        },
+        {
+          "reportingMonth": "2026-06",
+          "riskIssue": "Patch compliance could regress if operational capacity is diverted into project work",
+          "type": "Security",
+          "owner": "Infrastructure Manager",
+          "impact": "Medium",
+          "likelihood": "Possible",
+          "ratingRag": "Green",
+          "currentControlMitigation": "Maintain monthly patch cadence and reporting",
+          "targetDate": "2026-09-30",
+          "decisionRequired": false,
+          "commentary": "Currently stable but capacity-sensitive."
+        }
+      ],
+      "narrativeNotes": [
+        {
+          "reportingMonth": "2026-06",
+          "section": "Executive scorecard",
+          "noteType": "Win",
+          "headline": "Core service availability strongest in the half-year",
+          "narrative": "June delivered excellent availability across network, cloud and critical platforms with no major incidents.",
+          "owner": "Head of IT"
+        },
+        {
+          "reportingMonth": "2026-06",
+          "section": "Support operations and user experience",
+          "noteType": "Win",
+          "headline": "Support performance improved while ticket CSAT remained high",
+          "narrative": "Average resolution time reduced to 1.2 days and CSAT improved to 4.8/5.",
+          "owner": "Service Desk Manager"
+        },
+        {
+          "reportingMonth": "2026-06",
+          "section": "Security, patching and compliance",
+          "noteType": "Win",
+          "headline": "Critical vulnerability backlog reduced to zero",
+          "narrative": "Patch compliance and remediation controls are now materially stronger than at the start of the year.",
+          "owner": "Infrastructure Manager"
+        },
+        {
+          "reportingMonth": "2026-06",
+          "section": "Estate, assets and lifecycle",
+          "noteType": "Concern",
+          "headline": "Refresh progress still depends on protected Q3 funding",
+          "narrative": "Lifecycle health has improved, but progress will stall without the next refresh wave.",
+          "owner": "IT Operations"
+        },
+        {
+          "reportingMonth": "2026-06",
+          "section": "Budget and commercials",
+          "noteType": "Concern",
+          "headline": "Licensing remains the main commercial pressure line",
+          "narrative": "The position is improving, but optimisation work must continue before renewal.",
+          "owner": "CIO"
+        },
+        {
+          "reportingMonth": "2026-06",
+          "section": "Top risks and decisions",
+          "noteType": "Decision needed",
+          "headline": "Approve Q3 device refresh spend envelope",
+          "narrative": "Approving the refresh envelope now protects supplier lead times and supports further reduction in aged-estate incidents.",
+          "owner": "CIO"
+        },
+        {
+          "reportingMonth": "2026-06",
+          "section": "Delivery, projects and rolling roadmap",
+          "noteType": "Win",
+          "headline": "Delivery confidence is improving across the active portfolio",
+          "narrative": "Project CSAT and delivery confidence both improved after governance tightening.",
+          "owner": "IT Director"
+        }
+      ],
+      "derivedNetworkMetrics": [
+        {
+          "reportingMonth": "2026-01",
+          "availabilityPct": 99.67,
+          "outageMinutes": 3223,
+          "majorIncidents": 2,
+          "perfectOffices": 0,
+          "below99_9Offices": 17,
+          "below99Offices": 2,
+          "worstOffice": "Cardiff",
+          "worstAvailabilityPct": 97.8
+        },
+        {
+          "reportingMonth": "2026-02",
+          "availabilityPct": 99.77,
+          "outageMinutes": 2049,
+          "majorIncidents": 2,
+          "perfectOffices": 0,
+          "below99_9Offices": 12,
+          "below99Offices": 2,
+          "worstOffice": "Cardiff",
+          "worstAvailabilityPct": 98.5
+        },
+        {
+          "reportingMonth": "2026-03",
+          "availabilityPct": 99.87,
+          "outageMinutes": 1282,
+          "majorIncidents": 0,
+          "perfectOffices": 2,
+          "below99_9Offices": 4,
+          "below99Offices": 0,
+          "worstOffice": "Swansea",
+          "worstAvailabilityPct": 99.1
+        },
+        {
+          "reportingMonth": "2026-04",
+          "availabilityPct": 99.92,
+          "outageMinutes": 753,
+          "majorIncidents": 0,
+          "perfectOffices": 4,
+          "below99_9Offices": 2,
+          "below99Offices": 0,
+          "worstOffice": "Swansea",
+          "worstAvailabilityPct": 99.4
+        },
+        {
+          "reportingMonth": "2026-05",
+          "availabilityPct": 99.95,
+          "outageMinutes": 467,
+          "majorIncidents": 0,
+          "perfectOffices": 11,
+          "below99_9Offices": 2,
+          "below99Offices": 0,
+          "worstOffice": "Cardiff",
+          "worstAvailabilityPct": 99.55
+        },
+        {
+          "reportingMonth": "2026-06",
+          "availabilityPct": 99.97,
+          "outageMinutes": 303,
+          "majorIncidents": 0,
+          "perfectOffices": 19,
+          "below99_9Offices": 2,
+          "below99Offices": 0,
+          "worstOffice": "Cardiff",
+          "worstAvailabilityPct": 99.62
+        }
+      ]
+    },
+    "workbookObjectKey": "workbooks/pdC5-tekuPxptKxJOj0Pa/IT_Exec_Reporting_Ingestion_Template_v2_dummy_data.xlsx"
+  }
+]
