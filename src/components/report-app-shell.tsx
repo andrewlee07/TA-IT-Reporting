@@ -41,6 +41,7 @@ interface PortalTargets {
 }
 
 type ClientExportFormat = "png" | "jpeg";
+type CollapsedNavStyle = "icons" | "initials";
 
 interface ClientExportTarget {
   id: string;
@@ -146,6 +147,7 @@ export function ReportAppShell({
   const [selectedExportIds, setSelectedExportIds] = useState<string[]>([]);
   const [activeExportTargets, setActiveExportTargets] = useState<ClientExportTarget[]>([]);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [collapsedNavStyle, setCollapsedNavStyle] = useState<CollapsedNavStyle>("icons");
 
   const templateData = useMemo(() => buildTemplateData(activeReport.snapshot, selectedMonth), [activeReport.snapshot, selectedMonth]);
   const reportOptions = useMemo(() => {
@@ -181,6 +183,11 @@ export function ReportAppShell({
       if (storedValue === "true") {
         setIsSidebarCollapsed(true);
       }
+
+      const storedNavStyle = window.localStorage.getItem("ta-it-reporting-collapsed-nav-style");
+      if (storedNavStyle === "icons" || storedNavStyle === "initials") {
+        setCollapsedNavStyle(storedNavStyle);
+      }
     } catch {
       // localStorage access is optional
     }
@@ -193,6 +200,14 @@ export function ReportAppShell({
       // localStorage access is optional
     }
   }, [isSidebarCollapsed]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("ta-it-reporting-collapsed-nav-style", collapsedNavStyle);
+    } catch {
+      // localStorage access is optional
+    }
+  }, [collapsedNavStyle]);
 
   useEffect(() => {
     const handleUploadRequest = () => {
@@ -386,7 +401,9 @@ export function ReportAppShell({
     }
 
     shellRoot.classList.toggle("sidebar-collapsed", isSidebarCollapsed);
-  }, [isSidebarCollapsed]);
+    shellRoot.classList.toggle("sidebar-use-icons", collapsedNavStyle === "icons");
+    shellRoot.classList.toggle("sidebar-use-initials", collapsedNavStyle === "initials");
+  }, [collapsedNavStyle, isSidebarCollapsed]);
 
   useEffect(() => {
     controllerRef.current?.showPage(selectedPageId);
@@ -870,6 +887,27 @@ export function ReportAppShell({
             {activeReport.title}
           </div>
           <div className="sidebar-meta">Template {activeReport.templateKey} · v{activeReport.templateVersion}</div>
+        </div>
+
+        <div className="sidebar-stack-tight">
+          <span className="sidebar-field-label">Navigation</span>
+          <div className="sidebar-inline">
+            <button
+              className={`sidebar-button secondary ${collapsedNavStyle === "icons" ? "is-active" : ""}`}
+              onClick={() => setCollapsedNavStyle("icons")}
+              type="button"
+            >
+              Icons
+            </button>
+            <button
+              className={`sidebar-button secondary ${collapsedNavStyle === "initials" ? "is-active" : ""}`}
+              onClick={() => setCollapsedNavStyle("initials")}
+              type="button"
+            >
+              Initials
+            </button>
+          </div>
+          <div className="sidebar-meta">Collapsed rail style</div>
         </div>
 
         <div className="sidebar-stack-tight">

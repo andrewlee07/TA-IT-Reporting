@@ -102,6 +102,22 @@ body { font-family: Arial, sans-serif; background: #D8DDE3; color: var(--text); 
   flex-shrink: 0;
   font-size: 9px; font-weight: 700; letter-spacing: 0.6px;
 }
+.nav-icon-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.nav-icon-glyph {
+  display: none;
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 .nav-text {
   white-space: nowrap;
   overflow: hidden;
@@ -252,6 +268,18 @@ body { font-family: Arial, sans-serif; background: #D8DDE3; color: var(--text); 
   font-size: 10px;
 }
 .shell.sidebar-collapsed .nav-text {
+  display: none;
+}
+.shell.sidebar-collapsed.sidebar-use-icons .nav-icon-label {
+  display: none;
+}
+.shell.sidebar-collapsed.sidebar-use-icons .nav-icon-glyph {
+  display: block;
+}
+.shell.sidebar-collapsed.sidebar-use-initials .nav-icon-label {
+  display: inline-flex;
+}
+.shell.sidebar-collapsed.sidebar-use-initials .nav-icon-glyph {
   display: none;
 }
 
@@ -801,19 +829,19 @@ __REPORT_OVERRIDES__
   </div>
   <div class="sidebar-group" id="sidebar-period-slot"></div>
   <div class="nav-section">Report Sections</div>
-  <div class="nav-link active" data-page-id="p-exec" title="Executive Scorecard" onclick="showPage('p-exec',this)"><div class="nav-icon">EX</div><span class="nav-text">Executive Scorecard</span></div>
-  <div class="nav-link" data-page-id="p-avail" title="Service Availability" onclick="showPage('p-avail',this)"><div class="nav-icon">SA</div><span class="nav-text">Service Availability</span></div>
-  <div class="nav-link" data-page-id="p-network" title="Network &amp; Offices" onclick="showPage('p-network',this)"><div class="nav-icon">NW</div><span class="nav-text">Network &amp; Offices</span></div>
-  <div class="nav-link" data-page-id="p-support" title="Support Operations" onclick="showPage('p-support',this)"><div class="nav-icon">SU</div><span class="nav-text">Support Operations</span></div>
-  <div class="nav-link" data-page-id="p-security" title="Security &amp; Patching" onclick="showPage('p-security',this)"><div class="nav-icon">SC</div><span class="nav-text">Security &amp; Patching</span></div>
-  <div class="nav-link" data-page-id="p-assets" title="Assets &amp; Lifecycle" onclick="showPage('p-assets',this)"><div class="nav-icon">AS</div><span class="nav-text">Assets &amp; Lifecycle</span></div>
-  <div class="nav-link" data-page-id="p-change" title="Change &amp; Release" onclick="showPage('p-change',this)"><div class="nav-icon">CH</div><span class="nav-text">Change &amp; Release</span></div>
-  <div class="nav-link" data-page-id="p-dev" title="Development &amp; Delivery" onclick="showPage('p-dev',this)"><div class="nav-icon">DV</div><span class="nav-text">Development &amp; Delivery</span></div>
-  <div class="nav-link" data-page-id="p-projects" title="Project Portfolio" onclick="showPage('p-projects',this)"><div class="nav-icon">PF</div><span class="nav-text">Project Portfolio</span></div>
-  <div class="nav-link" data-page-id="p-roadmap" title="Rolling Roadmap" onclick="showPage('p-roadmap',this)"><div class="nav-icon">RM</div><span class="nav-text">Rolling Roadmap</span></div>
-  <div class="nav-link" data-page-id="p-gantt" title="Portfolio Gantt" onclick="showPage('p-gantt',this)"><div class="nav-icon">GT</div><span class="nav-text">Portfolio Gantt</span></div>
-  <div class="nav-link" data-page-id="p-budget" title="Budget &amp; Commercials" onclick="showPage('p-budget',this)"><div class="nav-icon">BD</div><span class="nav-text">Budget &amp; Commercials</span></div>
-  <div class="nav-link" data-page-id="p-risks" title="Risks &amp; Decisions" onclick="showPage('p-risks',this)"><div class="nav-icon">RK</div><span class="nav-text">Risks &amp; Decisions</span></div>
+  <div class="nav-link active" data-page-id="p-exec" title="Executive Scorecard" onclick="showPage('p-exec',this)"><div class="nav-icon"><span class="nav-icon-label">EX</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="4" height="4" rx="1"></rect><rect x="10" y="2" width="4" height="4" rx="1"></rect><rect x="2" y="10" width="4" height="4" rx="1"></rect><rect x="10" y="10" width="4" height="4" rx="1"></rect></svg></div><span class="nav-text">Executive Scorecard</span></div>
+  <div class="nav-link" data-page-id="p-avail" title="Service Availability" onclick="showPage('p-avail',this)"><div class="nav-icon"><span class="nav-icon-label">SA</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 11.5h11"></path><path d="M4 10V6.5"></path><path d="M8 10V4.5"></path><path d="M12 10V7.5"></path></svg></div><span class="nav-text">Service Availability</span></div>
+  <div class="nav-link" data-page-id="p-network" title="Network &amp; Offices" onclick="showPage('p-network',this)"><div class="nav-icon"><span class="nav-icon-label">NW</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="4" r="1.5"></circle><circle cx="13" cy="4" r="1.5"></circle><circle cx="8" cy="12" r="1.5"></circle><path d="M4.4 4.8 7 10.6"></path><path d="M11.6 4.8 9 10.6"></path><path d="M4.7 4h6.6"></path></svg></div><span class="nav-text">Network &amp; Offices</span></div>
+  <div class="nav-link" data-page-id="p-support" title="Support Operations" onclick="showPage('p-support',this)"><div class="nav-icon"><span class="nav-icon-label">SU</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8a4.5 4.5 0 0 1 9 0"></path><path d="M3.5 8v2.5c0 .8.7 1.5 1.5 1.5h1V8H3.5Z"></path><path d="M12.5 8v2.5c0 .8-.7 1.5-1.5 1.5h-1V8h2.5Z"></path><path d="M8 13.5h1.5"></path></svg></div><span class="nav-text">Support Operations</span></div>
+  <div class="nav-link" data-page-id="p-security" title="Security &amp; Patching" onclick="showPage('p-security',this)"><div class="nav-icon"><span class="nav-icon-label">SC</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.2 12.5 4v3.6c0 3-1.8 4.9-4.5 6.2-2.7-1.3-4.5-3.2-4.5-6.2V4L8 2.2Z"></path><path d="m5.8 8 1.4 1.4L10.4 6"></path></svg></div><span class="nav-text">Security &amp; Patching</span></div>
+  <div class="nav-link" data-page-id="p-assets" title="Assets &amp; Lifecycle" onclick="showPage('p-assets',this)"><div class="nav-icon"><span class="nav-icon-label">AS</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="8" rx="1.5"></rect><path d="M6 13h4"></path><path d="M8 11v2"></path></svg></div><span class="nav-text">Assets &amp; Lifecycle</span></div>
+  <div class="nav-link" data-page-id="p-change" title="Change &amp; Release" onclick="showPage('p-change',this)"><div class="nav-icon"><span class="nav-icon-label">CH</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 4H13"></path><path d="m10.5 1.5 2.5 2.5-2.5 2.5"></path><path d="M11 12H3"></path><path d="M5.5 9.5 3 12l2.5 2.5"></path></svg></div><span class="nav-text">Change &amp; Release</span></div>
+  <div class="nav-link" data-page-id="p-dev" title="Development &amp; Delivery" onclick="showPage('p-dev',this)"><div class="nav-icon"><span class="nav-icon-label">DV</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><path d="m6 4-3 4 3 4"></path><path d="m10 4 3 4-3 4"></path><path d="M9 2.5 7 13.5"></path></svg></div><span class="nav-text">Development &amp; Delivery</span></div>
+  <div class="nav-link" data-page-id="p-projects" title="Project Portfolio" onclick="showPage('p-projects',this)"><div class="nav-icon"><span class="nav-icon-label">PF</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 5.5h12"></path><path d="M6 3.5h4l1 2H5l1-2Z"></path><rect x="2" y="5.5" width="12" height="7" rx="1.5"></rect></svg></div><span class="nav-text">Project Portfolio</span></div>
+  <div class="nav-link" data-page-id="p-roadmap" title="Rolling Roadmap" onclick="showPage('p-roadmap',this)"><div class="nav-icon"><span class="nav-icon-label">RM</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="12" r="1.2"></circle><circle cx="7" cy="8" r="1.2"></circle><circle cx="13" cy="4" r="1.2"></circle><path d="M4 11.2 6.1 8.8"></path><path d="M7.9 7.2 12 4.8"></path></svg></div><span class="nav-text">Rolling Roadmap</span></div>
+  <div class="nav-link" data-page-id="p-gantt" title="Portfolio Gantt" onclick="showPage('p-gantt',this)"><div class="nav-icon"><span class="nav-icon-label">GT</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4.5h3"></path><path d="M3 8h6"></path><path d="M3 11.5h10"></path><path d="M7 3.5h6v2H7z"></path><path d="M10 7h3v2h-3z"></path></svg></div><span class="nav-text">Portfolio Gantt</span></div>
+  <div class="nav-link" data-page-id="p-budget" title="Budget &amp; Commercials" onclick="showPage('p-budget',this)"><div class="nav-icon"><span class="nav-icon-label">BD</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v11"></path><path d="M10.8 4.5C10.2 3.6 9.2 3 8 3c-1.7 0-3 .9-3 2.2 0 3 6 1.5 6 4.3 0 1.4-1.3 2.5-3.2 2.5-1.4 0-2.6-.5-3.4-1.5"></path></svg></div><span class="nav-text">Budget &amp; Commercials</span></div>
+  <div class="nav-link" data-page-id="p-risks" title="Risks &amp; Decisions" onclick="showPage('p-risks',this)"><div class="nav-icon"><span class="nav-icon-label">RK</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5 14 13H2L8 2.5Z"></path><path d="M8 6v3.3"></path><circle cx="8" cy="11.6" r=".8" fill="currentColor" stroke="none"></circle></svg></div><span class="nav-text">Risks &amp; Decisions</span></div>
   <div class="nav-section">App Utilities</div>
   <div class="sidebar-group" id="sidebar-app-utilities-slot"></div>
   <div class="nav-section">Saved Reports</div>

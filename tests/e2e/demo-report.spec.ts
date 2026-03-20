@@ -79,13 +79,25 @@ test("sidebar collapses into an icon rail and persists across refresh", async ({
 
   await expect(page.locator(".nav-link.active")).toHaveAttribute("title", "Network & Offices");
   await expect(page.locator(".nav-text").first()).toBeHidden();
+  await expect(page.locator(".shell")).toHaveClass(/sidebar-use-icons/);
+  await expect(page.locator(".nav-link.active .nav-icon-glyph")).toBeVisible();
+  await expect(page.locator(".nav-link.active .nav-icon-label")).toBeHidden();
+
+  await page.getByRole("button", { name: "Expand sidebar" }).click();
+  await page.getByRole("button", { name: "Initials" }).click();
+  await page.getByRole("button", { name: "Collapse sidebar" }).click();
+  await expect(page.locator(".shell")).toHaveClass(/sidebar-use-initials/);
+  await expect(page.locator(".nav-link.active .nav-icon-label")).toBeVisible();
+  await expect(page.locator(".nav-link.active .nav-icon-glyph")).toBeHidden();
 
   await page.reload();
   await expect(page.locator(".shell")).toHaveClass(/sidebar-collapsed/);
+  await expect(page.locator(".shell")).toHaveClass(/sidebar-use-initials/);
   await page.waitForTimeout(350);
 
   const persistedWidth = await page.locator(".sidebar").evaluate((element) => Math.round(element.getBoundingClientRect().width));
   expect(persistedWidth).toBeLessThan(expandedWidthBeforeCollapse / 2);
+  await expect(page.locator(".nav-link.active .nav-icon-label")).toBeVisible();
 
   await page.getByRole("button", { name: "Expand sidebar" }).click();
   await page.waitForTimeout(350);
