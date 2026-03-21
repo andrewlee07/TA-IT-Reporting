@@ -24,12 +24,13 @@
   --radius-pill: 999px;
 
   /* Shadows */
-  --shadow-xs: 0 1px 2px rgba(17, 24, 39, 0.04);
-  --shadow-sm: 0 1px 3px rgba(17, 24, 39, 0.06), 0 1px 2px rgba(17, 24, 39, 0.04);
-  --shadow-md: 0 4px 6px -1px rgba(17, 24, 39, 0.06), 0 2px 4px -2px rgba(17, 24, 39, 0.04);
-  --shadow-lg: 0 10px 15px -3px rgba(17, 24, 39, 0.06), 0 4px 6px -4px rgba(17, 24, 39, 0.04);
-  --shadow-xl: 0 20px 25px -5px rgba(17, 24, 39, 0.08), 0 8px 10px -6px rgba(17, 24, 39, 0.04);
-  --shadow-hover: 0 10px 24px -4px rgba(17, 24, 39, 0.1), 0 4px 8px -2px rgba(17, 24, 39, 0.05);
+  --shadow-xs: 0 1px 2px rgba(17, 24, 39, 0.05);
+  --shadow-sm: 0 1px 3px rgba(17, 24, 39, 0.08), 0 1px 2px rgba(17, 24, 39, 0.06);
+  --shadow-md: 0 4px 8px -1px rgba(17, 24, 39, 0.08), 0 2px 4px -2px rgba(17, 24, 39, 0.06);
+  --shadow-lg: 0 10px 20px -3px rgba(17, 24, 39, 0.08), 0 4px 8px -4px rgba(17, 24, 39, 0.06);
+  --shadow-xl: 0 20px 30px -5px rgba(17, 24, 39, 0.1), 0 8px 12px -6px rgba(17, 24, 39, 0.06);
+  --shadow-hover: 0 12px 28px -4px rgba(17, 24, 39, 0.12), 0 4px 10px -2px rgba(17, 24, 39, 0.06);
+  --shadow-card: 0 1px 3px rgba(17, 24, 39, 0.08), 0 1px 2px rgba(17, 24, 39, 0.06), 0 0 0 1px rgba(17, 24, 39, 0.04);
 
   /* Easing */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
@@ -139,9 +140,10 @@
 }
 
 .sidebarModePill {
-  padding: 8px 10px;
-  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(245, 125, 0, 0.15);
   color: var(--orange);
   font-size: 10px;
   font-weight: 700;
@@ -207,12 +209,12 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   border: 0;
   border-left: 3px solid transparent;
   background: transparent;
   text-align: left;
-  padding: 7px 14px;
+  padding: 9px 16px;
   color: inherit;
   cursor: pointer;
   transition: background 0.15s var(--ease-out), border-color 0.15s var(--ease-out), color 0.15s var(--ease-out);
@@ -225,9 +227,9 @@
 }
 
 .navIcon {
-  width: 24px;
-  height: 24px;
-  border-radius: 7px;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.08);
   display: inline-flex;
   align-items: center;
@@ -236,7 +238,7 @@
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.06em;
-  transition: width 0.2s var(--ease-out), height 0.2s var(--ease-out), border-radius 0.2s var(--ease-out), font-size 0.2s var(--ease-out);
+  transition: width 0.2s var(--ease-out), height 0.2s var(--ease-out), border-radius 0.2s var(--ease-out), font-size 0.2s var(--ease-out), background 0.2s var(--ease-out);
 }
 
 .navCopy {
@@ -272,15 +274,20 @@
 .activeListItem {
   border: 1px solid var(--rule);
   background: var(--surface-alt);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   text-align: left;
-  padding: 12px 14px;
+  padding: 13px 16px;
   color: inherit;
   cursor: pointer;
   transition: border-color 0.15s var(--ease-out), background 0.15s var(--ease-out), transform 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out);
 }
 
-.listItem:hover,
+.listItem:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+  border-color: rgba(0, 82, 146, 0.2);
+}
+
 .activeListItem:hover {
   transform: translateY(-1px);
   box-shadow: var(--shadow-md);
@@ -291,19 +298,21 @@
   display: block;
   font-size: 13px;
   font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 .listItem small,
 .activeListItem small {
   display: block;
-  margin-top: 3px;
+  margin-top: 4px;
   font-size: 11px;
   color: var(--text-soft);
 }
 
 .activeListItem {
   border-color: rgba(245, 125, 0, 0.42);
-  background: rgba(245, 125, 0, 0.08);
+  background: rgba(245, 125, 0, 0.06);
+  box-shadow: 0 0 0 1px rgba(245, 125, 0, 0.12);
 }
 
 .secondaryLink,
@@ -385,6 +394,19 @@
   border-color: rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.06);
   color: #fff;
+  border-radius: var(--radius-md);
+}
+
+.studioSidebar .primaryButton:hover,
+.runtimeSidebar .primaryButton:hover {
+  background: rgba(245, 125, 0, 0.28);
+  box-shadow: 0 4px 12px rgba(245, 125, 0, 0.15);
+}
+
+.studioSidebar .secondaryLink:hover,
+.runtimeSidebar .secondaryLink:hover {
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: none;
 }
 
 .studioSidebar .primaryButton,
@@ -396,11 +418,11 @@
 .studioMain,
 .runtimeMain {
   flex: 1;
-  padding: 16px 20px 20px 16px;
+  padding: 20px 24px 28px 20px;
   display: grid;
   align-content: start;
-  gap: 16px;
-  background: var(--page-background, #d8dde3);
+  gap: 18px;
+  background: var(--page-background, #eaecf0);
   min-width: 0;
 }
 
@@ -408,12 +430,12 @@
 .runtimeHeader {
   display: flex;
   justify-content: space-between;
-  gap: 20px;
-  padding: 24px 28px;
+  gap: 24px;
+  padding: 28px 32px;
   border: 1px solid var(--rule);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: #fff;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-card);
 }
 
 .headerLead {
@@ -429,10 +451,10 @@
 .eyebrow,
 .cardEyebrow {
   margin: 0 0 8px;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
   color: var(--blue);
 }
 
@@ -441,6 +463,7 @@
 .runtimeHero h1 {
   margin: 0;
   font-size: clamp(28px, 4vw, 40px);
+  font-weight: 800;
   line-height: 1.02;
   letter-spacing: -0.04em;
 }
@@ -448,11 +471,12 @@
 .headerCopy,
 .runtimeHero p,
 .helperCopy {
-  margin: 10px 0 0;
+  margin: 12px 0 0;
   max-width: 720px;
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 1.65;
   color: var(--text-soft);
+  letter-spacing: -0.005em;
 }
 
 .headerStats,
@@ -463,10 +487,16 @@
 }
 
 .metricCard {
-  padding: 14px 16px;
-  border-radius: var(--radius-sm);
+  padding: 16px 18px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--rule);
   background: var(--surface-alt);
+  transition: box-shadow 0.15s var(--ease-out), transform 0.15s var(--ease-out);
+}
+
+.metricCard:hover {
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
 }
 
 .metricCard span {
@@ -474,22 +504,23 @@
   font-size: 9px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--text-soft);
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
 }
 
 .metricCard strong {
   display: block;
   margin-top: 8px;
-  font-size: 24px;
+  font-size: 26px;
+  font-weight: 800;
   letter-spacing: -0.04em;
 }
 
 .headerNote {
-  padding: 14px 16px;
-  border-radius: var(--radius-sm);
+  padding: 16px 18px;
+  border-radius: var(--radius-md);
   border: 1px solid rgba(0, 82, 146, 0.12);
-  background: var(--blue-soft);
+  background: linear-gradient(180deg, var(--blue-soft) 0%, #f4f8fc 100%);
 }
 
 .headerNote span,
@@ -520,20 +551,24 @@
 
 .successBanner,
 .errorBanner {
-  padding: 14px 16px;
+  padding: 14px 18px;
   border-radius: var(--radius-md);
   font-size: 12px;
   font-weight: 600;
+  line-height: 1.5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .successBanner {
-  background: var(--success-soft);
+  background: linear-gradient(180deg, var(--success-soft) 0%, #f2faf7 100%);
   border: 1px solid #c7eadf;
   color: var(--success);
 }
 
 .errorBanner {
-  background: var(--danger-soft);
+  background: linear-gradient(180deg, var(--danger-soft) 0%, #fef5f4 100%);
   border: 1px solid #f0cbc8;
   color: var(--danger);
 }
@@ -541,7 +576,7 @@
 .workspaceGrid {
   display: grid;
   grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
-  gap: 16px;
+  gap: 18px;
 }
 
 .panel,
@@ -554,9 +589,9 @@
 .auditRow,
 .fieldCard {
   border: 1px solid var(--rule);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: #fff;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-card);
 }
 
 .panel,
@@ -564,7 +599,7 @@
 .runtimeCard,
 .runtimeHero,
 .runtimeSection {
-  padding: 20px 24px;
+  padding: 22px 26px;
 }
 
 .panelWide {
@@ -583,10 +618,15 @@
   flex-wrap: wrap;
 }
 
+.actionsRow {
+  padding-top: 8px;
+}
+
 .sectionHeader h2,
 .sectionHeader h3 {
   margin: 0;
   font-size: 21px;
+  font-weight: 800;
   letter-spacing: -0.03em;
 }
 
@@ -596,13 +636,14 @@
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-pill);
-  padding: 5px 10px;
+  padding: 5px 12px;
   background: var(--orange-soft);
   color: var(--orange);
   font-size: 9px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
+  border: 1px solid rgba(245, 125, 0, 0.15);
 }
 
 .formGrid,
@@ -619,15 +660,15 @@
 .formField,
 .formFieldSpan {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .formField span,
 .formFieldSpan span {
-  font-size: 9px;
-  font-weight: 700;
+  font-size: 10px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.08em;
   color: var(--text-soft);
 }
 
@@ -682,17 +723,26 @@
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
+  padding: 11px 14px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--rule);
   background: var(--surface-alt);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease-out), background 0.15s var(--ease-out);
+}
+
+.checkboxField:hover {
+  border-color: rgba(0, 82, 146, 0.25);
+  background: #fff;
 }
 
 .checkbox {
   width: 18px;
   height: 18px;
+  accent-color: var(--blue);
+  cursor: pointer;
 }
 
 .subSection {
@@ -708,7 +758,14 @@
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  padding: 14px 16px;
+  padding: 14px 18px;
+  transition: box-shadow 0.15s var(--ease-out), transform 0.15s var(--ease-out);
+}
+
+.fieldCard:hover,
+.auditRow:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
 }
 
 .fieldCard strong,
@@ -793,7 +850,7 @@
 
 .table th,
 .table td {
-  padding: 12px 10px;
+  padding: 12px 14px;
   border-bottom: 1px solid var(--rule);
   text-align: left;
   font-size: 12px;
@@ -803,10 +860,18 @@
   font-size: 9px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--text-soft);
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
   border-bottom: 2px solid var(--rule);
   background: var(--surface-alt);
+}
+
+.table td {
+  color: var(--text-soft);
+}
+
+.table td strong {
+  color: var(--text);
 }
 
 .table tbody tr {
@@ -817,15 +882,32 @@
   background: rgba(0, 82, 146, 0.03);
 }
 
+.table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
 .emptyState {
-  padding: 32px 24px;
-  border-radius: var(--radius-md);
-  background: var(--surface-alt);
+  padding: 44px 36px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, var(--surface-alt) 0%, #fff 100%);
   color: var(--text-soft);
   text-align: center;
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 1.7;
   border: 1px dashed var(--rule);
+  letter-spacing: -0.005em;
+  position: relative;
+}
+
+.emptyState::before {
+  content: "";
+  display: block;
+  width: 40px;
+  height: 40px;
+  margin: 0 auto 14px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--blue-soft) 0%, rgba(0, 82, 146, 0.08) 100%);
+  border: 1px solid rgba(0, 82, 146, 0.1);
 }
 
 .runtimeLensBar {
@@ -852,11 +934,12 @@
 
 .sidebarFooter {
   margin-top: auto;
-  padding: 12px 18px 0;
+  padding: 14px 18px 0;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   font-size: 8.5px;
-  line-height: 1.45;
-  color: rgba(255, 255, 255, 0.3);
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.25);
+  letter-spacing: 0.01em;
 }
 
 /* ── Sidebar toggle ── */
@@ -1026,33 +1109,38 @@
 .breadcrumb {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--text-muted);
+  padding: 2px 0;
 }
 
 .breadcrumbLink {
   all: unset;
   cursor: pointer;
   color: var(--text-muted);
-  transition: color 0.15s var(--ease-out);
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+  transition: color 0.15s var(--ease-out), background 0.15s var(--ease-out);
 }
 
 .breadcrumbLink:hover {
   color: var(--blue);
+  background: var(--blue-soft);
 }
 
 .breadcrumbSep {
   color: var(--text-muted);
   font-weight: 400;
-  opacity: 0.5;
+  opacity: 0.4;
 }
 
 .breadcrumbActive {
   color: var(--blue);
+  font-weight: 700;
 }
 
 /* ── Tab bar ── */
@@ -1060,19 +1148,19 @@
   display: flex;
   gap: 0;
   border: 1px solid var(--rule);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: #fff;
   overflow: hidden;
-  box-shadow: var(--shadow-xs);
+  box-shadow: var(--shadow-card);
 }
 
 .tab,
 .activeTab {
-  padding: 10px 16px;
+  padding: 12px 20px;
   border: 0;
   border-bottom: 2px solid transparent;
   background: transparent;
-  color: var(--text-soft);
+  color: var(--text-muted);
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
@@ -1089,6 +1177,7 @@
 .activeTab {
   color: var(--blue);
   border-bottom-color: var(--orange);
+  border-bottom-width: 3px;
   background: var(--surface-alt);
 }
 
@@ -1160,12 +1249,13 @@
 .publishPreviewStrip {
   display: grid;
   grid-template-columns: minmax(0, 220px) minmax(0, 1fr);
-  gap: 16px;
+  gap: 18px;
   align-items: center;
-  padding: 16px 18px;
+  padding: 20px 22px;
   border: 1px solid rgba(245, 125, 0, 0.22);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: linear-gradient(180deg, #fff9f3 0%, #fff 100%);
+  box-shadow: var(--shadow-card);
 }
 
 .publishPreviewStrip h3 {
@@ -1218,9 +1308,9 @@
 .runCard,
 .agentPolicyCard {
   border: 1px solid var(--rule);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: #fff;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-card);
 }
 
 .workflowCanvasCard,
@@ -1232,10 +1322,11 @@
 }
 
 .agentPolicyCard {
-  padding: 14px 16px;
+  padding: 16px 18px;
   display: grid;
   gap: 12px;
   background: linear-gradient(180deg, #f8fbff 0%, #fff 100%);
+  border-left: 3px solid var(--blue);
 }
 
 .nodePalette {
@@ -1247,19 +1338,20 @@
 .paletteButton {
   display: grid;
   gap: 4px;
-  padding: 12px;
+  padding: 14px;
   border: 1px solid var(--rule);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--surface-alt);
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.15s var(--ease-out), transform 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out);
+  transition: border-color 0.15s var(--ease-out), transform 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out), background 0.15s var(--ease-out);
 }
 
 .paletteButton:hover {
-  transform: translateY(-1px);
+  transform: translateY(-2px);
   box-shadow: var(--shadow-md);
   border-color: rgba(0, 82, 146, 0.2);
+  background: #fff;
 }
 
 .paletteButton:active {
@@ -1295,9 +1387,9 @@
 .activeCanvasNode {
   position: absolute;
   width: 210px;
-  padding: 12px 14px;
+  padding: 14px 16px;
   border: 1px solid var(--rule);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: #fff;
   text-align: left;
   cursor: pointer;
@@ -1306,8 +1398,9 @@
 }
 
 .canvasNode:hover {
-  transform: translateY(-1px);
+  transform: translateY(-2px);
   box-shadow: var(--shadow-hover);
+  border-color: rgba(0, 82, 146, 0.25);
 }
 
 .canvasNode small,
@@ -1337,8 +1430,10 @@
   inset: 16px;
   display: grid;
   place-items: center;
-  color: var(--text-soft);
-  font-size: 12px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
 }
 
 .workflowEdges,
@@ -1391,10 +1486,11 @@
 .logRow {
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 10px;
-  padding: 8px 10px;
-  border-radius: var(--radius-sm);
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
   background: var(--surface-alt);
+  border: 1px solid rgba(0, 0, 0, 0.04);
   font-size: 11px;
   line-height: 1.45;
 }
@@ -1408,13 +1504,14 @@
 
 .previewCode {
   margin: 0;
-  padding: 12px;
-  border-radius: var(--radius-sm);
+  padding: 16px;
+  border-radius: var(--radius-md);
   background: #0f172a;
   color: #dbeafe;
   font-size: 11px;
-  line-height: 1.55;
+  line-height: 1.6;
   overflow: auto;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 @media (max-width: 1100px) {
@@ -1476,10 +1573,10 @@
 .runtimeCallout {
   display: grid;
   gap: 12px;
-  padding: 18px;
+  padding: 20px 22px;
   border: 1px solid rgba(196, 106, 10, 0.2);
   background: linear-gradient(135deg, rgba(196, 106, 10, 0.08), rgba(15, 23, 42, 0.04));
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
 }
 
 .designerGrid {
@@ -1493,7 +1590,7 @@
 .designerInspector {
   background: #fff;
   border: 1px solid var(--rule);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   box-shadow: 0 12px 34px rgba(15, 23, 42, 0.07);
 }
 

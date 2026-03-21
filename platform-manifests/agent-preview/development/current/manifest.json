@@ -1060,7 +1060,7 @@
   ],
   "agents": [
     {
-      "id": "agent-gdZAbVBi",
+      "id": "agent-yElcM8Tj",
       "key": "coverage_analyst",
       "name": "Coverage Analyst",
       "scope": "workspace",
@@ -1134,8 +1134,8 @@
     ]
   },
   "metadata": {
-    "draftUpdatedAt": "2026-03-21T19:09:04.243Z",
-    "publishedAt": "2026-03-21T19:09:04.269Z",
-    "publishedVersionId": "version-dLiCO6Kf"
+    "draftUpdatedAt": "2026-03-21T22:41:46.593Z",
+    "publishedAt": "2026-03-21T22:41:46.601Z",
+    "publishedVersionId": "version-BFByf3U6"
   }
 }
