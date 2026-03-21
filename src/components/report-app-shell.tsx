@@ -715,7 +715,7 @@ export function ReportAppShell({
         "display:flex",
         "flex-direction:column",
         "gap:24px",
-        "font-family:Arial,sans-serif",
+        "font-family:Inter,-apple-system,BlinkMacSystemFont,sans-serif",
       ].join(";");
 
       const header = document.createElement("div");
@@ -754,7 +754,7 @@ export function ReportAppShell({
 
       const footer = document.createElement("div");
       footer.style.cssText =
-        "border-top:1px solid #E5E7EB;padding-top:12px;display:flex;justify-content:space-between;font-size:10px;color:#9CA3AF;font-family:Arial,sans-serif;";
+        "border-top:1px solid #E5E7EB;padding-top:12px;display:flex;justify-content:space-between;font-size:10px;color:#9CA3AF;font-family:Inter,-apple-system,BlinkMacSystemFont,sans-serif;";
       footer.innerHTML = `<span>Source: TABS · Internal systems · ${formatMonthLabel(selectedMonthRef.current)}</span><span>${targetsToExport.length} section${targetsToExport.length === 1 ? "" : "s"} exported</span>`;
       wrapper.appendChild(footer);
 

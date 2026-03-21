@@ -30,7 +30,7 @@ export function initReportApp(root, options) {
     },
   };
 
-  Chart.defaults.font.family = "Arial, sans-serif";
+  Chart.defaults.font.family = "Inter, -apple-system, sans-serif";
   Chart.defaults.font.size = 10;
   Chart.defaults.color = "#9CA3AF";
 
@@ -862,7 +862,7 @@ export function initReportApp(root, options) {
             '"></div></div>' +
             '<div class="bar-val">' +
             minutes +
-            '<span style="font-size:9px;color:var(--text-3);font-family:Arial"> mins</span></div>' +
+            '<span style="font-size:9px;color:var(--text-3);font-family:Inter,-apple-system,sans-serif"> mins</span></div>' +
             "</div>"
           );
         })
@@ -996,7 +996,7 @@ export function initReportApp(root, options) {
             color +
             ';border-radius:2px;"></div></div>' +
             "</div>" +
-            '<div style="text-align:right;"><div style="font-family:\'Arial Black\',Arial;font-size:11px;font-weight:700;color:' +
+            '<div style="text-align:right;"><div style="font-family:\'Inter\',-apple-system,sans-serif;font-weight:800;font-size:11px;font-weight:700;color:' +
             color +
             '">' +
             office.Availability +
@@ -1441,9 +1441,9 @@ export function initReportApp(root, options) {
           asset.PctWithin +
           ' in lifecycle</span><span>' +
           asset.PctOutside +
-          '</span></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-3)">Stock on hand</div><div style="font-family:\'Arial Black\',Arial;font-size:18px;font-weight:700;color:var(--text)">' +
+          '</span></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-3)">Stock on hand</div><div style="font-family:\'Inter\',-apple-system,sans-serif;font-weight:800;font-size:18px;font-weight:700;color:var(--text)">' +
           asset.StockOnHand +
-          '</div></div><div><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-3)">Incident links</div><div style="font-family:\'Arial Black\',Arial;font-size:18px;font-weight:700;color:' +
+          '</div></div><div><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-3)">Incident links</div><div style="font-family:\'Inter\',-apple-system,sans-serif;font-weight:800;font-size:18px;font-weight:700;color:' +
           (asset.IncidentsLinked > 10 ? COLORS.orange : COLORS.teal) +
           '">' +
           asset.IncidentsLinked +
@@ -1785,7 +1785,7 @@ export function initReportApp(root, options) {
         return (
           '<div style="display:grid;grid-template-columns:120px 1fr;border-top:1px solid var(--rule);margin-bottom:0"' +
           exportAttrs("roadmap-quarter-" + slugify(quarter), quarter + " roadmap section") +
-          '><div style="font-family:\'Arial Black\',Arial;font-size:12px;font-weight:700;color:var(--text-2);padding:16px 8px;border-right:1px solid var(--rule)">' +
+          '><div style="font-family:\'Inter\',-apple-system,sans-serif;font-weight:800;font-size:12px;font-weight:700;color:var(--text-2);padding:16px 8px;border-right:1px solid var(--rule)">' +
           quarter +
           '</div><div style="padding:10px;display:flex;flex-direction:column;gap:7px">' +
           items
@@ -2118,7 +2118,7 @@ export function initReportApp(root, options) {
     weekDates.forEach(function renderWeekLabel(date, index) {
       var centerX = xForWeek(index) + WEEK_W / 2;
       var dayLabel = date.getDate() + " " + date.toLocaleDateString("en-GB", { month: "short" });
-      html += '<text x="' + centerX + '" y="' + (HEADER_H - 22) + '" text-anchor="middle" style="font-size:8px;fill:#C0C8D4;font-family:Arial;">W' + (index + 1) + "</text>";
+      html += '<text x="' + centerX + '" y="' + (HEADER_H - 22) + '" text-anchor="middle" style="font-size:8px;fill:#C0C8D4;font-family:Inter,-apple-system,sans-serif;">W' + (index + 1) + "</text>";
       html += '<text x="' + centerX + '" y="' + (HEADER_H - 10) + '" text-anchor="middle" class="gantt-week-label">' + dayLabel + "</text>";
     });
 
@@ -2149,7 +2149,7 @@ export function initReportApp(root, options) {
         cutOffX +
         '" y="' +
         (CHART_H - 2) +
-        '" text-anchor="middle" style="font-size:8px;font-weight:700;fill:#F57D00;font-family:Arial;">CUT-OFF</text></g>';
+        '" text-anchor="middle" style="font-size:8px;font-weight:700;fill:#F57D00;font-family:Inter,-apple-system,sans-serif;">CUT-OFF</text></g>';
     }
 
     workstreams.forEach(function renderWorkstream(item, index) {
@@ -2250,7 +2250,7 @@ export function initReportApp(root, options) {
                     labelX +
                     '" y="' +
                     (centerY + 1) +
-                    '" text-anchor="middle" dominant-baseline="middle" style="font-size:8.5px;font-weight:700;fill:white;font-family:Arial;pointer-events:none;">' +
+                    '" text-anchor="middle" dominant-baseline="middle" style="font-size:8.5px;font-weight:700;fill:white;font-family:Inter,-apple-system,sans-serif;pointer-events:none;">' +
                     completionPct +
                     "%</text>";
                 }
@@ -2267,7 +2267,7 @@ export function initReportApp(root, options) {
               completionX +
               '" y="' +
               (centerY + 1) +
-              '" text-anchor="middle" dominant-baseline="middle" style="font-size:8.5px;font-weight:700;fill:white;font-family:Arial;pointer-events:none;">✓ Complete</text>';
+              '" text-anchor="middle" dominant-baseline="middle" style="font-size:8.5px;font-weight:700;fill:white;font-family:Inter,-apple-system,sans-serif;pointer-events:none;">✓ Complete</text>';
           }
         }
 
@@ -2393,7 +2393,7 @@ export function initReportApp(root, options) {
           (milestoneX + 10) +
           '" y="' +
           (centerY - 4) +
-          '" style="font-size:8.5px;fill:#4B5563;font-family:Arial;font-weight:600;">' +
+          '" style="font-size:8.5px;fill:#4B5563;font-family:Inter,-apple-system,sans-serif;font-weight:600;">' +
           milestone.MilestoneLabel +
           '</text><rect class="gantt-hover-target" data-hover-id="' +
           milestoneHoverId +
@@ -2542,7 +2542,7 @@ export function initReportApp(root, options) {
           row.RenewalDue +
           " · Owner: " +
           row.Owner +
-          '</div></div><div style="text-align:right"><div style="font-family:\'Arial Black\',Arial;font-size:14px;font-weight:700;color:' +
+          '</div></div><div style="text-align:right"><div style="font-family:\'Inter\',-apple-system,sans-serif;font-weight:800;font-size:14px;font-weight:700;color:' +
           color +
           '">£' +
           row.RenewalValue.toLocaleString() +
