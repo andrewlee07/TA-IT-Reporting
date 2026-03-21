@@ -6,7 +6,7 @@ describe("createStarterManifest", () => {
   it("creates a coherent starter manifest with runtime navigation", () => {
     const manifest = createStarterManifest("teacheractive");
 
-    expect(manifest.schemaVersion).toBe(1);
+    expect(manifest.schemaVersion).toBe(2);
     expect(manifest.objects.length).toBeGreaterThan(0);
     expect(manifest.pages.length).toBeGreaterThan(0);
     expect(manifest.menus.length).toBeGreaterThan(0);
@@ -20,4 +20,3 @@ describe("createStarterManifest", () => {
     }
   });
 });
-

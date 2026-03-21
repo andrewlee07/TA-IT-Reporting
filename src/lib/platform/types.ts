@@ -1,8 +1,9 @@
-export const PLATFORM_SCHEMA_VERSION = 1 as const;
+export const PLATFORM_SCHEMA_VERSION = 2 as const;
 
 export type PlatformRole = "SUPER_ADMIN" | "BUILDER_ADMIN" | "USER";
 export type PlatformVersionStatus = "DRAFT" | "ACTIVE" | "ROLLED_BACK";
 export type WorkflowRunStatus = "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED" | "PAUSED";
+export type RuleExpressionMode = "text" | "json_logic";
 
 export type FieldType =
   | "text"
@@ -61,6 +62,10 @@ export type ModelProviderStatus = "active" | "disabled";
 export type WorkflowCrudOperation = "create" | "update" | "delete";
 export type WorkflowNotificationChannel = "email" | "slack" | "task";
 export type WorkflowWebhookMethod = "GET" | "POST" | "PUT" | "PATCH";
+export type FormDeliveryMode = "public" | "embedded" | "authenticated";
+export type FormSubmissionStatus = "draft" | "submitted";
+export type BrandingMode = "draft" | "review" | "approved";
+export type BrandAssetKind = "logo" | "icon" | "brand_book" | "reference";
 
 export interface PlatformActor {
   email: string;
@@ -68,11 +73,19 @@ export interface PlatformActor {
   role: PlatformRole;
 }
 
+export interface RuleExpressionDefinition {
+  mode: RuleExpressionMode;
+  summary?: string;
+  expression?: string;
+  jsonLogic?: Record<string, unknown>;
+}
+
 export interface ValidationRuleDefinition {
   id: string;
   type: ValidationRuleType;
   message: string;
   value?: string | number | boolean;
+  rule?: RuleExpressionDefinition;
 }
 
 export interface CalculationRuleDefinition {
@@ -80,6 +93,7 @@ export interface CalculationRuleDefinition {
   expression: string;
   outputType: Exclude<FieldType, "relationship">;
   description?: string;
+  rule?: RuleExpressionDefinition;
 }
 
 export interface RelationshipDefinition {
@@ -106,12 +120,17 @@ export interface FieldDefinition {
   label: string;
   type: FieldType;
   description?: string;
+  helpText?: string;
+  tooltip?: string;
+  fieldGroup?: string;
   required: boolean;
   unique: boolean;
   sensitivity: FieldSensitivity;
   placeholder?: string;
   options?: string[];
   defaultValue?: string | number | boolean | null;
+  mandatoryRule?: RuleExpressionDefinition;
+  advancedValidation?: RuleExpressionDefinition;
   validations: ValidationRuleDefinition[];
   calculation?: CalculationRuleDefinition | null;
 }
@@ -135,6 +154,7 @@ export interface ObjectDefinition {
 export interface VisibilityRuleDefinition {
   expression: string;
   summary?: string;
+  rule?: RuleExpressionDefinition;
 }
 
 export interface LayoutResponsiveDefinition {
@@ -163,6 +183,7 @@ export interface LayoutBindingDefinition {
   relatedObjectKey?: string;
   viewKey?: string;
   promptAsset?: string;
+  formKey?: string;
 }
 
 export interface LayoutComponentDefinition {
@@ -180,6 +201,113 @@ export interface LayoutComponentDefinition {
   visibilityRule?: VisibilityRuleDefinition;
   binding?: LayoutBindingDefinition;
   props: Record<string, unknown>;
+}
+
+export interface BrandAssetDefinition {
+  id: string;
+  kind: BrandAssetKind;
+  label: string;
+  fileName: string;
+  contentType: string;
+  storageKey: string;
+  url: string;
+  uploadedAt: string;
+}
+
+export interface TenantBrandingDefinition {
+  mode: BrandingMode;
+  themeName: string;
+  primaryColor: string;
+  secondaryColor: string;
+  accentColor: string;
+  surfaceColor: string;
+  textColor: string;
+  pageBackground: string;
+  fontFamily: string;
+  logoAssetId?: string;
+  iconAssetId?: string;
+  brandBookAssetId?: string;
+  notes?: string;
+  assets: BrandAssetDefinition[];
+}
+
+export interface AppShellDefinition {
+  productName: string;
+  tagLine?: string;
+  supportEmail?: string;
+  menuStyle: "sidebar" | "topbar";
+  profilePageKey?: string;
+  settingsPageKey?: string;
+}
+
+export interface ProfileSettingsSectionDefinition {
+  key: string;
+  label: string;
+  description?: string;
+  preferenceKeys: string[];
+}
+
+export interface UserPreferenceDefinition {
+  key: string;
+  label: string;
+  description?: string;
+  type: "text" | "boolean" | "select";
+  defaultValue?: string | boolean;
+  options?: string[];
+}
+
+export interface ProfileConfigurationDefinition {
+  objectKey: string;
+  settingsObjectKey: string;
+  pageTitle: string;
+  profilePageKey?: string;
+  settingsPageKey?: string;
+  visibleFieldKeys: string[];
+  preferences: UserPreferenceDefinition[];
+  settingsSections: ProfileSettingsSectionDefinition[];
+}
+
+export interface FormFieldDefinition {
+  id: string;
+  key: string;
+  label: string;
+  type: FieldType;
+  description?: string;
+  helpText?: string;
+  tooltip?: string;
+  required: boolean;
+  placeholder?: string;
+  options?: string[];
+  defaultValue?: string | number | boolean | null;
+  validations: ValidationRuleDefinition[];
+  calculation?: CalculationRuleDefinition | null;
+  mandatoryRule?: RuleExpressionDefinition;
+}
+
+export interface FormStepDefinition {
+  id: string;
+  key: string;
+  title: string;
+  description?: string;
+  fieldKeys: string[];
+  visibilityRule?: VisibilityRuleDefinition;
+}
+
+export interface FormDefinition {
+  id: string;
+  key: string;
+  title: string;
+  description?: string;
+  route: string;
+  objectKey?: string;
+  deliveryMode: FormDeliveryMode;
+  submitLabel: string;
+  successMessage: string;
+  saveAndResume: boolean;
+  requireAuthentication: boolean;
+  analyticsEnabled: boolean;
+  fields: FormFieldDefinition[];
+  steps: FormStepDefinition[];
 }
 
 export interface LayoutSectionDefinition {
@@ -375,6 +503,13 @@ export interface SecurityPolicyDefinition {
   allowedModelProviderKeys: string[];
 }
 
+export interface PlatformViewAsState {
+  active: boolean;
+  role: PlatformRole;
+  personaLabel: string;
+  actorEmail?: string;
+}
+
 export interface PlatformManifestMetadata {
   draftUpdatedAt: string;
   publishedAt: string | null;
@@ -393,10 +528,14 @@ export interface PlatformManifest {
     name: string;
   };
   roles: PlatformRole[];
+  branding: TenantBrandingDefinition;
+  appShell: AppShellDefinition;
+  profiles: ProfileConfigurationDefinition;
   objects: ObjectDefinition[];
   layouts: LayoutDefinition[];
   pages: PageDefinition[];
   menus: MenuItemDefinition[];
+  forms: FormDefinition[];
   workflows: WorkflowDefinition[];
   tools: ToolDefinition[];
   agents: AgentDefinition[];
@@ -466,6 +605,27 @@ export interface PlatformWorkflowRunRecord {
   updatedAt: string;
 }
 
+export interface PlatformFormSubmissionRecord {
+  id: string;
+  formKey: string;
+  objectKey?: string;
+  status: FormSubmissionStatus;
+  data: Record<string, unknown>;
+  createdAt: string;
+  submittedAt?: string | null;
+  createdByEmail?: string | null;
+}
+
+export interface PlatformAgentEvalRecord {
+  id: string;
+  agentId: string;
+  agentKey: string;
+  score: number;
+  summary: string;
+  createdAt: string;
+  result: Record<string, unknown>;
+}
+
 export interface PublishPreviewBucket {
   added: string[];
   updated: string[];
@@ -527,6 +687,7 @@ export interface PlatformBootstrap {
   environment: PlatformEnvironmentSummary;
   actor: PlatformActor;
   session: PlatformSessionSummary;
+  viewAs: PlatformViewAsState | null;
   draftManifest: PlatformManifest;
   activeVersion: PlatformPublishedVersionRecord | null;
   versions: PlatformPublishedVersionRecord[];

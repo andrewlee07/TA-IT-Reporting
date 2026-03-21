@@ -10,6 +10,7 @@ function parseBoolean(value: string | undefined, fallback: boolean): boolean {
 
 const envSchema = z.object({
   DATABASE_URL: z.string().optional(),
+  REDIS_URL: z.string().url().optional(),
   STORAGE_MODE: z.enum(["local", "s3"]).default("local"),
   LOCAL_STORAGE_DIR: z.string().default(".storage"),
   S3_BUCKET: z.string().optional(),
@@ -45,6 +46,7 @@ export function getEnv(): AppEnv {
 
   cachedEnv = envSchema.parse({
     DATABASE_URL: process.env.DATABASE_URL,
+    REDIS_URL: process.env.REDIS_URL,
     STORAGE_MODE: process.env.STORAGE_MODE,
     LOCAL_STORAGE_DIR: process.env.LOCAL_STORAGE_DIR,
     S3_BUCKET: process.env.S3_BUCKET,

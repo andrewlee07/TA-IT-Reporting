@@ -2,13 +2,22 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { getEnv } from "@/lib/env";
 import { PlatformUnauthorizedError } from "@/lib/platform/errors";
+import type { PlatformRole, PlatformViewAsState } from "@/lib/platform/types";
 
 export const PLATFORM_SESSION_COOKIE = "ta_platform_session";
+export const PLATFORM_VIEW_AS_COOKIE = "ta_platform_view_as";
 export const PLATFORM_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 14;
 
 interface PlatformSessionPayload {
   email: string;
   name: string;
+  issuedAt: string;
+}
+
+interface PlatformViewAsPayload {
+  role: PlatformRole;
+  personaLabel: string;
+  actorEmail?: string;
   issuedAt: string;
 }
 
@@ -134,6 +143,35 @@ export function tryResolvePlatformActorIdentity(request?: Request | Headers): Pl
   }
 }
 
+function parseSignedViewAs(rawValue: string): PlatformViewAsPayload {
+  const separatorIndex = rawValue.lastIndexOf(".");
+  if (separatorIndex <= 0) {
+    throw new PlatformUnauthorizedError("Platform view-as cookie is invalid.");
+  }
+
+  const encodedPayload = rawValue.slice(0, separatorIndex);
+  const signature = rawValue.slice(separatorIndex + 1);
+  const expectedSignature = signPayload(encodedPayload);
+  const providedBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expectedSignature);
+
+  if (providedBuffer.length !== expectedBuffer.length || !timingSafeEqual(providedBuffer, expectedBuffer)) {
+    throw new PlatformUnauthorizedError("Platform view-as signature is invalid.");
+  }
+
+  const payload = JSON.parse(decodeBase64Url(encodedPayload)) as Partial<PlatformViewAsPayload>;
+  if (!payload.role || !payload.personaLabel) {
+    throw new PlatformUnauthorizedError("Platform view-as payload is incomplete.");
+  }
+
+  return {
+    role: payload.role,
+    personaLabel: payload.personaLabel,
+    actorEmail: payload.actorEmail,
+    issuedAt: payload.issuedAt ?? new Date().toISOString(),
+  };
+}
+
 export function createSignedPlatformSessionValue(input: { email: string; name: string }): string {
   const payload: PlatformSessionPayload = {
     email: input.email,
@@ -142,6 +180,41 @@ export function createSignedPlatformSessionValue(input: { email: string; name: s
   };
   const encodedPayload = encodeBase64Url(JSON.stringify(payload));
   return `${encodedPayload}.${signPayload(encodedPayload)}`;
+}
+
+export function createSignedPlatformViewAsValue(input: {
+  role: PlatformRole;
+  personaLabel: string;
+  actorEmail?: string;
+}): string {
+  const payload: PlatformViewAsPayload = {
+    role: input.role,
+    personaLabel: input.personaLabel,
+    actorEmail: input.actorEmail,
+    issuedAt: new Date().toISOString(),
+  };
+  const encodedPayload = encodeBase64Url(JSON.stringify(payload));
+  return `${encodedPayload}.${signPayload(encodedPayload)}`;
+}
+
+export function tryResolvePlatformViewAsState(request?: Request | Headers): PlatformViewAsState | null {
+  try {
+    const cookies = parseCookies(getCookieHeader(request));
+    const viewAsCookie = cookies[PLATFORM_VIEW_AS_COOKIE];
+    if (!viewAsCookie) {
+      return null;
+    }
+
+    const payload = parseSignedViewAs(viewAsCookie);
+    return {
+      active: true,
+      role: payload.role,
+      personaLabel: payload.personaLabel,
+      actorEmail: payload.actorEmail,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function getPlatformSessionCookieSettings(): {

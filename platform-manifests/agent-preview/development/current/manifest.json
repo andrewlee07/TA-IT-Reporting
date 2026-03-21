@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "tenant": {
     "slug": "agent-preview",
     "name": "agent-preview",
@@ -14,6 +14,70 @@
     "BUILDER_ADMIN",
     "USER"
   ],
+  "branding": {
+    "mode": "draft",
+    "themeName": "agent-preview Default",
+    "primaryColor": "#005292",
+    "secondaryColor": "#003d6e",
+    "accentColor": "#f57d00",
+    "surfaceColor": "#ffffff",
+    "textColor": "#111827",
+    "pageBackground": "#d8dde3",
+    "fontFamily": "var(--font-inter, 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif)",
+    "notes": "",
+    "assets": []
+  },
+  "appShell": {
+    "productName": "agent-preview Adaptive Platform",
+    "tagLine": "Business automation that stays simple to operate.",
+    "supportEmail": "support@teacheractive.local",
+    "menuStyle": "sidebar",
+    "profilePageKey": "profile",
+    "settingsPageKey": "settings"
+  },
+  "profiles": {
+    "objectKey": "user_profile",
+    "settingsObjectKey": "user_setting",
+    "pageTitle": "Profile",
+    "profilePageKey": "profile",
+    "settingsPageKey": "settings",
+    "visibleFieldKeys": [
+      "full_name",
+      "email",
+      "job_title",
+      "timezone"
+    ],
+    "preferences": [
+      {
+        "key": "theme_preference",
+        "label": "Theme preference",
+        "type": "select",
+        "defaultValue": "system",
+        "options": [
+          "system",
+          "light",
+          "dark"
+        ]
+      },
+      {
+        "key": "compact_density",
+        "label": "Compact density",
+        "type": "boolean",
+        "defaultValue": false
+      }
+    ],
+    "settingsSections": [
+      {
+        "key": "appearance",
+        "label": "Appearance",
+        "description": "Personal display preferences for the runtime.",
+        "preferenceKeys": [
+          "theme_preference",
+          "compact_density"
+        ]
+      }
+    ]
+  },
   "objects": [
     {
       "id": "obj-booking-request",
@@ -42,7 +106,8 @@
               "type": "required",
               "message": "A booking request title is required."
             }
-          ]
+          ],
+          "calculation": null
         },
         {
           "id": "fld-school-name",
@@ -59,7 +124,8 @@
               "type": "required",
               "message": "School name is required."
             }
-          ]
+          ],
+          "calculation": null
         },
         {
           "id": "fld-contact-email",
@@ -82,7 +148,8 @@
               "message": "Enter a valid email address.",
               "value": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"
             }
-          ]
+          ],
+          "calculation": null
         },
         {
           "id": "fld-vacancies",
@@ -100,7 +167,8 @@
               "message": "Vacancies must be at least 1.",
               "value": 1
             }
-          ]
+          ],
+          "calculation": null
         },
         {
           "id": "fld-daily-rate",
@@ -117,7 +185,8 @@
               "message": "Daily rate must be positive.",
               "value": 0
             }
-          ]
+          ],
+          "calculation": null
         },
         {
           "id": "fld-days-requested",
@@ -135,7 +204,8 @@
               "message": "Days requested must be at least 1.",
               "value": 1
             }
-          ]
+          ],
+          "calculation": null
         },
         {
           "id": "fld-total-value",
@@ -168,7 +238,8 @@
             "Matched",
             "Filled"
           ],
-          "validations": []
+          "validations": [],
+          "calculation": null
         }
       ],
       "relationships": [],
@@ -215,7 +286,8 @@
               "type": "required",
               "message": "A brief name is required."
             }
-          ]
+          ],
+          "calculation": null
         },
         {
           "id": "fld-brief-prompt",
@@ -231,7 +303,8 @@
               "type": "required",
               "message": "A prompt is required."
             }
-          ]
+          ],
+          "calculation": null
         },
         {
           "id": "fld-brief-zero-retention",
@@ -242,7 +315,8 @@
           "unique": false,
           "sensitivity": "internal",
           "defaultValue": true,
-          "validations": []
+          "validations": [],
+          "calculation": null
         }
       ],
       "relationships": [],
@@ -257,6 +331,155 @@
             "zero_retention_required"
           ],
           "defaultSortKey": "name"
+        }
+      ]
+    },
+    {
+      "id": "obj-user-profile",
+      "key": "user_profile",
+      "label": "User Profile",
+      "pluralLabel": "User Profiles",
+      "description": "Profile records available to admins and end users.",
+      "icon": "user",
+      "primaryFieldKey": "full_name",
+      "allowCreate": true,
+      "allowUpdate": true,
+      "allowDelete": false,
+      "fields": [
+        {
+          "id": "fld-profile-name",
+          "key": "full_name",
+          "label": "Full Name",
+          "type": "text",
+          "required": true,
+          "unique": false,
+          "sensitivity": "internal",
+          "validations": [
+            {
+              "id": "val-profile-name-required",
+              "type": "required",
+              "message": "A full name is required."
+            }
+          ],
+          "calculation": null
+        },
+        {
+          "id": "fld-profile-email",
+          "key": "email",
+          "label": "Email",
+          "type": "text",
+          "required": true,
+          "unique": true,
+          "sensitivity": "pii",
+          "validations": [
+            {
+              "id": "val-profile-email-required",
+              "type": "required",
+              "message": "An email address is required."
+            },
+            {
+              "id": "val-profile-email-format",
+              "type": "regex",
+              "message": "Enter a valid email address.",
+              "value": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"
+            }
+          ],
+          "calculation": null
+        },
+        {
+          "id": "fld-profile-job-title",
+          "key": "job_title",
+          "label": "Job Title",
+          "type": "text",
+          "required": false,
+          "unique": false,
+          "sensitivity": "internal",
+          "validations": [],
+          "calculation": null
+        },
+        {
+          "id": "fld-profile-timezone",
+          "key": "timezone",
+          "label": "Timezone",
+          "type": "text",
+          "required": false,
+          "unique": false,
+          "sensitivity": "internal",
+          "defaultValue": "Europe/London",
+          "validations": [],
+          "calculation": null
+        }
+      ],
+      "relationships": [],
+      "views": [
+        {
+          "id": "view-user-profile-default",
+          "key": "default",
+          "label": "Default View",
+          "objectKey": "user_profile",
+          "visibleFieldKeys": [
+            "full_name",
+            "email",
+            "job_title",
+            "timezone"
+          ],
+          "defaultSortKey": "full_name"
+        }
+      ]
+    },
+    {
+      "id": "obj-user-setting",
+      "key": "user_setting",
+      "label": "User Setting",
+      "pluralLabel": "User Settings",
+      "description": "User preference records captured for runtime personalization.",
+      "icon": "sliders",
+      "primaryFieldKey": "setting_key",
+      "allowCreate": true,
+      "allowUpdate": true,
+      "allowDelete": true,
+      "fields": [
+        {
+          "id": "fld-user-setting-key",
+          "key": "setting_key",
+          "label": "Setting Key",
+          "type": "text",
+          "required": true,
+          "unique": false,
+          "sensitivity": "internal",
+          "validations": [
+            {
+              "id": "val-setting-key-required",
+              "type": "required",
+              "message": "A setting key is required."
+            }
+          ],
+          "calculation": null
+        },
+        {
+          "id": "fld-user-setting-value",
+          "key": "setting_value",
+          "label": "Setting Value",
+          "type": "text",
+          "required": false,
+          "unique": false,
+          "sensitivity": "internal",
+          "validations": [],
+          "calculation": null
+        }
+      ],
+      "relationships": [],
+      "views": [
+        {
+          "id": "view-user-setting-default",
+          "key": "default",
+          "label": "Default View",
+          "objectKey": "user_setting",
+          "visibleFieldKeys": [
+            "setting_key",
+            "setting_value"
+          ],
+          "defaultSortKey": "setting_key"
         }
       ]
     }
@@ -584,6 +807,26 @@
       "layoutKey": "agent_briefs",
       "objectKey": "agent_brief",
       "isHome": false
+    },
+    {
+      "id": "page-profile",
+      "key": "profile",
+      "title": "Profile",
+      "route": "profile",
+      "description": "Runtime profile page for the current user.",
+      "layoutKey": "agent_briefs",
+      "objectKey": "user_profile",
+      "isHome": false
+    },
+    {
+      "id": "page-settings",
+      "key": "settings",
+      "title": "Settings",
+      "route": "settings",
+      "description": "Runtime settings and preferences page.",
+      "layoutKey": "booking_requests",
+      "objectKey": "user_setting",
+      "isHome": false
     }
   ],
   "menus": [
@@ -613,6 +856,141 @@
       "pageKey": "agent_briefs",
       "order": 2,
       "group": "AI"
+    },
+    {
+      "id": "menu-profile",
+      "key": "profile",
+      "label": "Profile",
+      "icon": "user",
+      "pageKey": "profile",
+      "order": 3,
+      "group": "Account"
+    },
+    {
+      "id": "menu-settings",
+      "key": "settings",
+      "label": "Settings",
+      "icon": "sliders",
+      "pageKey": "settings",
+      "order": 4,
+      "group": "Account"
+    }
+  ],
+  "forms": [
+    {
+      "id": "form-booking-request-intake",
+      "key": "booking_request_intake",
+      "title": "Booking Request Intake",
+      "description": "Public branded booking request form for supply and cover intake.",
+      "route": "booking-request-intake",
+      "objectKey": "booking_request",
+      "deliveryMode": "public",
+      "submitLabel": "Submit request",
+      "successMessage": "Request submitted. The operations team will review it shortly.",
+      "saveAndResume": true,
+      "requireAuthentication": false,
+      "analyticsEnabled": true,
+      "fields": [
+        {
+          "id": "form-fld-request-title",
+          "key": "request_title",
+          "label": "Request Title",
+          "type": "text",
+          "description": "Short title that identifies the booking need.",
+          "helpText": "Make it clear enough for a support colleague to recognize later.",
+          "tooltip": "Example: Year 4 maternity cover",
+          "required": true,
+          "placeholder": "Year 4 maternity cover",
+          "validations": [
+            {
+              "id": "form-val-request-title-required",
+              "type": "required",
+              "message": "A request title is required."
+            }
+          ],
+          "calculation": null
+        },
+        {
+          "id": "form-fld-school-name",
+          "key": "school_name",
+          "label": "School Name",
+          "type": "text",
+          "helpText": "Enter the school or organisation name.",
+          "required": true,
+          "placeholder": "Leeds Central Academy",
+          "validations": [
+            {
+              "id": "form-val-school-name-required",
+              "type": "required",
+              "message": "School name is required."
+            }
+          ],
+          "calculation": null
+        },
+        {
+          "id": "form-fld-contact-email",
+          "key": "contact_email",
+          "label": "Contact Email",
+          "type": "text",
+          "helpText": "We will use this for updates on the request.",
+          "required": true,
+          "placeholder": "ops@school.example",
+          "validations": [
+            {
+              "id": "form-val-contact-email-required",
+              "type": "required",
+              "message": "Contact email is required."
+            },
+            {
+              "id": "form-val-contact-email-pattern",
+              "type": "regex",
+              "message": "Enter a valid email address.",
+              "value": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"
+            }
+          ],
+          "calculation": null
+        },
+        {
+          "id": "form-fld-days-requested",
+          "key": "days_requested",
+          "label": "Days Requested",
+          "type": "number",
+          "helpText": "How many days of cover are needed?",
+          "required": true,
+          "defaultValue": 5,
+          "validations": [
+            {
+              "id": "form-val-days-requested-min",
+              "type": "min",
+              "message": "Days requested must be at least 1.",
+              "value": 1
+            }
+          ],
+          "calculation": null
+        }
+      ],
+      "steps": [
+        {
+          "id": "form-step-request",
+          "key": "request_details",
+          "title": "Request details",
+          "description": "Capture the booking need and contact details.",
+          "fieldKeys": [
+            "request_title",
+            "school_name",
+            "contact_email"
+          ]
+        },
+        {
+          "id": "form-step-requirements",
+          "key": "requirements",
+          "title": "Requirements",
+          "description": "Capture demand and delivery details.",
+          "fieldKeys": [
+            "days_requested"
+          ]
+        }
+      ]
     }
   ],
   "workflows": [
@@ -682,7 +1060,7 @@
   ],
   "agents": [
     {
-      "id": "agent-wOvGfHhU",
+      "id": "agent-gdZAbVBi",
       "key": "coverage_analyst",
       "name": "Coverage Analyst",
       "scope": "workspace",
@@ -756,8 +1134,8 @@
     ]
   },
   "metadata": {
-    "draftUpdatedAt": "2026-03-21T16:45:07.606Z",
-    "publishedAt": "2026-03-21T16:45:07.616Z",
-    "publishedVersionId": "version-4Hashx2I"
+    "draftUpdatedAt": "2026-03-21T19:09:04.243Z",
+    "publishedAt": "2026-03-21T19:09:04.269Z",
+    "publishedVersionId": "version-dLiCO6Kf"
   }
 }

@@ -3,7 +3,8 @@ import Link from "next/link";
 
 import { PublishedRuntime } from "@/components/platform/published-runtime";
 import styles from "@/components/platform/platform-shell.module.css";
-import { getRuntimeManifest } from "@/lib/platform/service";
+import { tryResolvePlatformViewAsState } from "@/lib/platform/auth";
+import { getPublicRuntimeManifest } from "@/lib/platform/service";
 
 export const dynamic = "force-dynamic";
 
@@ -14,8 +15,9 @@ interface RuntimePageProps {
 export default async function PlatformRuntimePage({ params }: RuntimePageProps) {
   const { tenantSlug, segments } = await params;
   const requestHeaders = await headers();
-  const manifest = await getRuntimeManifest({ tenantSlug, request: requestHeaders });
+  const manifest = await getPublicRuntimeManifest({ tenantSlug });
   const requestedRoute = segments?.[0];
+  const viewAs = tryResolvePlatformViewAsState(requestHeaders);
 
   if (!manifest) {
     return (
@@ -82,5 +84,5 @@ export default async function PlatformRuntimePage({ params }: RuntimePageProps) 
     );
   }
 
-  return <PublishedRuntime manifest={manifest} requestedRoute={requestedRoute} tenantSlug={tenantSlug} />;
+  return <PublishedRuntime manifest={manifest} requestedRoute={requestedRoute} tenantSlug={tenantSlug} viewAs={viewAs} />;
 }

@@ -7,6 +7,19 @@ export const recordSchema = z.object({
   data: z.record(z.string(), z.unknown()),
 });
 
+const ruleExpressionSchema = z.discriminatedUnion("mode", [
+  z.object({
+    mode: z.literal("text"),
+    summary: optionalNonEmptyStringSchema,
+    expression: nonEmptyStringSchema,
+  }),
+  z.object({
+    mode: z.literal("json_logic"),
+    summary: optionalNonEmptyStringSchema,
+    jsonLogic: z.record(z.string(), z.unknown()),
+  }),
+]);
+
 export const objectSchema = z.object({
   id: z.string().optional(),
   key: optionalNonEmptyStringSchema,
@@ -41,18 +54,25 @@ export const fieldSchema = z.object({
           type: z.enum(["required", "unique", "min", "max", "regex"]),
           message: nonEmptyStringSchema,
           value: z.union([z.string(), z.number(), z.boolean()]).optional(),
+          rule: ruleExpressionSchema.optional(),
         }),
       )
       .optional(),
+    helpText: optionalNonEmptyStringSchema,
+    tooltip: optionalNonEmptyStringSchema,
+    fieldGroup: optionalNonEmptyStringSchema,
     calculation: z
       .object({
         id: nonEmptyStringSchema,
         expression: nonEmptyStringSchema,
         outputType: z.enum(["text", "long_text", "number", "currency", "boolean", "date", "datetime", "select", "computed"]),
         description: optionalNonEmptyStringSchema,
+        rule: ruleExpressionSchema.optional(),
       })
       .nullable()
       .optional(),
+    mandatoryRule: ruleExpressionSchema.optional(),
+    advancedValidation: ruleExpressionSchema.optional(),
   }),
 });
 
@@ -81,6 +101,7 @@ export const menuSchema = z.object({
 const visibilityRuleSchema = z.object({
   expression: nonEmptyStringSchema,
   summary: optionalNonEmptyStringSchema,
+  rule: ruleExpressionSchema.optional(),
 });
 
 const layoutPlacementSchema = z.object({
@@ -135,6 +156,7 @@ const layoutComponentSchema = z.object({
       relatedObjectKey: optionalNonEmptyStringSchema,
       viewKey: optionalNonEmptyStringSchema,
       promptAsset: optionalNonEmptyStringSchema,
+      formKey: optionalNonEmptyStringSchema,
     })
     .optional(),
   props: z.record(z.string(), z.unknown()),
@@ -339,4 +361,101 @@ export const securityPolicySchema = z.object({
   zeroRetentionRequiredForSensitiveData: z.boolean(),
   defaultMaskingPolicyKey: nonEmptyStringSchema,
   allowedModelProviderKeys: z.array(nonEmptyStringSchema),
+});
+
+export const brandingSchema = z.object({
+  themeName: nonEmptyStringSchema,
+  primaryColor: nonEmptyStringSchema,
+  secondaryColor: nonEmptyStringSchema,
+  accentColor: nonEmptyStringSchema,
+  surfaceColor: nonEmptyStringSchema,
+  textColor: nonEmptyStringSchema,
+  pageBackground: nonEmptyStringSchema,
+  fontFamily: nonEmptyStringSchema,
+  logoAssetId: optionalNonEmptyStringSchema,
+  iconAssetId: optionalNonEmptyStringSchema,
+  brandBookAssetId: optionalNonEmptyStringSchema,
+  notes: z.string().optional(),
+  mode: z.enum(["draft", "review", "approved"]).optional(),
+});
+
+const formFieldSchema = z.object({
+  id: z.string().optional(),
+  key: optionalNonEmptyStringSchema,
+  label: nonEmptyStringSchema,
+  type: z.enum(["text", "long_text", "number", "currency", "boolean", "date", "datetime", "select", "relationship", "computed"]),
+  description: optionalNonEmptyStringSchema,
+  helpText: optionalNonEmptyStringSchema,
+  tooltip: optionalNonEmptyStringSchema,
+  required: z.boolean().optional(),
+  placeholder: optionalNonEmptyStringSchema,
+  options: z.array(nonEmptyStringSchema).optional(),
+  defaultValue: z.union([z.string(), z.number(), z.boolean(), z.null()]).optional(),
+  validations: z
+    .array(
+      z.object({
+        id: nonEmptyStringSchema,
+        type: z.enum(["required", "unique", "min", "max", "regex"]),
+        message: nonEmptyStringSchema,
+        value: z.union([z.string(), z.number(), z.boolean()]).optional(),
+        rule: ruleExpressionSchema.optional(),
+      }),
+    )
+    .optional(),
+  calculation: z
+    .object({
+      id: nonEmptyStringSchema,
+      expression: nonEmptyStringSchema,
+      outputType: z.enum(["text", "long_text", "number", "currency", "boolean", "date", "datetime", "select", "computed"]),
+      description: optionalNonEmptyStringSchema,
+      rule: ruleExpressionSchema.optional(),
+    })
+    .nullable()
+    .optional(),
+  mandatoryRule: ruleExpressionSchema.optional(),
+});
+
+const formStepSchema = z.object({
+  id: z.string().optional(),
+  key: optionalNonEmptyStringSchema,
+  title: nonEmptyStringSchema,
+  description: optionalNonEmptyStringSchema,
+  fieldKeys: z.array(nonEmptyStringSchema),
+  visibilityRule: visibilityRuleSchema.optional(),
+});
+
+export const formSchema = z.object({
+  id: z.string().optional(),
+  key: optionalNonEmptyStringSchema,
+  title: nonEmptyStringSchema,
+  description: optionalNonEmptyStringSchema,
+  route: optionalNonEmptyStringSchema,
+  objectKey: optionalNonEmptyStringSchema,
+  deliveryMode: z.enum(["public", "embedded", "authenticated"]),
+  submitLabel: nonEmptyStringSchema,
+  successMessage: nonEmptyStringSchema,
+  saveAndResume: z.boolean().optional(),
+  requireAuthentication: z.boolean().optional(),
+  analyticsEnabled: z.boolean().optional(),
+  fields: z.array(formFieldSchema).optional(),
+  steps: z.array(formStepSchema).optional(),
+});
+
+export const formSubmissionSchema = z.object({
+  data: z.record(z.string(), z.unknown()),
+  status: z.enum(["draft", "submitted"]).optional(),
+});
+
+export const profileSettingsSchema = z.object({
+  displayName: nonEmptyStringSchema,
+  themePreference: z.enum(["system", "light", "dark"]).optional(),
+  compactDensity: z.boolean().optional(),
+  timezone: optionalNonEmptyStringSchema,
+});
+
+export const viewAsSchema = z.object({
+  active: z.boolean().optional(),
+  role: z.enum(["SUPER_ADMIN", "BUILDER_ADMIN", "USER"]).optional(),
+  personaLabel: optionalNonEmptyStringSchema,
+  actorEmail: optionalNonEmptyStringSchema,
 });

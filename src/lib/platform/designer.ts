@@ -74,6 +74,7 @@ export function normalizeLayoutComponentDefinition(component: LayoutComponentDef
     relatedObjectKey: component.binding?.relatedObjectKey ?? component.relatedObjectKey,
     viewKey: component.binding?.viewKey,
     promptAsset: component.binding?.promptAsset,
+    formKey: component.binding?.formKey,
   };
 
   return {

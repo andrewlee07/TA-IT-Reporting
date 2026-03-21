@@ -1,6 +1,7 @@
 import { Prisma } from "@/generated/prisma/client";
 
 import { getEnv } from "@/lib/env";
+import { createWorkflowRunWorker } from "@/lib/platform/execution-bus";
 import {
   getLocalEnvironmentById,
   getLocalTenantById,
@@ -43,8 +44,8 @@ async function withLocalFallback<T>(action: () => Promise<T>, fallback: () => Pr
   }
 }
 
-async function processLocalQueuedRuns(): Promise<number> {
-  const runs = await listLocalQueuedWorkflowRuns();
+async function processLocalQueuedRuns(targetRunId?: string): Promise<number> {
+  const runs = (await listLocalQueuedWorkflowRuns()).filter((run) => !targetRunId || run.id === targetRunId);
   let processed = 0;
 
   for (const run of runs) {
@@ -125,10 +126,13 @@ async function processLocalQueuedRuns(): Promise<number> {
   return processed;
 }
 
-async function processDatabaseQueuedRuns(): Promise<number> {
+async function processDatabaseQueuedRuns(targetRunId?: string): Promise<number> {
   const prisma = getPrisma();
   const runs = await prisma.platformWorkflowRun.findMany({
-    where: { status: "QUEUED" },
+    where: {
+      status: "QUEUED",
+      ...(targetRunId ? { id: targetRunId } : {}),
+    },
     include: {
       tenant: true,
       environment: true,
@@ -218,12 +222,25 @@ async function processDatabaseQueuedRuns(): Promise<number> {
   return processed;
 }
 
-export async function runWorkflowWorkerCycle(): Promise<number> {
-  return withLocalFallback(processDatabaseQueuedRuns, processLocalQueuedRuns);
+export async function runWorkflowWorkerCycle(targetRunId?: string): Promise<number> {
+  return withLocalFallback(() => processDatabaseQueuedRuns(targetRunId), () => processLocalQueuedRuns(targetRunId));
 }
 
 export async function startPlatformWorker(intervalMs = 10_000): Promise<void> {
   console.log(`[platform-worker] started with interval ${intervalMs}ms`);
+
+  const queueWorker = createWorkflowRunWorker(async (runId) => {
+    const processed = await runWorkflowWorkerCycle(runId);
+    console.log(`[platform-worker] processed ${processed} queued run(s) from execution bus`);
+  });
+
+  if (queueWorker) {
+    console.log("[platform-worker] BullMQ worker active");
+    await new Promise<void>(() => {
+      // Keep the process alive while BullMQ receives jobs.
+    });
+    return;
+  }
 
   while (true) {
     try {

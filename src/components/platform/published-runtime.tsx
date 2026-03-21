@@ -1,11 +1,13 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 
 import { getSampleFieldValue } from "@/lib/platform/designer";
 import { formatPlatformDateTime } from "@/lib/platform/format";
 import { findLayoutForPage, findObjectDefinition, findPageDefinition } from "@/lib/platform/manifest";
+import { getThemeCssVariables } from "@/lib/platform/theme";
 import type {
   AgentDefinition,
   FieldDefinition,
@@ -13,6 +15,7 @@ import type {
   ObjectDefinition,
   PlatformManifest,
   PlatformRecord,
+  PlatformViewAsState,
   PlatformWorkflowRunRecord,
 } from "@/lib/platform/types";
 
@@ -22,7 +25,8 @@ interface PublishedRuntimeProps {
   manifest: PlatformManifest;
   requestedRoute?: string;
   tenantSlug: string;
-  mode?: "published" | "draft-preview";
+  mode?: "published" | "draft-preview" | "admin-preview";
+  viewAs?: PlatformViewAsState | null;
 }
 
 function metricValue(manifest: PlatformManifest, metric: string): string {
@@ -108,8 +112,9 @@ function glyphLabel(value: string): string {
   return words.map((word) => word[0]?.toUpperCase() ?? "").join("");
 }
 
-export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = "published" }: PublishedRuntimeProps) {
+export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = "published", viewAs = null }: PublishedRuntimeProps) {
   const orderedMenus = [...manifest.menus].sort((left, right) => left.order - right.order);
+  const brandLogo = manifest.branding.assets.find((asset) => asset.id === manifest.branding.logoAssetId);
   const firstRoute = manifest.pages.find((page) => page.isHome)?.key ?? orderedMenus[0]?.pageKey;
   const requestedPage =
     manifest.pages.find((page) => page.route === requestedRoute) ??
@@ -189,6 +194,19 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
       }),
     );
   }, [manifest, mode, pageObjectKeys]);
+
+  async function clearViewAs(): Promise<void> {
+    await fetch(`/api/platform/tenants/${tenantSlug}/view-as`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        active: false,
+      }),
+    });
+    window.location.reload();
+  }
 
   useEffect(() => {
     if (mode !== "published") {
@@ -733,18 +751,35 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
   }
 
   return (
-    <div className={styles.runtimeShell}>
+    <div className={styles.runtimeShell} style={getThemeCssVariables(manifest)}>
       <aside className={styles.runtimeSidebar}>
         <div className={styles.brandBlock}>
           <div className={styles.brandRow}>
-            <div className={styles.brandMark}>TA</div>
+            {brandLogo ? (
+              <Image
+                alt={`${manifest.tenant.name} logo`}
+                className={styles.brandImage}
+                height={40}
+                src={brandLogo.url}
+                unoptimized
+                width={40}
+              />
+            ) : (
+              <div className={styles.brandMark}>TA</div>
+            )}
             <div className={styles.brandCopy}>
-              <p className={styles.sidebarTitle}>{manifest.tenant.name}</p>
-              <p className={styles.sidebarSub}>{mode === "published" ? "Published runtime" : "Draft preview"}</p>
+              <p className={styles.sidebarTitle}>{manifest.appShell.productName || manifest.tenant.name}</p>
+              <p className={styles.sidebarSub}>
+                {mode === "published" ? "Published runtime" : mode === "admin-preview" ? "Admin preview" : "Draft preview"}
+              </p>
             </div>
           </div>
           <div className={styles.sidebarModePill}>
-            {mode === "published" ? "Runtime shell · published manifest" : "Runtime shell · draft preview"}
+            {mode === "published"
+              ? "Runtime shell · published manifest"
+              : mode === "admin-preview"
+                ? "Runtime shell · admin preview"
+                : "Runtime shell · draft preview"}
           </div>
         </div>
         <div className={styles.sidebarSection}>
@@ -784,7 +819,7 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
           </div>
           <div className={styles.sidebarMeta}>
             <span>Published</span>
-            <strong>{mode === "published" ? publishedLabel : "Draft preview"}</strong>
+            <strong>{mode === "published" ? publishedLabel : mode === "admin-preview" ? "Admin preview" : "Draft preview"}</strong>
           </div>
         </div>
         <div className={styles.sidebarSection}>
@@ -792,7 +827,9 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
           <div className={styles.sidebarPanel}>
             {mode === "published"
               ? "This runtime only reflects published metadata. Draft changes stay hidden until the next activated version."
-              : "This view renders the current draft manifest for builders only. Data mutations stay disabled until publish."}
+              : mode === "admin-preview"
+                ? "This admin lens renders draft metadata with diagnostics, while user-facing runtime remains unchanged until publish."
+                : "This view renders the current draft manifest for builders only. Data mutations stay disabled until publish."}
           </div>
         </div>
         <div className={styles.sidebarSection}>
@@ -801,24 +838,43 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
           </Link>
         </div>
         <div className={styles.sidebarFooter}>
-          {mode === "published" ? "Internal runtime preview." : "Internal draft preview."}
+          {mode === "published" ? "Internal runtime preview." : mode === "admin-preview" ? "Internal admin preview." : "Internal draft preview."}
           <br />
-          Route: /platform/{mode === "published" ? "runtime" : "preview"}/{tenantSlug}
+          Route: /platform/{mode === "published" ? "runtime" : mode === "admin-preview" ? "admin-preview" : "preview"}/{tenantSlug}
         </div>
       </aside>
 
       <main className={styles.runtimeMain}>
+        {mode === "admin-preview" ? (
+          <div className={styles.runtimeLensBar}>
+            <strong>Admin preview</strong>
+            <span>Draft rendering with diagnostics enabled.</span>
+          </div>
+        ) : null}
+        {viewAs?.active ? (
+          <div className={styles.runtimeLensBar}>
+            <strong>Viewing as {viewAs.personaLabel}</strong>
+            <span>{viewAs.role}</span>
+            <button className={styles.secondaryButton} onClick={() => void clearViewAs()} type="button">
+              Exit view-as
+            </button>
+          </div>
+        ) : null}
         {message ? <div className={styles.successBanner}>{message}</div> : null}
         {error ? <div className={styles.errorBanner}>{error}</div> : null}
         <header className={styles.runtimeHeader}>
           <div className={styles.headerLead}>
-            <p className={styles.eyebrow}>{mode === "published" ? manifest.environment.name : "Draft preview"}</p>
+            <p className={styles.eyebrow}>
+              {mode === "published" ? manifest.environment.name : mode === "admin-preview" ? "Admin preview" : "Draft preview"}
+            </p>
             <h1>{activePage?.title ?? "Published runtime"}</h1>
             <p className={styles.headerCopy}>
               {activePage?.description ??
                 (mode === "published"
                   ? "This surface is rendered from the current published manifest with no hand-authored page code."
-                  : "This surface renders the current draft manifest so builders can validate layout, bindings, and responsiveness before publish.")}
+                  : mode === "admin-preview"
+                    ? "This surface renders the current draft manifest with admin diagnostics and a view-as lens before publish."
+                    : "This surface renders the current draft manifest so builders can validate layout, bindings, and responsiveness before publish.")}
             </p>
           </div>
           <div className={styles.headerRail}>
@@ -837,7 +893,7 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
               </article>
             </div>
             <div className={styles.headerNote}>
-              <span>{mode === "published" ? "Published manifest" : "Draft manifest"}</span>
+              <span>{mode === "published" ? "Published manifest" : mode === "admin-preview" ? "Admin lens" : "Draft manifest"}</span>
               <strong>{manifest.tenant.slug}</strong>
               <p>{mode === "published" ? publishedLabel : manifest.metadata.draftUpdatedAt}</p>
             </div>

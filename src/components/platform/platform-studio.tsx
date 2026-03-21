@@ -14,6 +14,7 @@ import {
 import { formatPlatformDateTime } from "@/lib/platform/format";
 import type {
   AgentDefinition,
+  FormDefinition,
   LayoutComponentDefinition,
   LayoutDefinition,
   LayoutSectionDefinition,
@@ -21,12 +22,14 @@ import type {
   ModelProviderDefinition,
   ObjectDefinition,
   PageDefinition,
+  PlatformFormSubmissionRecord,
   PlatformAgentPreview,
   PlatformBootstrap,
   PlatformPublishPreview,
   PlatformRole,
   PlatformWorkflowRunRecord,
   SecurityPolicyDefinition,
+  TenantBrandingDefinition,
   WorkflowDefinition,
   WorkflowEdgeDefinition,
   WorkflowNodeDefinition,
@@ -35,11 +38,25 @@ import type {
 
 import styles from "./platform-shell.module.css";
 
-type WorkspaceKey = "data-model" | "pages" | "navigation" | "workflows" | "agents" | "models" | "security" | "audit";
+type WorkspaceKey =
+  | "data-model"
+  | "pages"
+  | "forms"
+  | "branding"
+  | "profiles"
+  | "navigation"
+  | "workflows"
+  | "agents"
+  | "models"
+  | "security"
+  | "audit";
 
 const WORKSPACES: Array<{ key: WorkspaceKey; label: string; note: string; code: string }> = [
   { key: "data-model", label: "Data Model", note: "Objects, fields, rules, formulas", code: "DM" },
   { key: "pages", label: "Pages", note: "Page definitions, layout sections, runtime components", code: "PG" },
+  { key: "forms", label: "Forms", note: "Public forms, embedded intake flows, submissions", code: "FM" },
+  { key: "branding", label: "Branding", note: "Tenant theme, logos, brand assets, shell identity", code: "BR" },
+  { key: "profiles", label: "Profiles", note: "Profile pages, settings, admin view-as-user lens", code: "PF" },
   { key: "navigation", label: "Navigation", note: "Menus, ordering, route exposure", code: "NV" },
   { key: "workflows", label: "Workflows", note: "Visual graph metadata and execution scaffolding", code: "WF" },
   { key: "agents", label: "Agents", note: "Prompt assets, scope, model assignment", code: "AG" },
@@ -51,6 +68,9 @@ const WORKSPACES: Array<{ key: WorkspaceKey; label: string; note: string; code: 
 const WORKSPACE_TABS: Record<WorkspaceKey, string[]> = {
   "data-model": ["Objects", "Fields", "Validation"],
   pages: ["Designer", "Pages", "Templates"],
+  forms: ["Builder", "Submissions"],
+  branding: ["Theme", "Assets"],
+  profiles: ["Experience", "View As"],
   navigation: ["Menu Items", "Routes"],
   workflows: ["Definitions", "Runs"],
   agents: ["Definitions", "Prompts", "Scope"],
@@ -353,6 +373,52 @@ function createPageDraftFromDefinition(pageDefinition?: PageDefinition) {
   };
 }
 
+function createBlankForm(): FormDefinition {
+  return {
+    id: createClientId("form"),
+    key: "",
+    title: "",
+    description: "",
+    route: "",
+    objectKey: "booking_request",
+    deliveryMode: "public",
+    submitLabel: "Submit",
+    successMessage: "Submitted successfully.",
+    saveAndResume: true,
+    requireAuthentication: false,
+    analyticsEnabled: true,
+    fields: [
+      {
+        id: createClientId("form-field"),
+        key: "full_name",
+        label: "Full Name",
+        type: "text",
+        required: true,
+        placeholder: "Jane Smith",
+        validations: [
+          {
+            id: createClientId("val"),
+            type: "required",
+            message: "Full Name is required.",
+          },
+        ],
+      },
+    ],
+    steps: [
+      {
+        id: createClientId("form-step"),
+        key: "details",
+        title: "Details",
+        fieldKeys: ["full_name"],
+      },
+    ],
+  };
+}
+
+function createFormDraftFromDefinition(formDefinition?: FormDefinition) {
+  return formDefinition ? structuredClone(formDefinition) : createBlankForm();
+}
+
 function normalizeLayoutDraftForSave(
   layoutDraft: LayoutDefinition,
   pageKey: string,
@@ -399,6 +465,7 @@ export function PlatformStudio({
 
   const initialObject = initialBootstrap.draftManifest.objects[0];
   const initialPage = initialBootstrap.draftManifest.pages[0];
+  const initialForm = initialBootstrap.draftManifest.forms[0];
   const initialWorkflow = initialBootstrap.draftManifest.workflows[0];
   const initialAgent = initialBootstrap.draftManifest.agents[0];
   const initialLayout =
@@ -414,6 +481,7 @@ export function PlatformStudio({
   );
   const [selectedObjectId, setSelectedObjectId] = useState(initialBootstrap.draftManifest.objects[0]?.id ?? "");
   const [selectedPageId, setSelectedPageId] = useState(initialBootstrap.draftManifest.pages[0]?.id ?? "");
+  const [selectedFormId, setSelectedFormId] = useState(initialForm?.id ?? "");
   const [selectedWorkflowId, setSelectedWorkflowId] = useState(initialWorkflow?.id ?? "");
   const [selectedWorkflowNodeId, setSelectedWorkflowNodeId] = useState(initialWorkflow?.nodes[0]?.id ?? "");
   const [selectedAgentId, setSelectedAgentId] = useState(initialAgent?.id ?? "");
@@ -429,6 +497,23 @@ export function PlatformStudio({
     placeholder: "",
   });
   const [pageDraft, setPageDraft] = useState(createPageDraftFromDefinition(initialPage));
+  const [formDraft, setFormDraft] = useState<FormDefinition>(createFormDraftFromDefinition(initialForm));
+  const [formSubmissions, setFormSubmissions] = useState<PlatformFormSubmissionRecord[]>([]);
+  const [brandingDraft, setBrandingDraft] = useState<TenantBrandingDefinition>(initialBootstrap.draftManifest.branding);
+  const [brandAssetKind, setBrandAssetKind] = useState<"logo" | "icon" | "brand_book" | "reference">("logo");
+  const [brandAssetLabel, setBrandAssetLabel] = useState("Tenant logo");
+  const [brandAssetFile, setBrandAssetFile] = useState<File | null>(null);
+  const [profileDraft, setProfileDraft] = useState({
+    pageTitle: initialBootstrap.draftManifest.profiles.pageTitle,
+    visibleFieldKeys: initialBootstrap.draftManifest.profiles.visibleFieldKeys.join(", "),
+    profilePageKey: initialBootstrap.draftManifest.profiles.profilePageKey ?? "",
+    settingsPageKey: initialBootstrap.draftManifest.profiles.settingsPageKey ?? "",
+  });
+  const [viewAsDraft, setViewAsDraft] = useState({
+    role: initialBootstrap.viewAs?.role ?? ("USER" as PlatformRole),
+    personaLabel: initialBootstrap.viewAs?.personaLabel ?? "Sample teacher",
+    active: initialBootstrap.viewAs?.active ?? false,
+  });
   const [layoutDraft, setLayoutDraft] = useState<LayoutDefinition | null>(initialLayout);
   const [selectedSectionId, setSelectedSectionId] = useState(initialLayout?.sections[0]?.id ?? "");
   const [selectedComponentId, setSelectedComponentId] = useState(initialLayout?.sections[0]?.components[0]?.id ?? "");
@@ -450,6 +535,7 @@ export function PlatformStudio({
   const [workflowEdgeDraft, setWorkflowEdgeDraft] = useState({ sourceId: "", targetId: "", label: "" });
   const [agentDraft, setAgentDraft] = useState<AgentDefinition>(createAgentDraftFromDefinition(initialAgent));
   const [agentPreview, setAgentPreview] = useState<PlatformAgentPreview | null>(null);
+  const [agentEvalSummary, setAgentEvalSummary] = useState<string | null>(null);
   const [publishPreview, setPublishPreview] = useState<PlatformPublishPreview | null>(null);
   const [providerDraft, setProviderDraft] = useState<ModelProviderDefinition>(createBlankProvider());
   const [inviteDraft, setInviteDraft] = useState({
@@ -470,6 +556,7 @@ export function PlatformStudio({
   const actor = bootstrap.actor;
   const selectedObject = manifest.objects.find((objectDefinition) => objectDefinition.id === selectedObjectId) ?? manifest.objects[0];
   const selectedPage = manifest.pages.find((pageDefinition) => pageDefinition.id === selectedPageId) ?? manifest.pages[0];
+  const selectedForm = manifest.forms.find((formDefinition) => formDefinition.id === selectedFormId) ?? manifest.forms[0];
   const selectedWorkflow = manifest.workflows.find((workflowDefinition) => workflowDefinition.id === selectedWorkflowId) ?? manifest.workflows[0];
   const selectedWorkflowNode =
     workflowDraft.nodes.find((node) => node.id === selectedWorkflowNodeId) ??
@@ -540,6 +627,17 @@ export function PlatformStudio({
     }
   }, [bootstrap.tenant.slug]);
 
+  const refreshFormSubmissions = useCallback(async (formKey: string): Promise<void> => {
+    try {
+      const payload = await fetchJson<{ submissions: PlatformFormSubmissionRecord[] }>(
+        `/api/platform/tenants/${bootstrap.tenant.slug}/forms/${formKey}/submissions`,
+      );
+      setFormSubmissions(payload.submissions);
+    } catch {
+      setFormSubmissions([]);
+    }
+  }, [bootstrap.tenant.slug]);
+
   async function refreshBootstrap(): Promise<void> {
     const payload = await fetchJson<PlatformBootstrap>(`/api/platform/tenants/${bootstrap.tenant.slug}/bootstrap`);
     setBootstrap(payload);
@@ -547,6 +645,8 @@ export function PlatformStudio({
       payload.draftManifest.objects.find((objectDefinition) => objectDefinition.id === selectedObjectId) ?? payload.draftManifest.objects[0];
     const nextPage =
       payload.draftManifest.pages.find((pageDefinition) => pageDefinition.id === selectedPageId) ?? payload.draftManifest.pages[0];
+    const nextForm =
+      payload.draftManifest.forms.find((formDefinition) => formDefinition.id === selectedFormId) ?? payload.draftManifest.forms[0];
     const nextWorkflow =
       payload.draftManifest.workflows.find((workflowDefinition) => workflowDefinition.id === selectedWorkflowId) ?? payload.draftManifest.workflows[0];
     const nextAgent =
@@ -554,11 +654,13 @@ export function PlatformStudio({
 
     setSelectedObjectId(nextObject?.id ?? "");
     setSelectedPageId(nextPage?.id ?? "");
+    setSelectedFormId(nextForm?.id ?? "");
     setSelectedWorkflowId(nextWorkflow?.id ?? "");
     setSelectedWorkflowNodeId(nextWorkflow?.nodes[0]?.id ?? "");
     setSelectedAgentId(nextAgent?.id ?? "");
     setObjectDraft(createObjectDraftFromDefinition(nextObject));
     setPageDraft(createPageDraftFromDefinition(nextPage));
+    setFormDraft(createFormDraftFromDefinition(nextForm));
     setWorkflowDraft(createWorkflowDraftFromDefinition(nextWorkflow));
     setWorkflowEdgeDraft({
       sourceId: nextWorkflow?.nodes[0]?.id ?? "",
@@ -566,6 +668,18 @@ export function PlatformStudio({
       label: "",
     });
     setAgentDraft(createAgentDraftFromDefinition(nextAgent));
+    setBrandingDraft(payload.draftManifest.branding);
+    setProfileDraft({
+      pageTitle: payload.draftManifest.profiles.pageTitle,
+      visibleFieldKeys: payload.draftManifest.profiles.visibleFieldKeys.join(", "),
+      profilePageKey: payload.draftManifest.profiles.profilePageKey ?? "",
+      settingsPageKey: payload.draftManifest.profiles.settingsPageKey ?? "",
+    });
+    setViewAsDraft({
+      role: payload.viewAs?.role ?? "USER",
+      personaLabel: payload.viewAs?.personaLabel ?? "Sample teacher",
+      active: payload.viewAs?.active ?? false,
+    });
     const nextLayout =
       nextPage
         ? structuredClone(
@@ -578,6 +692,14 @@ export function PlatformStudio({
     setSelectedComponentId(nextLayout?.sections[0]?.components[0]?.id ?? "");
     setSecurityDraft(payload.draftManifest.securityPolicy);
     await refreshPublishPreview();
+    if (nextForm) {
+      const formPayload = await fetchJson<{ submissions: PlatformFormSubmissionRecord[] }>(
+        `/api/platform/tenants/${bootstrap.tenant.slug}/forms/${nextForm.key}/submissions`,
+      ).catch(() => ({ submissions: [] }));
+      setFormSubmissions(formPayload.submissions);
+    } else {
+      setFormSubmissions([]);
+    }
     if (nextWorkflow) {
       await refreshWorkflowRuns(nextWorkflow.id);
     } else {
@@ -888,6 +1010,31 @@ export function PlatformStudio({
     );
   }
 
+  async function handleWorkflowTest(workflowId: string): Promise<void> {
+    try {
+      setError(null);
+      setMessage(null);
+      const payload = await fetchJson<{ run: PlatformWorkflowRunRecord }>(
+        `/api/platform/tenants/${bootstrap.tenant.slug}/workflows/${workflowId}/test`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            payload: {
+              previewMode: true,
+            },
+          }),
+        },
+      );
+      setWorkflowRuns((current) => [payload.run, ...current]);
+      setMessage(`Ran draft test for ${workflowDraft.name}.`);
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Workflow test failed.");
+    }
+  }
+
   async function handleQueueWorkflowRun(workflowId: string): Promise<void> {
     await executeAction(
       async () => {
@@ -907,6 +1054,111 @@ export function PlatformStudio({
       },
       "Workflow run queued.",
     );
+  }
+
+  async function handleBrandingSave(): Promise<void> {
+    await executeAction(
+      async () => {
+        await fetchJson(`/api/platform/tenants/${bootstrap.tenant.slug}/branding`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(brandingDraft),
+        });
+      },
+      `Saved branding theme ${brandingDraft.themeName}.`,
+    );
+  }
+
+  async function handleBrandAssetUpload(): Promise<void> {
+    if (!brandAssetFile) {
+      setError("Choose a file before uploading a brand asset.");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", brandAssetFile);
+    formData.append("kind", brandAssetKind);
+    formData.append("label", brandAssetLabel);
+
+    await executeAction(
+      async () => {
+        const response = await fetch(`/api/platform/tenants/${bootstrap.tenant.slug}/branding/assets`, {
+          method: "POST",
+          body: formData,
+        });
+
+        const payload = (await response.json()) as { error?: string };
+        if (!response.ok) {
+          throw new Error(payload.error ?? "Failed to upload brand asset.");
+        }
+        setBrandAssetFile(null);
+      },
+      `Uploaded ${brandAssetKind.replace(/_/g, " ")} asset.`,
+    );
+  }
+
+  async function handleFormSave(): Promise<void> {
+    await executeAction(
+      async () => {
+        const payload = await fetchJson<{ form: FormDefinition }>(`/api/platform/tenants/${bootstrap.tenant.slug}/forms`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(formDraft),
+        });
+        setSelectedFormId(payload.form.id);
+      },
+      `Saved form ${formDraft.title}.`,
+    );
+  }
+
+  async function handleProfileSave(): Promise<void> {
+    await executeAction(
+      async () => {
+        await fetchJson(`/api/platform/tenants/${bootstrap.tenant.slug}/profiles`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            pageTitle: profileDraft.pageTitle,
+            visibleFieldKeys: profileDraft.visibleFieldKeys
+              .split(",")
+              .map((value) => value.trim())
+              .filter(Boolean),
+            profilePageKey: profileDraft.profilePageKey || undefined,
+            settingsPageKey: profileDraft.settingsPageKey || undefined,
+          }),
+        });
+      },
+      "Saved profile and settings configuration.",
+    );
+  }
+
+  async function handleViewAsSave(active: boolean): Promise<void> {
+    try {
+      setError(null);
+      setMessage(null);
+      await fetchJson(`/api/platform/tenants/${bootstrap.tenant.slug}/view-as`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          active,
+          role: viewAsDraft.role,
+          personaLabel: viewAsDraft.personaLabel,
+          actorEmail: actor.email,
+        }),
+      });
+      await refreshBootstrap();
+      setMessage(active ? `Viewing runtime as ${viewAsDraft.personaLabel}.` : "Exited view-as mode.");
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Failed to update view-as state.");
+    }
   }
 
   async function handleAgentSave(): Promise<void> {
@@ -949,10 +1201,35 @@ export function PlatformStudio({
         },
       );
       setAgentPreview(payload.preview);
+      setAgentEvalSummary(null);
       await refreshBootstrap();
       setMessage(`Prepared masked preview for ${agentDraft.name}.`);
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Failed to preview agent.");
+    }
+  }
+
+  async function handleEvaluateAgent(agentId: string): Promise<void> {
+    try {
+      setError(null);
+      setMessage(null);
+      const payload = await fetchJson<{ evaluation: { score: number; summary: string } }>(
+        `/api/platform/tenants/${bootstrap.tenant.slug}/agents/${agentId}/evals`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            objectKey: agentDraft.objectKeys[0] ?? manifest.objects[0]?.key,
+            sampleSize: 3,
+          }),
+        },
+      );
+      setAgentEvalSummary(`${payload.evaluation.score}/100 — ${payload.evaluation.summary}`);
+      setMessage(`Evaluated ${agentDraft.name}.`);
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Failed to evaluate agent.");
     }
   }
 
@@ -2050,6 +2327,431 @@ export function PlatformStudio({
     );
   }
 
+  function renderFormsWorkspace() {
+    return (
+      <div className={styles.workspaceGrid}>
+        <section className={styles.panel}>
+          <div className={styles.sectionHeader}>
+            <div>
+              <p className={styles.cardEyebrow}>Forms</p>
+              <h2>Form registry</h2>
+            </div>
+            <button className={styles.secondaryButton} onClick={() => { setSelectedFormId(""); setFormDraft(createBlankForm()); setFormSubmissions([]); }} type="button">
+              New form
+            </button>
+          </div>
+          <div className={styles.listStack}>
+            {manifest.forms.map((form) => (
+              <button
+                className={form.id === selectedForm?.id ? styles.activeListItem : styles.listItem}
+                key={form.id}
+                onClick={() => {
+                  setSelectedFormId(form.id);
+                  setFormDraft(createFormDraftFromDefinition(form));
+                  void refreshFormSubmissions(form.key);
+                }}
+                type="button"
+              >
+                <span>{form.title}</span>
+                <small>/{form.route} · {form.deliveryMode}</small>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className={styles.panelWide}>
+          {activeTab === 0 ? (
+            <>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <p className={styles.cardEyebrow}>Form builder</p>
+                  <h2>{formDraft.title || "Create form"}</h2>
+                </div>
+                <div className={styles.inlineList}>
+                  {formDraft.route ? (
+                    <Link className={styles.secondaryLink} href={`/platform/preview/${bootstrap.tenant.slug}/forms/${formDraft.route}`} target="_blank">
+                      Open draft preview
+                    </Link>
+                  ) : null}
+                  {formDraft.route ? (
+                    <Link className={styles.secondaryLink} href={`/platform/forms/${bootstrap.tenant.slug}/${formDraft.route}`} target="_blank">
+                      Open live form
+                    </Link>
+                  ) : null}
+                  <button className={styles.primaryButton} onClick={() => void handleFormSave()} type="button">
+                    Save form
+                  </button>
+                </div>
+              </div>
+              <div className={styles.formGrid}>
+                <label className={styles.formField}>
+                  <span>Title</span>
+                  <input className={styles.input} onChange={(event) => setFormDraft((current) => ({ ...current, title: event.target.value }))} value={formDraft.title} />
+                </label>
+                <label className={styles.formField}>
+                  <span>Key</span>
+                  <input className={styles.input} onChange={(event) => setFormDraft((current) => ({ ...current, key: event.target.value }))} value={formDraft.key} />
+                </label>
+                <label className={styles.formField}>
+                  <span>Route</span>
+                  <input className={styles.input} onChange={(event) => setFormDraft((current) => ({ ...current, route: event.target.value }))} value={formDraft.route} />
+                </label>
+                <label className={styles.formField}>
+                  <span>Delivery mode</span>
+                  <select className={styles.select} onChange={(event) => setFormDraft((current) => ({ ...current, deliveryMode: event.target.value as FormDefinition["deliveryMode"] }))} value={formDraft.deliveryMode}>
+                    <option value="public">Public</option>
+                    <option value="embedded">Embedded</option>
+                    <option value="authenticated">Authenticated</option>
+                  </select>
+                </label>
+                <label className={styles.formFieldSpan}>
+                  <span>Description</span>
+                  <textarea className={styles.textarea} onChange={(event) => setFormDraft((current) => ({ ...current, description: event.target.value }))} value={formDraft.description ?? ""} />
+                </label>
+              </div>
+              <div className={styles.inlineList}>
+                <label className={styles.checkboxField}>
+                  <input checked={formDraft.saveAndResume} onChange={(event) => setFormDraft((current) => ({ ...current, saveAndResume: event.target.checked }))} type="checkbox" />
+                  <span>Save and resume</span>
+                </label>
+                <label className={styles.checkboxField}>
+                  <input checked={formDraft.requireAuthentication} onChange={(event) => setFormDraft((current) => ({ ...current, requireAuthentication: event.target.checked }))} type="checkbox" />
+                  <span>Require authentication</span>
+                </label>
+                <label className={styles.checkboxField}>
+                  <input checked={formDraft.analyticsEnabled} onChange={(event) => setFormDraft((current) => ({ ...current, analyticsEnabled: event.target.checked }))} type="checkbox" />
+                  <span>Analytics enabled</span>
+                </label>
+              </div>
+              <div className={styles.subSection}>
+                <div className={styles.sectionHeader}>
+                  <div>
+                    <p className={styles.cardEyebrow}>Fields</p>
+                    <h3>Question model</h3>
+                  </div>
+                  <button
+                    className={styles.secondaryButton}
+                    onClick={() =>
+                      setFormDraft((current) => ({
+                        ...current,
+                        fields: [
+                          ...current.fields,
+                          {
+                            id: createClientId("form-field"),
+                            key: `field_${current.fields.length + 1}`,
+                            label: `Question ${current.fields.length + 1}`,
+                            type: "text",
+                            required: false,
+                            validations: [],
+                          },
+                        ],
+                      }))
+                    }
+                    type="button"
+                  >
+                    Add field
+                  </button>
+                </div>
+                <div className={styles.listStack}>
+                  {formDraft.fields.map((field) => (
+                    <div className={styles.fieldCard} key={field.id}>
+                      <div className={styles.formGridTight}>
+                        <label className={styles.formField}>
+                          <span>Label</span>
+                          <input className={styles.input} onChange={(event) => setFormDraft((current) => ({ ...current, fields: current.fields.map((candidate) => candidate.id === field.id ? { ...candidate, label: event.target.value } : candidate) }))} value={field.label} />
+                        </label>
+                        <label className={styles.formField}>
+                          <span>Key</span>
+                          <input className={styles.input} onChange={(event) => setFormDraft((current) => ({ ...current, fields: current.fields.map((candidate) => candidate.id === field.id ? { ...candidate, key: event.target.value } : candidate) }))} value={field.key} />
+                        </label>
+                        <label className={styles.formField}>
+                          <span>Type</span>
+                          <select className={styles.select} onChange={(event) => setFormDraft((current) => ({ ...current, fields: current.fields.map((candidate) => candidate.id === field.id ? { ...candidate, type: event.target.value as FormDefinition["fields"][number]["type"] } : candidate) }))} value={field.type}>
+                            <option value="text">Text</option>
+                            <option value="long_text">Long text</option>
+                            <option value="number">Number</option>
+                            <option value="currency">Currency</option>
+                            <option value="boolean">Boolean</option>
+                            <option value="date">Date</option>
+                            <option value="datetime">DateTime</option>
+                            <option value="select">Select</option>
+                          </select>
+                        </label>
+                        <label className={styles.formField}>
+                          <span>Tooltip</span>
+                          <input className={styles.input} onChange={(event) => setFormDraft((current) => ({ ...current, fields: current.fields.map((candidate) => candidate.id === field.id ? { ...candidate, tooltip: event.target.value } : candidate) }))} value={field.tooltip ?? ""} />
+                        </label>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          ) : null}
+
+          {activeTab === 1 ? (
+            <>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <p className={styles.cardEyebrow}>Submissions</p>
+                  <h2>{selectedForm ? selectedForm.title : "No form selected"}</h2>
+                </div>
+                {selectedForm ? (
+                  <div className={styles.inlineList}>
+                    <Link className={styles.secondaryLink} href={`/platform/preview/${bootstrap.tenant.slug}/forms/${selectedForm.route}`} target="_blank">
+                      Open draft preview
+                    </Link>
+                    <Link className={styles.secondaryLink} href={`/platform/forms/${bootstrap.tenant.slug}/${selectedForm.route}`} target="_blank">
+                      Open live form
+                    </Link>
+                  </div>
+                ) : null}
+              </div>
+              {formSubmissions.length === 0 ? (
+                <div className={styles.emptyState}>No submissions yet. Publish the tenant runtime and submit the form to inspect captured entries.</div>
+              ) : (
+                <div className={styles.listStack}>
+                  {formSubmissions.map((submission) => (
+                    <article className={styles.workflowCard} key={submission.id}>
+                      <strong>{submission.formKey}</strong>
+                      <p>{submission.status} · {formatPlatformDateTime(submission.createdAt)}</p>
+                      <pre className={styles.previewCode}>{JSON.stringify(submission.data, null, 2)}</pre>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : null}
+        </section>
+      </div>
+    );
+  }
+
+  function renderBrandingWorkspace() {
+    return (
+      <div className={styles.workspaceGrid}>
+        <section className={styles.panel}>
+          <div className={styles.sectionHeader}>
+            <div>
+              <p className={styles.cardEyebrow}>Brand system</p>
+              <h2>Tenant identity</h2>
+            </div>
+          </div>
+          <div className={styles.sidebarPanel}>
+            Upload logos and brand books, then tune the tenant theme tokens that flow into runtime pages, forms, and previews.
+          </div>
+          <div className={styles.sidebarMeta}>
+            <span>Theme</span>
+            <strong>{brandingDraft.themeName}</strong>
+          </div>
+          <div className={styles.sidebarMeta}>
+            <span>Assets</span>
+            <strong>{manifest.branding.assets.length}</strong>
+          </div>
+        </section>
+        <section className={styles.panelWide}>
+          {activeTab === 0 ? (
+            <>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <p className={styles.cardEyebrow}>Theme</p>
+                  <h2>{brandingDraft.themeName}</h2>
+                </div>
+                <button className={styles.primaryButton} onClick={() => void handleBrandingSave()} type="button">
+                  Save theme
+                </button>
+              </div>
+              <div className={styles.formGrid}>
+                <label className={styles.formField}>
+                  <span>Theme name</span>
+                  <input className={styles.input} onChange={(event) => setBrandingDraft((current) => ({ ...current, themeName: event.target.value }))} value={brandingDraft.themeName} />
+                </label>
+                <label className={styles.formField}>
+                  <span>Font family</span>
+                  <input className={styles.input} onChange={(event) => setBrandingDraft((current) => ({ ...current, fontFamily: event.target.value }))} value={brandingDraft.fontFamily} />
+                </label>
+                {[
+                  ["primaryColor", "Primary"],
+                  ["secondaryColor", "Secondary"],
+                  ["accentColor", "Accent"],
+                  ["surfaceColor", "Surface"],
+                  ["textColor", "Text"],
+                  ["pageBackground", "Page background"],
+                ].map(([key, label]) => (
+                  <label className={styles.formField} key={key}>
+                    <span>{label}</span>
+                    <input className={styles.input} onChange={(event) => setBrandingDraft((current) => ({ ...current, [key]: event.target.value }))} value={String(brandingDraft[key as keyof TenantBrandingDefinition] ?? "")} />
+                  </label>
+                ))}
+                <label className={styles.formFieldSpan}>
+                  <span>Notes</span>
+                  <textarea className={styles.textarea} onChange={(event) => setBrandingDraft((current) => ({ ...current, notes: event.target.value }))} value={brandingDraft.notes ?? ""} />
+                </label>
+              </div>
+            </>
+          ) : null}
+
+          {activeTab === 1 ? (
+            <>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <p className={styles.cardEyebrow}>Assets</p>
+                  <h2>Brand uploads</h2>
+                </div>
+                <button className={styles.primaryButton} onClick={() => void handleBrandAssetUpload()} type="button">
+                  Upload asset
+                </button>
+              </div>
+              <div className={styles.formGrid}>
+                <label className={styles.formField}>
+                  <span>Kind</span>
+                  <select className={styles.select} onChange={(event) => setBrandAssetKind(event.target.value as typeof brandAssetKind)} value={brandAssetKind}>
+                    <option value="logo">Logo</option>
+                    <option value="icon">Icon</option>
+                    <option value="brand_book">Brand book</option>
+                    <option value="reference">Reference</option>
+                  </select>
+                </label>
+                <label className={styles.formField}>
+                  <span>Label</span>
+                  <input className={styles.input} onChange={(event) => setBrandAssetLabel(event.target.value)} value={brandAssetLabel} />
+                </label>
+                <label className={styles.formFieldSpan}>
+                  <span>File</span>
+                  <input className={styles.input} onChange={(event) => setBrandAssetFile(event.target.files?.[0] ?? null)} type="file" />
+                </label>
+              </div>
+              <div className={styles.listStack}>
+                {manifest.branding.assets.map((asset) => (
+                  <article className={styles.auditRow} key={asset.id}>
+                    <div>
+                      <strong>{asset.label}</strong>
+                      <p>{asset.kind} · {asset.fileName}</p>
+                    </div>
+                    <Link className={styles.secondaryLink} href={asset.url} target="_blank">
+                      Open
+                    </Link>
+                  </article>
+                ))}
+              </div>
+            </>
+          ) : null}
+        </section>
+      </div>
+    );
+  }
+
+  function renderProfilesWorkspace() {
+    return (
+      <div className={styles.workspaceGrid}>
+        <section className={styles.panel}>
+          <div className={styles.sectionHeader}>
+            <div>
+              <p className={styles.cardEyebrow}>Profiles</p>
+              <h2>Identity surfaces</h2>
+            </div>
+          </div>
+          <div className={styles.sidebarMeta}>
+            <span>Profile page</span>
+            <strong>{profileDraft.profilePageKey || "Unassigned"}</strong>
+          </div>
+          <div className={styles.sidebarMeta}>
+            <span>Settings page</span>
+            <strong>{profileDraft.settingsPageKey || "Unassigned"}</strong>
+          </div>
+          <div className={styles.sidebarMeta}>
+            <span>View-as</span>
+            <strong>{viewAsDraft.active ? `Active · ${viewAsDraft.personaLabel}` : "Inactive"}</strong>
+          </div>
+        </section>
+        <section className={styles.panelWide}>
+          {activeTab === 0 ? (
+            <>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <p className={styles.cardEyebrow}>Profile configuration</p>
+                  <h2>{profileDraft.pageTitle}</h2>
+                </div>
+                <button className={styles.primaryButton} onClick={() => void handleProfileSave()} type="button">
+                  Save profile config
+                </button>
+              </div>
+              <div className={styles.formGrid}>
+                <label className={styles.formField}>
+                  <span>Page title</span>
+                  <input className={styles.input} onChange={(event) => setProfileDraft((current) => ({ ...current, pageTitle: event.target.value }))} value={profileDraft.pageTitle} />
+                </label>
+                <label className={styles.formField}>
+                  <span>Profile page key</span>
+                  <input className={styles.input} onChange={(event) => setProfileDraft((current) => ({ ...current, profilePageKey: event.target.value }))} value={profileDraft.profilePageKey} />
+                </label>
+                <label className={styles.formField}>
+                  <span>Settings page key</span>
+                  <input className={styles.input} onChange={(event) => setProfileDraft((current) => ({ ...current, settingsPageKey: event.target.value }))} value={profileDraft.settingsPageKey} />
+                </label>
+                <label className={styles.formFieldSpan}>
+                  <span>Visible field keys</span>
+                  <input className={styles.input} onChange={(event) => setProfileDraft((current) => ({ ...current, visibleFieldKeys: event.target.value }))} value={profileDraft.visibleFieldKeys} />
+                </label>
+              </div>
+              <div className={styles.inlineList}>
+                <Link className={styles.secondaryLink} href={`/platform/admin-preview/${bootstrap.tenant.slug}/${profileDraft.profilePageKey || "profile"}`} target="_blank">
+                  Open admin preview
+                </Link>
+                <Link className={styles.secondaryLink} href={`/platform/runtime/${bootstrap.tenant.slug}/${profileDraft.profilePageKey || "profile"}`} target="_blank">
+                  Open runtime profile
+                </Link>
+              </div>
+            </>
+          ) : null}
+
+          {activeTab === 1 ? (
+            <>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <p className={styles.cardEyebrow}>View as user</p>
+                  <h2>Admin impersonation lens</h2>
+                </div>
+              </div>
+              <div className={styles.formGrid}>
+                <label className={styles.formField}>
+                  <span>Role</span>
+                  <select className={styles.select} onChange={(event) => setViewAsDraft((current) => ({ ...current, role: event.target.value as PlatformRole }))} value={viewAsDraft.role}>
+                    <option value="USER">User</option>
+                    <option value="BUILDER_ADMIN">Builder admin</option>
+                    <option value="SUPER_ADMIN">Super admin</option>
+                  </select>
+                </label>
+                <label className={styles.formField}>
+                  <span>Persona label</span>
+                  <input className={styles.input} onChange={(event) => setViewAsDraft((current) => ({ ...current, personaLabel: event.target.value }))} value={viewAsDraft.personaLabel} />
+                </label>
+              </div>
+              <div className={styles.actionsRow}>
+                <div className={styles.inlineList}>
+                  <button className={styles.primaryButton} onClick={() => void handleViewAsSave(true)} type="button">
+                    Enable view-as
+                  </button>
+                  <button className={styles.secondaryButton} onClick={() => void handleViewAsSave(false)} type="button">
+                    Clear view-as
+                  </button>
+                </div>
+                <div className={styles.inlineList}>
+                  <Link className={styles.secondaryLink} href={`/platform/admin-preview/${bootstrap.tenant.slug}`} target="_blank">
+                    Open admin preview
+                  </Link>
+                  <Link className={styles.secondaryLink} href={`/platform/runtime/${bootstrap.tenant.slug}`} target="_blank">
+                    Open runtime
+                  </Link>
+                </div>
+              </div>
+            </>
+          ) : null}
+        </section>
+      </div>
+    );
+  }
+
   function renderNavigationWorkspace() {
     return (
       <div className={styles.workspaceGrid}>
@@ -2171,9 +2873,14 @@ export function PlatformStudio({
                   <h2>{selectedWorkflow ? selectedWorkflow.name : "Create workflow"}</h2>
                 </div>
                 {selectedWorkflow ? (
-                  <button className={styles.secondaryButton} onClick={() => void handleQueueWorkflowRun(selectedWorkflow.id)} type="button">
-                    Queue run
-                  </button>
+                  <div className={styles.inlineList}>
+                    <button className={styles.secondaryButton} onClick={() => void handleWorkflowTest(selectedWorkflow.id)} type="button">
+                      Run draft test
+                    </button>
+                    <button className={styles.secondaryButton} onClick={() => void handleQueueWorkflowRun(selectedWorkflow.id)} type="button">
+                      Queue run
+                    </button>
+                  </div>
                 ) : null}
               </div>
               <div className={styles.formGrid}>
@@ -2576,9 +3283,14 @@ export function PlatformStudio({
                   <h3>{selectedWorkflow ? selectedWorkflow.name : "No workflow selected"}</h3>
                 </div>
                 {selectedWorkflow ? (
-                  <button className={styles.primaryButton} onClick={() => void handleQueueWorkflowRun(selectedWorkflow.id)} type="button">
-                    Queue run
-                  </button>
+                  <div className={styles.inlineList}>
+                    <button className={styles.secondaryButton} onClick={() => void handleWorkflowTest(selectedWorkflow.id)} type="button">
+                      Run draft test
+                    </button>
+                    <button className={styles.primaryButton} onClick={() => void handleQueueWorkflowRun(selectedWorkflow.id)} type="button">
+                      Queue run
+                    </button>
+                  </div>
                 ) : null}
               </div>
               {workflowRuns.length === 0 ? (
@@ -2727,9 +3439,14 @@ export function PlatformStudio({
                   <p className={styles.cardEyebrow}>Prompt and tools</p>
                   <h3>Guarded builder</h3>
                 </div>
-                <button className={styles.secondaryButton} disabled={!agentDraft.id} onClick={() => void handlePreviewAgent(agentDraft.id)} type="button">
-                  Preview masked invocation
-                </button>
+                <div className={styles.inlineList}>
+                  <button className={styles.secondaryButton} disabled={!agentDraft.id} onClick={() => void handlePreviewAgent(agentDraft.id)} type="button">
+                    Preview masked invocation
+                  </button>
+                  <button className={styles.secondaryButton} disabled={!agentDraft.id} onClick={() => void handleEvaluateAgent(agentDraft.id)} type="button">
+                    Run eval
+                  </button>
+                </div>
               </div>
               <div className={styles.formGrid}>
                 <label className={styles.formFieldSpan}>
@@ -2737,6 +3454,7 @@ export function PlatformStudio({
                   <textarea className={styles.textareaTall} onChange={(event) => setAgentDraft((current) => ({ ...current, prompt: event.target.value }))} value={agentDraft.prompt} />
                 </label>
               </div>
+              {agentEvalSummary ? <div className={styles.sidebarPanel}>{agentEvalSummary}</div> : null}
               <div className={styles.scopeGrid}>
                 <article className={styles.scopeCard}>
                   <p className={styles.cardEyebrow}>Allowed tools</p>
@@ -3248,6 +3966,9 @@ export function PlatformStudio({
             <Link className={styles.secondaryLink} href={`/platform/preview/${bootstrap.tenant.slug}/${pageDraft.route || ""}`} target="_blank">
               Draft preview
             </Link>
+            <Link className={styles.secondaryLink} href={`/platform/admin-preview/${bootstrap.tenant.slug}`} target="_blank">
+              Admin preview
+            </Link>
             <Link className={styles.secondaryLink} href={`/platform/runtime/${bootstrap.tenant.slug}`} target="_blank">
               Open runtime
             </Link>
@@ -3305,6 +4026,9 @@ export function PlatformStudio({
 
         {workspace === "data-model" ? renderDataModelWorkspace() : null}
         {workspace === "pages" ? renderPagesWorkspace() : null}
+        {workspace === "forms" ? renderFormsWorkspace() : null}
+        {workspace === "branding" ? renderBrandingWorkspace() : null}
+        {workspace === "profiles" ? renderProfilesWorkspace() : null}
         {workspace === "navigation" ? renderNavigationWorkspace() : null}
         {workspace === "workflows" ? renderWorkflowsWorkspace() : null}
         {workspace === "agents" ? renderAgentsWorkspace() : null}

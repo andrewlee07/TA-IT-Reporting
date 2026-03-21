@@ -2,7 +2,13 @@ import { nanoid } from "nanoid";
 import { Prisma } from "@/generated/prisma/client";
 
 import { prepareAgentInvocation } from "@/lib/platform/agent-gateway";
-import { createSignedPlatformSessionValue, resolvePlatformActorIdentity, tryResolvePlatformActorIdentity, type PlatformActorIdentity } from "@/lib/platform/auth";
+import {
+  createSignedPlatformSessionValue,
+  resolvePlatformActorIdentity,
+  tryResolvePlatformActorIdentity,
+  tryResolvePlatformViewAsState,
+  type PlatformActorIdentity,
+} from "@/lib/platform/auth";
 import {
   countLayoutComponents,
   createDefaultPlacement,
@@ -41,6 +47,7 @@ import {
 } from "@/lib/platform/local-store";
 import { ensureManifestConsistency, findObjectDefinition, touchManifest } from "@/lib/platform/manifest";
 import { buildPublishedArtifacts } from "@/lib/platform/publish";
+import { enqueueWorkflowRun } from "@/lib/platform/execution-bus";
 import {
   PlatformError,
   PlatformForbiddenError,
@@ -48,19 +55,26 @@ import {
 } from "@/lib/platform/errors";
 import { assertRole } from "@/lib/platform/rbac";
 import { validateRecordInput } from "@/lib/platform/records";
+import { createDefaultBranding } from "@/lib/platform/theme";
+import { getObjectStorage } from "@/lib/storage";
 import type {
   AgentDefinition,
   FieldDefinition,
+  FormDefinition,
+  FormFieldDefinition,
+  FormStepDefinition,
   LayoutDefinition,
   MenuItemDefinition,
   ModelProviderDefinition,
   ObjectDefinition,
   PageDefinition,
+  PlatformAgentEvalRecord,
   PlatformActor,
   PlatformAgentPreview,
   PlatformAuditEventRecord,
   PlatformBootstrap,
   PlatformEnvironmentSummary,
+  PlatformFormSubmissionRecord,
   PlatformInviteRecord,
   PlatformManifest,
   PlatformPublishPageImpact,
@@ -72,6 +86,7 @@ import type {
   PlatformSessionSummary,
   PlatformTenantSummary,
   SecurityPolicyDefinition,
+  TenantBrandingDefinition,
   WorkflowDefinition,
   PlatformWorkflowRunRecord,
 } from "@/lib/platform/types";
@@ -89,6 +104,25 @@ interface PlatformContext {
   versions: PlatformPublishedVersionRecord[];
   auditEvents: PlatformAuditEventRecord[];
 }
+
+type EditableFormFieldInput = Partial<Omit<FormFieldDefinition, "id" | "key">> &
+  Pick<FormFieldDefinition, "label" | "type"> & {
+  id?: string;
+  key?: string;
+};
+
+type EditableFormStepInput = Partial<Omit<FormStepDefinition, "id" | "key">> &
+  Pick<FormStepDefinition, "title"> & {
+  id?: string;
+  key?: string;
+};
+
+type EditableFormInput = Omit<FormDefinition, "id" | "key" | "fields" | "steps"> & {
+  id?: string;
+  key?: string;
+  fields?: EditableFormFieldInput[];
+  steps?: EditableFormStepInput[];
+};
 
 function toJsonValue(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -257,6 +291,27 @@ function buildInviteUrl(tenantSlug: string, token: string): string {
 
 function createInviteToken(): string {
   return `invite_${nanoid(24)}`;
+}
+
+function findFormDefinition(manifest: PlatformManifest, formIdOrKey: string): FormDefinition | undefined {
+  return manifest.forms.find((form) => form.id === formIdOrKey || form.key === formIdOrKey || form.route === formIdOrKey);
+}
+
+function getFormSubmissionObjectKey(formKey: string): string {
+  return `form_submission:${formKey}`;
+}
+
+function toFormSubmissionRecord(record: PlatformRecord): PlatformFormSubmissionRecord {
+  return {
+    id: record.id,
+    formKey: String(record.data.formKey ?? ""),
+    objectKey: typeof record.data.objectKey === "string" ? record.data.objectKey : undefined,
+    status: (record.data.status as PlatformFormSubmissionRecord["status"]) ?? "submitted",
+    data: (record.data.submission as Record<string, unknown>) ?? {},
+    createdAt: record.createdAt,
+    submittedAt: typeof record.data.submittedAt === "string" ? record.data.submittedAt : null,
+    createdByEmail: typeof record.data.createdByEmail === "string" ? record.data.createdByEmail : null,
+  };
 }
 
 function toInviteRecord(record: {
@@ -1074,6 +1129,7 @@ export async function getPlatformBootstrap(input: {
     environment: context.environment,
     actor: context.actor,
     session,
+    viewAs: tryResolvePlatformViewAsState(input.request),
     draftManifest: context.draftManifest,
     activeVersion: context.activeVersion,
     versions: context.versions,
@@ -2275,6 +2331,77 @@ async function loadActiveRuntimeManifest(context: PlatformContext): Promise<Plat
   );
 }
 
+export async function getPublicRuntimeManifest(input: {
+  tenantSlug: string;
+  environmentSlug?: string;
+}): Promise<PlatformManifest | null> {
+  const environmentSlug = input.environmentSlug ?? getEnv().PLATFORM_DEFAULT_ENVIRONMENT_SLUG;
+
+  return withLocalFallback(
+    async () => {
+      const prisma = getPrisma();
+      const tenant = await prisma.platformTenant.findUnique({
+        where: { slug: input.tenantSlug },
+      });
+      if (!tenant) {
+        return null;
+      }
+
+      const environment = await prisma.platformEnvironment.findUnique({
+        where: {
+          tenantId_slug: {
+            tenantId: tenant.id,
+            slug: environmentSlug,
+          },
+        },
+      });
+      if (!environment) {
+        return null;
+      }
+
+      const version = await prisma.platformPublishedVersion.findFirst({
+        where: {
+          tenantId: tenant.id,
+          environmentId: environment.id,
+          status: "ACTIVE",
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      return version?.manifest ? ensureManifestConsistency(version.manifest as unknown as PlatformManifest) : null;
+    },
+    async () => {
+      const tenant = await getLocalTenantBySlug(input.tenantSlug);
+      if (!tenant) {
+        return null;
+      }
+
+      const environment = await getLocalEnvironmentBySlug({
+        tenantId: tenant.id,
+        slug: environmentSlug,
+      });
+      if (!environment) {
+        return null;
+      }
+
+      const activeVersion = await getLocalActiveVersion({
+        tenantId: tenant.id,
+        environmentId: environment.id,
+      });
+      if (!activeVersion) {
+        return null;
+      }
+
+      const versions = await listLocalVersions({
+        tenantId: tenant.id,
+        environmentId: environment.id,
+      });
+      const manifest = versions.find((version) => version.id === activeVersion.id)?.manifest;
+      return manifest ? ensureManifestConsistency(manifest) : null;
+    },
+  );
+}
+
 export async function getRuntimeManifest(input: {
   tenantSlug: string;
   environmentSlug?: string;
@@ -2323,6 +2450,505 @@ export async function getDraftPreviewManifest(input: {
   });
 
   return context.draftManifest;
+}
+
+export async function saveBrandingDefinition(input: {
+  tenantSlug: string;
+  branding: Partial<TenantBrandingDefinition> & Pick<TenantBrandingDefinition, "themeName" | "primaryColor" | "secondaryColor" | "accentColor" | "surfaceColor" | "textColor" | "pageBackground" | "fontFamily">;
+  environmentSlug?: string;
+  request?: Request | Headers;
+}): Promise<TenantBrandingDefinition> {
+  return updateDraftWithMutation({
+    tenantSlug: input.tenantSlug,
+    request: input.request,
+    environmentSlug: input.environmentSlug,
+    action: "branding.saved",
+    resourceType: "branding",
+    resourceId: "tenant-branding",
+    summary: `Saved branding theme ${input.branding.themeName}.`,
+    mutate: (manifest) => {
+      const nextBranding: TenantBrandingDefinition = {
+        ...createDefaultBranding(manifest.tenant.name),
+        ...manifest.branding,
+        ...input.branding,
+        themeName: requireNonEmptyText(input.branding.themeName, "Theme name"),
+        primaryColor: requireNonEmptyText(input.branding.primaryColor, "Primary color"),
+        secondaryColor: requireNonEmptyText(input.branding.secondaryColor, "Secondary color"),
+        accentColor: requireNonEmptyText(input.branding.accentColor, "Accent color"),
+        surfaceColor: requireNonEmptyText(input.branding.surfaceColor, "Surface color"),
+        textColor: requireNonEmptyText(input.branding.textColor, "Text color"),
+        pageBackground: requireNonEmptyText(input.branding.pageBackground, "Page background"),
+        fontFamily: requireNonEmptyText(input.branding.fontFamily, "Font family"),
+        notes: normalizeOptionalText(input.branding.notes),
+        mode: input.branding.mode ?? manifest.branding?.mode ?? "draft",
+        assets: manifest.branding?.assets ?? [],
+      };
+
+      manifest.branding = nextBranding;
+      return {
+        manifest,
+        result: nextBranding,
+      };
+    },
+  });
+}
+
+export async function uploadBrandAsset(input: {
+  tenantSlug: string;
+  kind: "logo" | "icon" | "brand_book" | "reference";
+  label: string;
+  fileName: string;
+  contentType: string;
+  buffer: Buffer;
+  environmentSlug?: string;
+  request?: Request | Headers;
+}) {
+  const fileName = input.fileName.replace(/[^a-zA-Z0-9._-]+/g, "-");
+  const storageKey = `platform-assets/${input.tenantSlug}/${nanoid(10)}/${fileName}`;
+  await getObjectStorage().putBuffer(storageKey, input.buffer, input.contentType);
+
+  return updateDraftWithMutation({
+    tenantSlug: input.tenantSlug,
+    request: input.request,
+    environmentSlug: input.environmentSlug,
+    action: "branding.asset_uploaded",
+    resourceType: "branding_asset",
+    resourceId: storageKey,
+    summary: `Uploaded ${input.kind.replace(/_/g, " ")} asset ${input.label}.`,
+    mutate: (manifest) => {
+      const assetId = nextId("brand-asset");
+      const asset = {
+        id: assetId,
+        kind: input.kind,
+        label: requireNonEmptyText(input.label, "Asset label"),
+        fileName,
+        contentType: input.contentType,
+        storageKey,
+        url: `/api/platform/tenants/${input.tenantSlug}/branding/assets/${assetId}`,
+        uploadedAt: new Date().toISOString(),
+      };
+
+      manifest.branding = {
+        ...createDefaultBranding(manifest.tenant.name),
+        ...manifest.branding,
+        assets: [asset, ...(manifest.branding?.assets ?? [])],
+        logoAssetId: input.kind === "logo" ? assetId : manifest.branding?.logoAssetId,
+        iconAssetId: input.kind === "icon" ? assetId : manifest.branding?.iconAssetId,
+        brandBookAssetId: input.kind === "brand_book" ? assetId : manifest.branding?.brandBookAssetId,
+      };
+
+      return {
+        manifest,
+        result: asset,
+      };
+    },
+  });
+}
+
+export async function saveProfileConfiguration(input: {
+  tenantSlug: string;
+  pageTitle: string;
+  visibleFieldKeys: string[];
+  profilePageKey?: string;
+  settingsPageKey?: string;
+  environmentSlug?: string;
+  request?: Request | Headers;
+}) {
+  return updateDraftWithMutation({
+    tenantSlug: input.tenantSlug,
+    request: input.request,
+    environmentSlug: input.environmentSlug,
+    action: "profiles.saved",
+    resourceType: "profiles",
+    resourceId: "tenant-profile-config",
+    summary: `Saved profile settings for ${input.tenantSlug}.`,
+    mutate: (manifest) => {
+      manifest.profiles = {
+        ...manifest.profiles,
+        pageTitle: requireNonEmptyText(input.pageTitle, "Profile page title"),
+        visibleFieldKeys: input.visibleFieldKeys,
+        profilePageKey: normalizeOptionalText(input.profilePageKey),
+        settingsPageKey: normalizeOptionalText(input.settingsPageKey),
+      };
+
+      manifest.appShell = {
+        ...manifest.appShell,
+        profilePageKey: normalizeOptionalText(input.profilePageKey) ?? manifest.appShell.profilePageKey,
+        settingsPageKey: normalizeOptionalText(input.settingsPageKey) ?? manifest.appShell.settingsPageKey,
+      };
+
+      return {
+        manifest,
+        result: manifest.profiles,
+      };
+    },
+  });
+}
+
+export async function listFormDefinitions(input: {
+  tenantSlug: string;
+  environmentSlug?: string;
+  request?: Request | Headers;
+}): Promise<FormDefinition[]> {
+  const bootstrap = await getPlatformBootstrap(input);
+  return bootstrap.draftManifest.forms;
+}
+
+export async function saveFormDefinition(input: {
+  tenantSlug: string;
+  form: Partial<EditableFormInput> & Pick<EditableFormInput, "title" | "deliveryMode" | "submitLabel" | "successMessage">;
+  environmentSlug?: string;
+  request?: Request | Headers;
+}): Promise<FormDefinition> {
+  return updateDraftWithMutation({
+    tenantSlug: input.tenantSlug,
+    request: input.request,
+    environmentSlug: input.environmentSlug,
+    action: "form.saved",
+    resourceType: "form",
+    resourceId: input.form.id ?? input.form.key ?? input.form.title,
+    summary: `Saved form ${input.form.title}.`,
+    mutate: (manifest) => {
+      const formId = input.form.id ?? nextId("form");
+      const title = requireNonEmptyText(input.form.title, "Form title");
+      const key = requireManifestKey(input.form.key, title, "Form key");
+      const route = normalizeRoute(input.form.route, key);
+      assertUniqueValue(manifest.forms, formId, (form) => form.key, key, "Form key");
+      assertUniqueValue(manifest.forms, formId, (form) => form.route, route, "Form route");
+
+      const fields: FormFieldDefinition[] = (input.form.fields ?? []).map((field, index) => {
+        const label = requireNonEmptyText(field.label, `Form field ${index + 1} label`);
+        const fieldKey = requireManifestKey(field.key, label, `Form field ${index + 1} key`);
+        return {
+          id: field.id ?? nextId("form-field"),
+          key: fieldKey,
+          label,
+          type: field.type,
+          description: normalizeOptionalText(field.description),
+          helpText: normalizeOptionalText(field.helpText),
+          tooltip: normalizeOptionalText(field.tooltip),
+          required: field.required ?? false,
+          placeholder: normalizeOptionalText(field.placeholder),
+          options: field.options ?? [],
+          defaultValue: field.defaultValue,
+          validations: field.validations ?? [],
+          calculation: field.calculation ?? null,
+          mandatoryRule: field.mandatoryRule,
+        };
+      });
+
+      const steps: FormStepDefinition[] = (input.form.steps ?? []).map((step, index) => ({
+        id: step.id ?? nextId("form-step"),
+        key: requireManifestKey(step.key, step.title, `Form step ${index + 1} key`),
+        title: requireNonEmptyText(step.title, `Form step ${index + 1} title`),
+        description: normalizeOptionalText(step.description),
+        fieldKeys: step.fieldKeys ?? [],
+        visibilityRule: step.visibilityRule,
+      }));
+
+      const nextForm: FormDefinition = {
+        id: formId,
+        key,
+        title,
+        description: normalizeOptionalText(input.form.description),
+        route,
+        objectKey: normalizeOptionalText(input.form.objectKey),
+        deliveryMode: input.form.deliveryMode,
+        submitLabel: requireNonEmptyText(input.form.submitLabel, "Submit label"),
+        successMessage: requireNonEmptyText(input.form.successMessage, "Success message"),
+        saveAndResume: input.form.saveAndResume ?? true,
+        requireAuthentication: input.form.requireAuthentication ?? false,
+        analyticsEnabled: input.form.analyticsEnabled ?? true,
+        fields,
+        steps,
+      };
+
+      manifest.forms = upsertById(manifest.forms, nextForm);
+      return {
+        manifest,
+        result: nextForm,
+      };
+    },
+  });
+}
+
+export async function listFormSubmissions(input: {
+  tenantSlug: string;
+  formKey: string;
+  environmentSlug?: string;
+  request?: Request | Headers;
+}): Promise<PlatformFormSubmissionRecord[]> {
+  const context = await getPlatformContextFromRequest({
+    tenantSlug: input.tenantSlug,
+    environmentSlug: input.environmentSlug,
+    request: input.request,
+  });
+  assertRole(context.actor, "BUILDER_ADMIN");
+  const form = findFormDefinition(context.draftManifest, input.formKey);
+  assertExists(form, "Form definition not found.");
+  const objectKey = getFormSubmissionObjectKey(form.key);
+
+  const records = await withLocalFallback(
+    async () => {
+      const prisma = getPrisma();
+      const rows = await prisma.platformRecord.findMany({
+        where: {
+          tenantId: context.tenantId,
+          environmentId: context.environmentId,
+          objectKey,
+        },
+        orderBy: [{ createdAt: "desc" }],
+        take: 50,
+      });
+      return rows.map(toPlatformRecord);
+    },
+    async () => {
+      const rows = await listLocalPlatformRecords({
+        tenantId: context.tenantId,
+        environmentId: context.environmentId,
+        objectKey,
+      });
+      return rows.map(toPlatformRecord);
+    },
+  );
+
+  return records.map(toFormSubmissionRecord);
+}
+
+export async function submitFormSubmission(input: {
+  tenantSlug: string;
+  formKey: string;
+  data: Record<string, unknown>;
+  status?: PlatformFormSubmissionRecord["status"];
+  environmentSlug?: string;
+  request?: Request | Headers;
+}): Promise<PlatformFormSubmissionRecord> {
+  const manifest = await getPublicRuntimeManifest({
+    tenantSlug: input.tenantSlug,
+    environmentSlug: input.environmentSlug,
+  });
+  if (!manifest) {
+    throw new PlatformError("No published runtime is active for this tenant.", 409);
+  }
+
+  const form = findFormDefinition(manifest, input.formKey);
+  assertExists(form, "Form definition not found in the active runtime.");
+
+  const identity = tryResolvePlatformActorIdentity(input.request);
+  if (form.requireAuthentication && !identity) {
+    throw new PlatformForbiddenError("Authentication is required to submit this form.");
+  }
+
+  const formAsObject = {
+    id: `obj-${form.key}`,
+    key: form.key,
+    label: form.title,
+    pluralLabel: `${form.title}s`,
+    icon: "form",
+    primaryFieldKey: form.fields[0]?.key ?? "submission",
+    allowCreate: true,
+    allowUpdate: true,
+    allowDelete: false,
+    fields: form.fields.map((field) => ({
+      ...field,
+      unique: false,
+      sensitivity: "public" as const,
+    })),
+    relationships: [],
+    views: [],
+  };
+  const validation = validateRecordInput({
+    objectDefinition: formAsObject,
+    manifest,
+    rawData: input.data,
+    existingRecords: [],
+  });
+
+  if (validation.errors.length > 0) {
+    throw new PlatformError(validation.errors.join(" "));
+  }
+
+  const environmentSlug = input.environmentSlug ?? manifest.environment.slug;
+  const submissionObjectKey = getFormSubmissionObjectKey(form.key);
+  const actorEmail = identity?.email ?? null;
+
+  const saved = await withLocalFallback(
+    async () => {
+      const prisma = getPrisma();
+      const tenant = await prisma.platformTenant.findUnique({
+        where: { slug: input.tenantSlug },
+      });
+      assertExists(tenant, "Platform tenant not found.");
+      const environment = await prisma.platformEnvironment.findUnique({
+        where: {
+          tenantId_slug: {
+            tenantId: tenant.id,
+            slug: environmentSlug,
+          },
+        },
+      });
+      assertExists(environment, "Platform environment not found.");
+      const row = await prisma.platformRecord.create({
+        data: {
+          tenantId: tenant.id,
+          environmentId: environment.id,
+          objectKey: submissionObjectKey,
+          data: toJsonValue({
+            formKey: form.key,
+            objectKey: form.objectKey,
+            status: input.status ?? "submitted",
+            submission: validation.data,
+            submittedAt: new Date().toISOString(),
+            createdByEmail: actorEmail,
+          }),
+          createdByEmail: actorEmail,
+          updatedByEmail: actorEmail,
+        },
+      });
+      return toPlatformRecord(row);
+    },
+    async () => {
+      const tenant = await getLocalTenantBySlug(input.tenantSlug);
+      assertExists(tenant, "Platform tenant not found.");
+      const environment = await getLocalEnvironmentBySlug({
+        tenantId: tenant.id,
+        slug: environmentSlug,
+      });
+      assertExists(environment, "Platform environment not found.");
+      const row = await upsertLocalPlatformRecord({
+        tenantId: tenant.id,
+        environmentId: environment.id,
+        objectKey: submissionObjectKey,
+        data: {
+          formKey: form.key,
+          objectKey: form.objectKey,
+          status: input.status ?? "submitted",
+          submission: validation.data,
+          submittedAt: new Date().toISOString(),
+          createdByEmail: actorEmail,
+        },
+        actor: {
+          email: actorEmail ?? "public@tenant.local",
+          name: actorEmail ?? "Public submitter",
+          role: "USER",
+        },
+      });
+      return toPlatformRecord(row);
+    },
+  );
+
+  return toFormSubmissionRecord(saved);
+}
+
+export async function runWorkflowTest(input: {
+  tenantSlug: string;
+  workflowId: string;
+  payload?: Record<string, unknown>;
+  environmentSlug?: string;
+  request?: Request | Headers;
+}): Promise<PlatformWorkflowRunRecord> {
+  const context = await getPlatformContextFromRequest({
+    tenantSlug: input.tenantSlug,
+    environmentSlug: input.environmentSlug,
+    request: input.request,
+  });
+  assertRole(context.actor, "BUILDER_ADMIN");
+
+  const workflow = context.draftManifest.workflows.find(
+    (candidate) => candidate.id === input.workflowId || candidate.key === input.workflowId,
+  );
+  assertExists(workflow, "Workflow definition not found.");
+
+  const logs = [
+    {
+      level: "info",
+      message: `Started draft test for ${workflow.name}.`,
+      at: new Date().toISOString(),
+    },
+    ...workflow.nodes
+      .sort((left, right) => left.position.y - right.position.y || left.position.x - right.position.x)
+      .map((node) => ({
+        level: "info",
+        message: `Simulated ${node.type} node "${node.label}".`,
+        at: new Date().toISOString(),
+      })),
+    {
+      level: "info",
+      message: `Completed draft test for ${workflow.name}.`,
+      at: new Date().toISOString(),
+    },
+  ];
+
+  await appendAuditEvent({
+    tenantId: context.tenantId,
+    environmentId: context.environmentId,
+    actor: context.actor,
+    action: "workflow.test_ran",
+    resourceType: "workflow",
+    resourceId: workflow.id,
+    summary: `Ran draft test for workflow ${workflow.name}.`,
+    payload: {
+      payload: input.payload ?? null,
+    },
+  });
+
+  return {
+    id: nextId("wf-test"),
+    workflowId: workflow.id,
+    workflowKey: workflow.key,
+    status: "SUCCEEDED",
+    input: input.payload ?? null,
+    output: {
+      completedNodes: workflow.nodes.length,
+      mode: "draft-test",
+    },
+    logs,
+    startedAt: new Date().toISOString(),
+    finishedAt: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export async function evaluateAgentDefinition(input: {
+  tenantSlug: string;
+  agentId: string;
+  objectKey?: string;
+  sampleSize?: number;
+  environmentSlug?: string;
+  request?: Request | Headers;
+}): Promise<PlatformAgentEvalRecord> {
+  const preview = await previewAgentInvocation({
+    tenantSlug: input.tenantSlug,
+    agentId: input.agentId,
+    objectKey: input.objectKey,
+    sampleSize: input.sampleSize,
+    environmentSlug: input.environmentSlug,
+    request: input.request,
+  });
+
+  const score = [
+    preview.metadata.allowedByPolicy,
+    preview.metadata.masked,
+    !preview.agent.zeroRetentionRequired || preview.provider.supportsZeroRetention,
+  ].filter(Boolean).length * 33;
+
+  return {
+    id: nextId("agent-eval"),
+    agentId: preview.agent.id,
+    agentKey: preview.agent.key,
+    score: Math.min(score, 100),
+    summary:
+      score >= 99
+        ? "Provider policy, masking, and retention posture all passed for the sampled invocation."
+        : "The sampled invocation surfaced one or more policy or retention concerns.",
+    createdAt: new Date().toISOString(),
+    result: {
+      metadata: preview.metadata,
+      provider: preview.provider,
+      sampleSize: preview.sampleSize,
+    },
+  };
 }
 
 export async function listPlatformRecords(input: {
@@ -2695,6 +3321,10 @@ export async function queueWorkflowRun(input: {
       workflowId: workflow.id,
       workflowKey: workflow.key,
     },
+  });
+
+  await enqueueWorkflowRun(run.id).catch(() => {
+    // Polling worker remains the fallback path when Redis/BullMQ is unavailable.
   });
 
   return run;

@@ -1,4 +1,5 @@
 import { findObjectDefinition } from "@/lib/platform/manifest";
+import { evaluateRuleAsBoolean, evaluateRuleExpression } from "@/lib/platform/rule-engine";
 import type {
   FieldDefinition,
   MaskingMode,
@@ -6,9 +7,6 @@ import type {
   PlatformManifest,
   PlatformRecord,
 } from "@/lib/platform/types";
-
-const RESERVED_IDENTIFIERS = new Set(["true", "false", "null", "undefined"]);
-const SAFE_EXPRESSION_PATTERN = /^[\w\s()+\-*/%.'&|<>=!?:"[\],]+$/;
 
 function escapeRegex(value: string): RegExp {
   return new RegExp(value);
@@ -53,27 +51,6 @@ function coerceValue(field: FieldDefinition, value: unknown): unknown {
   }
 }
 
-function evaluateExpression(expression: string, scope: Record<string, unknown>): unknown {
-  if (!SAFE_EXPRESSION_PATTERN.test(expression)) {
-    throw new Error("Expression contains unsupported characters.");
-  }
-
-  const identifiers = Array.from(expression.matchAll(/\b[a-zA-Z_][a-zA-Z0-9_]*\b/g))
-    .map((match) => match[0])
-    .filter((identifier) => !RESERVED_IDENTIFIERS.has(identifier));
-
-  const uniqueIdentifiers = Array.from(new Set(identifiers));
-  for (const identifier of uniqueIdentifiers) {
-    if (!(identifier in scope)) {
-      throw new Error(`Unknown field reference "${identifier}" in calculation.`);
-    }
-  }
-
-  // Builders are trusted administrators; keep the evaluator intentionally narrow.
-  const evaluator = new Function(...uniqueIdentifiers, `return (${expression});`);
-  return evaluator(...uniqueIdentifiers.map((identifier) => scope[identifier]));
-}
-
 export function normalizeRecordInput(objectDefinition: ObjectDefinition, rawData: Record<string, unknown>): Record<string, unknown> {
   const normalizedEntries = objectDefinition.fields.map((field) => [field.key, coerceValue(field, rawData[field.key])]);
   return Object.fromEntries(normalizedEntries);
@@ -92,8 +69,9 @@ export function validateRecordInput(input: {
   for (const field of input.objectDefinition.fields) {
     const value = normalizedData[field.key];
     const hasValue = value !== null && value !== undefined && value !== "";
+    const ruleMakesMandatory = field.mandatoryRule ? evaluateRuleAsBoolean(field.mandatoryRule, normalizedData) : false;
 
-    if (field.required && !hasValue) {
+    if ((field.required || ruleMakesMandatory) && !hasValue) {
       errors.push(field.validations.find((rule) => rule.type === "required")?.message ?? `${field.label} is required.`);
       continue;
     }
@@ -114,6 +92,10 @@ export function validateRecordInput(input: {
       if (rule.type === "regex" && typeof value === "string" && typeof rule.value === "string" && !escapeRegex(rule.value).test(value)) {
         errors.push(rule.message);
       }
+
+      if (rule.rule && !evaluateRuleAsBoolean(rule.rule, { ...normalizedData, value })) {
+        errors.push(rule.message);
+      }
     }
 
     if (field.unique && hasValue) {
@@ -128,6 +110,10 @@ export function validateRecordInput(input: {
     if (field.type === "select" && field.options?.length && hasValue && typeof value === "string" && !field.options.includes(value)) {
       errors.push(`${field.label} must be one of: ${field.options.join(", ")}.`);
     }
+
+    if (field.advancedValidation && hasValue && !evaluateRuleAsBoolean(field.advancedValidation, { ...normalizedData, value })) {
+      errors.push(`${field.label} failed the advanced validation rule.`);
+    }
   }
 
   for (const field of input.objectDefinition.fields) {
@@ -136,7 +122,15 @@ export function validateRecordInput(input: {
     }
 
     try {
-      normalizedData[field.key] = evaluateExpression(field.calculation.expression, normalizedData);
+      if (!field.calculation.rule || evaluateRuleAsBoolean(field.calculation.rule, normalizedData)) {
+        normalizedData[field.key] = evaluateRuleExpression(
+          {
+            mode: "text",
+            expression: field.calculation.expression,
+          },
+          normalizedData,
+        );
+      }
     } catch (error) {
       errors.push(error instanceof Error ? error.message : `Failed to calculate ${field.label}.`);
     }
@@ -195,4 +189,3 @@ export function maskRecordForAgent(input: {
     }),
   );
 }
-
