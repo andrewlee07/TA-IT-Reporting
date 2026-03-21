@@ -500,4 +500,36 @@ test("demo export endpoints return binary artifacts", async ({ request }) => {
   const pptxZip = await JSZip.loadAsync(pptxBuffer);
   const slideEntries = Object.keys(pptxZip.files).filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name));
   expect(slideEntries).toHaveLength(getReportSlides().length);
+
+  const editablePptxResponse = await request.post("/api/reports/demo/exports", {
+    data: {
+      exportType: "full-pptx-editable",
+      month: "2026-06",
+    },
+  });
+
+  expect(editablePptxResponse.ok()).toBeTruthy();
+  expect(editablePptxResponse.headers()["content-type"]).toContain(
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  );
+  expect(editablePptxResponse.headers()["content-disposition"]).toContain(".pptx");
+
+  const editablePptxBuffer = await editablePptxResponse.body();
+  expect(editablePptxBuffer.byteLength).toBeGreaterThan(100_000);
+
+  const editableZip = await JSZip.loadAsync(editablePptxBuffer);
+  const editableSlides = Object.keys(editableZip.files).filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name));
+  expect(editableSlides).toHaveLength(getReportSlides().length);
+
+  const chartEntries = Object.keys(editableZip.files).filter((name) => /^ppt\/charts\/chart\d+\.xml$/.test(name));
+  expect(chartEntries.length).toBeGreaterThan(0);
+
+  const mediaEntries = Object.keys(editableZip.files).filter((name) => /^ppt\/media\//.test(name));
+  expect(mediaEntries.length).toBeGreaterThanOrEqual(3);
+  expect(mediaEntries.length).toBeLessThan(editableSlides.length);
+
+  const slideXmlBodies = await Promise.all(
+    editableSlides.map(async (name) => (await editableZip.file(name)?.async("string")) ?? ""),
+  );
+  expect(slideXmlBodies.join("\n")).toContain("Exec Summary");
 });

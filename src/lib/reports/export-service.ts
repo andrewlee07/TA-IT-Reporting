@@ -4,11 +4,12 @@ import PptxGenJS from "pptxgenjs";
 import { getEnv } from "@/lib/env";
 import { getReportSlides, getSlideId } from "@/lib/report/blocks";
 import { renderReportHtml } from "@/lib/report/render-report-html";
+import { renderEditablePptx } from "@/lib/reports/editable-pptx";
 import type { ExecSummaryState } from "@/lib/reports/exec-summary";
 import { saveGeneratedExport } from "@/lib/reports/service";
 import type { NormalizedReportSnapshot } from "@/lib/workbook/types";
 
-export type ExportType = "page-png" | "block-png" | "full-pdf" | "full-pptx";
+export type ExportType = "page-png" | "block-png" | "full-pdf" | "full-pptx" | "full-pptx-editable";
 
 const PPTX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
 const PPTX_LAYOUT_WIDTH = 13.333;
@@ -94,7 +95,7 @@ export async function exportReportArtifact(input: ExportArtifactInput): Promise<
     month: input.month,
     initialPageId: input.pageId ?? "p-summary",
     initialTabId: input.tabId,
-    showAllPages: input.exportType === "full-pdf" || input.exportType === "full-pptx",
+    showAllPages: input.exportType === "full-pdf" || input.exportType === "full-pptx" || input.exportType === "full-pptx-editable",
     hideChrome: true,
     execSummary: input.execSummary,
   });
@@ -141,6 +142,16 @@ export async function exportReportArtifact(input: ExportArtifactInput): Promise<
       buffer = await renderSlideDeckPptx(page);
       contentType = PPTX_CONTENT_TYPE;
       filename = `${slugify(input.reportTitle)}-${input.month}-full-report.pptx`;
+    } else if (input.exportType === "full-pptx-editable") {
+      buffer = await renderEditablePptx({
+        page,
+        snapshot: input.snapshot,
+        month: input.month,
+        reportTitle: input.reportTitle,
+        execSummary: input.execSummary,
+      });
+      contentType = PPTX_CONTENT_TYPE;
+      filename = `${slugify(input.reportTitle)}-${input.month}-editable-report.pptx`;
     } else if (input.exportType === "page-png") {
       if (!input.pageId) {
         throw new Error("pageId is required for page-png exports.");

@@ -1009,7 +1009,7 @@ export function ReportAppShell({
     [handleUpload],
   );
 
-  const downloadExport = useCallback(async (exportType: "page-png" | "full-pdf" | "full-pptx") => {
+  const downloadExport = useCallback(async (exportType: "page-png" | "full-pdf" | "full-pptx" | "full-pptx-editable") => {
     setBusyExport(exportType);
     setExportError(null);
 
@@ -1020,7 +1020,7 @@ export function ReportAppShell({
         month: selectedMonthRef.current,
       };
 
-      if (exportType !== "full-pdf") {
+      if (exportType !== "full-pdf" && exportType !== "full-pptx" && exportType !== "full-pptx-editable") {
         payload.pageId = selectedPageRef.current;
         if (activeTabId) {
           payload.tabId = activeTabId;
@@ -1242,14 +1242,24 @@ export function ReportAppShell({
               {busyExport === "full-pdf" ? "Rendering..." : "Full PDF"}
             </button>
           </div>
-          <button
-            className="sidebar-button secondary"
-            disabled={busyExport !== null || busyClientExport !== null}
-            onClick={() => void downloadExport("full-pptx")}
-            type="button"
-          >
-            {busyExport === "full-pptx" ? "Rendering..." : "Full PPTX"}
-          </button>
+          <div className="sidebar-inline">
+            <button
+              className="sidebar-button secondary"
+              disabled={busyExport !== null || busyClientExport !== null}
+              onClick={() => void downloadExport("full-pptx")}
+              type="button"
+            >
+              {busyExport === "full-pptx" ? "Rendering..." : "Visual PPTX"}
+            </button>
+            <button
+              className="sidebar-button secondary"
+              disabled={busyExport !== null || busyClientExport !== null}
+              onClick={() => void downloadExport("full-pptx-editable")}
+              type="button"
+            >
+              {busyExport === "full-pptx-editable" ? "Rendering..." : "Editable PPTX"}
+            </button>
+          </div>
           <button
             className={`sidebar-button ${exportMode ? "primary is-active" : "secondary"}`}
             disabled={busyExport !== null || busyClientExport !== null || activeExportTargets.length === 0}

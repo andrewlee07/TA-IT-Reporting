@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const exportSchema = z.object({
-  exportType: z.enum(["page-png", "block-png", "full-pdf", "full-pptx"]),
+  exportType: z.enum(["page-png", "block-png", "full-pdf", "full-pptx", "full-pptx-editable"]),
   month: z.string(),
   pageId: z.string().optional(),
   tabId: z.string().optional(),
@@ -37,7 +37,7 @@ export async function POST(request: Request, { params }: RouteProps) {
       return NextResponse.json({ error: "Invalid month." }, { status: 400 });
     }
 
-    if (payload.exportType !== "full-pdf" && payload.exportType !== "full-pptx") {
+    if (payload.exportType !== "full-pdf" && payload.exportType !== "full-pptx" && payload.exportType !== "full-pptx-editable") {
       if (!payload.pageId || !isValidPageId(payload.pageId)) {
         return NextResponse.json({ error: "A valid pageId is required." }, { status: 400 });
       }
