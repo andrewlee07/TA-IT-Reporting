@@ -192,6 +192,18 @@ export interface PortfolioGanttMilestoneRow {
   displayOrder: number;
 }
 
+export interface ChartSettingRow {
+  reportingMonth: string;
+  page: string;
+  chartKey: string;
+  overlayEnabled: boolean;
+  overlayMetric: string;
+  rollingWindow: number;
+  healthyMin: number;
+  amberMin: number;
+  commentary: string;
+}
+
 export interface BudgetCommercialRow {
   reportingMonth: string;
   budgetLine: string;
@@ -271,6 +283,7 @@ export interface NormalizedReportSnapshot {
   rollingRoadmap: RollingRoadmapRow[];
   portfolioGanttWorkstreams: PortfolioGanttWorkstreamRow[];
   portfolioGanttMilestones: PortfolioGanttMilestoneRow[];
+  chartSettings: ChartSettingRow[];
   budgetCommercials: BudgetCommercialRow[];
   topRisks: TopRiskRow[];
   narrativeNotes: NarrativeNoteRow[];

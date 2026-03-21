@@ -1,5 +1,6 @@
 import { format, parseISO } from "date-fns";
 
+import { REPORT_PAGE_TABS } from "@/lib/report/blocks";
 import type { ExecSummaryMode, ExecSummaryState } from "@/lib/reports/exec-summary";
 import type { NormalizedReportSnapshot } from "@/lib/workbook/types";
 
@@ -15,6 +16,7 @@ export interface TemplateData {
     templateKey: string;
     templateVersion: number;
     sourceFilename: string;
+    pageTabs: Record<string, Array<{ id: string; label: string }>>;
   };
   execSummary: {
     mode: ExecSummaryMode;
@@ -33,6 +35,7 @@ export interface TemplateData {
   roadmap: Array<Record<string, number | string>>;
   ganttWorkstreams: Array<Record<string, number | string | boolean | null>>;
   ganttMilestones: Array<Record<string, number | string>>;
+  chartSettings: Array<Record<string, number | string>>;
   budget: Array<Record<string, number | string>>;
   budgetMonthlyTotals: Array<Record<string, number | string>>;
   risks: Array<Record<string, number | string>>;
@@ -127,6 +130,9 @@ export function buildTemplateData(snapshot: NormalizedReportSnapshot, month: str
       templateKey: snapshot.metadata.templateKey,
       templateVersion: snapshot.metadata.templateVersion,
       sourceFilename: snapshot.metadata.sourceFilename,
+      pageTabs: Object.fromEntries(
+        Object.entries(REPORT_PAGE_TABS).map(([pageId, tabs]) => [pageId, tabs.map((tab) => ({ id: tab.id, label: tab.label }))]),
+      ),
     },
     execSummary: {
       mode: summaryState.mode,
@@ -262,6 +268,17 @@ export function buildTemplateData(snapshot: NormalizedReportSnapshot, month: str
       MilestoneLabel: row.milestoneLabel,
       MilestoneDate: row.milestoneDate,
       DisplayOrder: row.displayOrder,
+    })),
+    chartSettings: (snapshot.chartSettings ?? []).map((row) => ({
+      Month: row.reportingMonth,
+      Page: row.page,
+      ChartKey: row.chartKey,
+      OverlayEnabled: row.overlayEnabled ? "Yes" : "No",
+      OverlayMetric: row.overlayMetric,
+      RollingWindow: row.rollingWindow,
+      HealthyMin: row.healthyMin,
+      AmberMin: row.amberMin,
+      Commentary: row.commentary,
     })),
     budget: snapshot.budgetCommercials.map((row) => ({
       Month: row.reportingMonth,

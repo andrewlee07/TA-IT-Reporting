@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TeacherActive — IT Executive Report · June 2026</title>
+<title>TeacherActive — IT Reporting · June 2026</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -18,7 +18,12 @@
   --amber:   #F57D00; --amber-l: #FEF3E7;
   --text:    #111827; --text-2: #4B5563; --text-3: #9CA3AF;
   --rule:    #E5E7EB; --rule-l: #F3F4F6;
-  --page-w:  1200px;
+  --page-w:  1280px;
+  --page-h:  720px;
+  --page-layout-w: 1600px;
+  --page-layout-h: 900px;
+  --page-scale: 0.8;
+  --slide-tab-h: 44px;
 }
 body { font-family: Arial, sans-serif; background: #D8DDE3; color: var(--text); -webkit-font-smoothing: antialiased; }
 
@@ -29,6 +34,7 @@ body { font-family: Arial, sans-serif; background: #D8DDE3; color: var(--text); 
 .sidebar {
   width: 376px; flex-shrink: 0; background: var(--blue-d);
   position: sticky; top: 0; height: 100vh; overflow-y: auto; overflow-x: hidden;
+  z-index: 24;
   display: flex; flex-direction: column; padding-bottom: 20px;
   transition: width 0.24s cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -62,16 +68,31 @@ body { font-family: Arial, sans-serif; background: #D8DDE3; color: var(--text); 
 .sidebar-logo {
   padding: 8px 18px 14px;
   border-bottom: 1px solid rgba(255,255,255,0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
-.sidebar-mark {
-  width: 32px; height: 32px; background: var(--orange);
-  border-radius: 5px; display: flex; align-items: center;
-  justify-content: center; font-weight: 700; font-size: 12px;
-  color: #fff; margin-bottom: 10px;
+.sidebar-logo-full,
+.sidebar-logo-icon {
+  display: block;
+  height: auto;
+  object-fit: contain;
 }
-.sidebar-brand-copy { min-width: 0; }
-.sidebar-name { font-size: 13px; font-weight: 700; color: #fff; }
-.sidebar-sub  { font-size: 10px; color: rgba(255,255,255,0.45); margin-top: 2px; }
+.sidebar-logo-full {
+  width: min(192px, 100%);
+  filter: drop-shadow(0 8px 18px rgba(0,0,0,0.16));
+}
+.sidebar-logo-icon {
+  display: none;
+  width: 42px;
+  filter: drop-shadow(0 8px 18px rgba(0,0,0,0.16));
+}
+.sidebar-sub  {
+  font-size: 10px;
+  color: rgba(255,255,255,0.52);
+  letter-spacing: 1.1px;
+  text-transform: uppercase;
+}
 .sidebar-period {
   margin: 12px 0 0; padding: 8px 10px;
   background: rgba(255,255,255,0.06);
@@ -221,24 +242,110 @@ body { font-family: Arial, sans-serif; background: #D8DDE3; color: var(--text); 
 }
 .sidebar-link:hover { color: #fff; }
 .sidebar-report-list {
-  display: grid; gap: 6px;
-  max-height: 182px; overflow-y: auto; padding-right: 2px;
+  display: grid;
+  gap: 8px;
+  max-height: 218px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.22) transparent;
+  scrollbar-gutter: stable;
+}
+.sidebar-report-list::-webkit-scrollbar {
+  width: 8px;
+}
+.sidebar-report-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar-report-list::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.18);
+  border-radius: 999px;
+}
+.sidebar-report-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,0.28);
 }
 .sidebar-report-item {
-  width: 100%; border: 1px solid rgba(255,255,255,0.08);
-  background: rgba(255,255,255,0.04); color: #fff;
-  border-radius: 6px; padding: 6px 8px; text-align: left; cursor: pointer;
+  width: 100%;
+  border: 1px solid rgba(255,255,255,0.09);
+  background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.035));
+  color: #fff;
+  border-radius: 10px;
+  padding: 11px 12px;
+  text-align: left;
+  cursor: pointer;
+  display: grid;
+  gap: 9px;
+  overflow: hidden;
+  transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+.sidebar-report-item:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(255,255,255,0.18);
+  background: linear-gradient(180deg, rgba(255,255,255,0.085), rgba(255,255,255,0.05));
+  box-shadow: 0 10px 22px rgba(0,0,0,0.14);
+}
+.sidebar-report-item:disabled {
+  opacity: 0.62;
+  cursor: not-allowed;
 }
 .sidebar-report-item.active {
-  border-color: rgba(245,125,0,0.42);
-  background: rgba(245,125,0,0.16);
+  border-color: rgba(245,125,0,0.62);
+  background:
+    linear-gradient(180deg, rgba(245,125,0,0.14), rgba(255,255,255,0.06)),
+    rgba(255,255,255,0.02);
+  box-shadow:
+    inset 0 0 0 1px rgba(245,125,0,0.08),
+    0 12px 26px rgba(0,0,0,0.16);
 }
 .sidebar-report-title {
-  font-size: 10px; font-weight: 700; color: #fff;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.28;
+  min-width: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  text-wrap: pretty;
+  word-break: break-word;
 }
 .sidebar-report-sub {
-  font-size: 8.5px; color: rgba(255,255,255,0.45); margin-top: 2px;
+  font-size: 8.5px;
+  color: rgba(255,255,255,0.56);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sidebar-report-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.sidebar-report-chip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 18px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.78);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.55px;
+  text-transform: uppercase;
+}
+.sidebar-report-item.active .sidebar-report-chip {
+  background: rgba(245,125,0,0.16);
+  border-color: rgba(245,125,0,0.28);
+  color: #ffd2a0;
 }
 .sidebar-empty, .sidebar-error {
   font-size: 8.5px; line-height: 1.45;
@@ -258,6 +365,7 @@ body { font-family: Arial, sans-serif; background: #D8DDE3; color: var(--text); 
 }
 .shell.sidebar-collapsed .sidebar {
   width: 72px;
+  overflow-x: visible;
 }
 .shell.sidebar-collapsed .sidebar-toggle-slot {
   justify-content: center;
@@ -269,17 +377,24 @@ body { font-family: Arial, sans-serif; background: #D8DDE3; color: var(--text); 
 .shell.sidebar-collapsed .sidebar-logo {
   padding: 10px 0 14px;
   display: flex;
+  flex-direction: column;
+  gap: 0;
   justify-content: center;
-}
-.shell.sidebar-collapsed .sidebar-mark {
-  width: 36px;
-  height: 36px;
-  margin-bottom: 0;
+  align-items: center;
 }
 .shell.sidebar-collapsed .sidebar-brand-copy,
 .shell.sidebar-collapsed .sidebar-group,
 .shell.sidebar-collapsed .nav-section,
 .shell.sidebar-collapsed .sidebar-footer {
+  display: none;
+}
+.shell.sidebar-collapsed .sidebar-logo-full {
+  display: none;
+}
+.shell.sidebar-collapsed .sidebar-logo-icon {
+  display: block;
+}
+.shell.sidebar-collapsed .sidebar-sub {
   display: none;
 }
 .shell.sidebar-collapsed .nav-link {
@@ -387,20 +502,90 @@ body { font-family: Arial, sans-serif; background: #D8DDE3; color: var(--text); 
 
 .uk-map-frame {
   width: 100%;
-  aspect-ratio: 675 / 1180;
+  height: 470px;
   background:
     radial-gradient(circle at 18% 14%, rgba(255,255,255,0.66), transparent 24%),
     linear-gradient(180deg, #F5F7FA 0%, #EEF3F7 100%);
   overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .uk-map-svg {
-  width: 100%;
+  width: auto;
   height: 100%;
+  max-width: 100%;
   display: block;
+}
+.network-detail-grid {
+  display: grid;
+  grid-template-columns: 0.9fr 1.1fr;
+  gap: 16px;
+  margin-bottom: 14px;
+  align-items: start;
+}
+.office-list-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 10px;
+  padding: 4px 12px 10px;
+}
+.office-list-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--rule-l);
+}
+.office-list-meta {
+  min-width: 0;
+}
+.office-list-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.office-list-name strong {
+  font-size: 11px;
+  color: var(--text);
+}
+.office-list-name span {
+  font-size: 9px;
+  color: var(--text-3);
+}
+.office-list-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.office-list-track {
+  height: 3px;
+  background: var(--rule);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.office-list-fill {
+  height: 100%;
+  border-radius: 999px;
+}
+.office-list-value {
+  text-align: right;
+}
+.office-list-value strong {
+  display: block;
+  font-family: 'Arial Black', Arial, sans-serif;
+  font-size: 11px;
+}
+.office-list-value span {
+  font-size: 9px;
+  color: var(--text-3);
 }
 
 /* ── MAIN ── */
-.main { flex: 1; padding: 14px 16px 14px 10px; min-width: 0; }
+.main { flex: 1; padding: 12px 14px 12px 8px; min-width: 0; }
 .shell.app-embedded { background: #fff; }
 .shell.app-embedded .main {
   padding: 0;
@@ -415,20 +600,86 @@ body { font-family: Arial, sans-serif; background: #D8DDE3; color: var(--text); 
 
 /* ── PAGE BLOCK ── */
 .report-page {
-  width: var(--page-w); background: #fff;
+  width: var(--page-layout-w);
+  height: var(--page-layout-h);
+  background: #fff;
   box-shadow: none;
-  margin-bottom: 18px; display: none;
+  margin-bottom: calc(18px * var(--page-scale));
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--rule-l);
+  zoom: var(--page-scale);
 }
-.report-page.active { display: block; }
+.report-page.active { display: flex; }
+#p-network-map,
+#p-network-detail { zoom: 0.73; }
+#p-summary .pb { padding-bottom: 24px; }
+#p-support-detail { zoom: 0.705; }
+#p-change { zoom: 0.74; }
+#p-gantt { zoom: 0.7; }
+#p-budget { zoom: 0.79; }
+#p-network-map .pb { padding-bottom: 18px; }
+#p-network-detail .pb { padding-bottom: 16px; }
+#p-network-detail .bh,
+#p-support-detail .bh,
+#p-change .bh { padding: 12px 18px; }
+#p-network-detail .bb,
+#p-support-detail .bb,
+#p-change .bb { padding: 14px 18px; }
+#p-network-detail #network-detail-note-block {
+  padding: 14px 18px;
+  gap: 14px;
+  margin-bottom: 0;
+}
+#p-network-detail .insight-text { line-height: 1.55; }
+#p-support-detail .pb { padding-bottom: 16px; }
+#p-support-detail .sl { margin-bottom: 18px; }
+#p-support-detail #support-cats-block { margin-bottom: 14px !important; }
+#p-change .pb { padding-bottom: 18px; }
+#p-change .sl { margin-bottom: 20px; }
+#p-change .hero { margin-bottom: 20px; }
+#p-change #chg-kpis { margin-bottom: 18px; }
+#p-gantt .pb { padding-bottom: 16px; }
+#p-gantt .sl { margin-bottom: 16px; }
+#p-gantt .gantt-panel { margin-bottom: 14px; }
+#p-gantt .gantt-legend {
+  gap: 12px;
+  padding: 8px 18px 0;
+  margin-bottom: 10px !important;
+}
+#p-gantt #gantt-summary {
+  gap: 10px;
+  margin-bottom: 0;
+}
+#p-gantt #gantt-summary .kc {
+  padding: 12px 14px;
+}
+#p-gantt #gantt-summary .kc-label {
+  margin-bottom: 6px;
+}
+#p-gantt #gantt-summary .kc-value {
+  font-size: 30px;
+}
+#p-gantt #gantt-summary .kc-delta {
+  margin-top: 6px;
+}
+#p-budget .pb { padding-bottom: 18px; }
+#p-budget .sl { margin-bottom: 20px; }
+#p-budget #bud-table-block { margin-bottom: 16px !important; }
+#p-budget .grid-2 { gap: 16px; margin-bottom: 0; }
+#bud-trend-block .bb,
+#bud-renewals-block .bb { padding: 14px 18px; }
 
 /* ── PAGE HEADER ── */
 .ph {
-  display: grid; grid-template-columns: 240px 1fr;
-  height: 64px; border-bottom: 1px solid var(--rule);
+  display: block;
+  min-height: 108px;
+  padding: 22px 36px 16px;
+  border-bottom: 1px solid var(--rule);
 }
 .ph-brand {
-  background: var(--blue); display: flex;
-  align-items: center; gap: 11px; padding: 0 22px;
+  display: none;
 }
 .ph-brand-gantt {
   gap: 13px;
@@ -444,35 +695,140 @@ body { font-family: Arial, sans-serif; background: #D8DDE3; color: var(--text); 
 .ph-org  { font-size: 13px; font-weight: 700; color: #fff; }
 .ph-dept { font-size: 10px; color: rgba(255,255,255,0.5); margin-top: 1px; }
 .ph-meta {
-  display: flex; align-items: center;
-  justify-content: space-between; padding: 0 28px;
+  display: block;
+  padding: 0;
 }
-.ph-title { font-size: 16px; font-weight: 700; color: var(--text); }
-.ph-sub   { font-size: 10px; color: var(--text-3); margin-top: 2px; }
-.ph-period-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--text-3); }
-.ph-period-val   { font-size: 13px; font-weight: 700; color: var(--text-2); margin-top: 2px; font-family: 'Arial Black', Arial, sans-serif; }
+.ph-meta > div:last-child {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+.ph-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ph-title-line {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.ph-title {
+  font-size: 44px;
+  font-weight: 400;
+  line-height: 0.95;
+  letter-spacing: -2px;
+  color: var(--blue);
+  font-family: Arial, sans-serif;
+}
+.ph-title-sep {
+  font-size: 40px;
+  font-weight: 400;
+  line-height: 1;
+  color: var(--blue);
+  font-family: Arial, sans-serif;
+}
+.ph-title-accent {
+  font-size: 44px;
+  font-weight: 400;
+  line-height: 0.95;
+  letter-spacing: -2px;
+  color: var(--orange);
+  font-family: Arial, sans-serif;
+}
+.ph-meta-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  min-height: 14px;
+}
+.ph-sub,
+.ph-period-label,
+.ph-period-val,
+.ph-meta-divider {
+  font-size: 10px;
+  color: var(--orange);
+  line-height: 1.35;
+}
+.ph-sub {
+  margin-top: 0;
+  color: var(--orange);
+}
+.ph-period-label {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.ph-period-val {
+  font-weight: 700;
+  font-family: Arial, sans-serif;
+  margin-top: 0;
+}
+
+/* ── SLIDE TABS ── */
+.slide-tabs-slot {
+  min-height: var(--slide-tab-h);
+  border-bottom: 1px solid var(--rule);
+  padding: 0 36px;
+  display: none;
+  align-items: center;
+}
+.slide-tabs-slot:has(.slide-tabs) {
+  display: flex;
+}
+.slide-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.slide-tab {
+  border: 1px solid rgba(0,82,146,0.16);
+  background: #fff;
+  color: var(--text-2);
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.slide-tab:hover {
+  border-color: rgba(245,125,0,0.42);
+  color: var(--blue);
+}
+.slide-tab.active {
+  background: linear-gradient(135deg, rgba(0,82,146,0.12), rgba(245,125,0,0.1));
+  border-color: rgba(245,125,0,0.45);
+  color: var(--blue);
+}
 
 /* ── PAGE BODY ── */
-.pb { padding: 32px 40px 40px; }
+.pb { padding: 22px 36px 30px; flex: 1; min-height: 0; }
 
 /* ── PAGE FOOTER ── */
 .pf {
   border-top: 1px solid var(--rule);
-  padding: 12px 40px; display: flex;
+  padding: 12px 36px; display: flex;
   align-items: center; justify-content: space-between;
 }
 .pf-source { font-size: 10px; color: var(--text-3); }
 .pf-page   { font-size: 10px; font-weight: 700; color: var(--text-3); letter-spacing: 0.5px; font-family: 'Arial Black', Arial, sans-serif; }
 
 /* ── SECTION LABEL ── */
-.sl { margin-bottom: 24px; }
+.sl { margin-bottom: 12px; }
 .sl-tag {
   display: inline-block; font-size: 9px; font-weight: 700;
   text-transform: uppercase; letter-spacing: 1.2px;
   color: var(--orange); margin-bottom: 4px;
 }
-.sl-title { font-size: 20px; font-weight: 700; font-family: 'Arial Black', Arial, sans-serif; color: var(--text); }
-.sl-sub   { font-size: 11px; color: var(--text-3); margin-top: 3px; }
+.sl-title { display: none; }
+.sl-sub   { font-size: 10px; color: var(--text-3); margin-top: 0; }
 
 /* ── HERO ── */
 .hero {
@@ -562,6 +918,18 @@ body { font-family: Arial, sans-serif; background: #D8DDE3; color: var(--text); 
 .legend { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 12px; }
 .legend-item { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--text-2); }
 .legend-swatch { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; }
+.legend-line {
+  width: 18px;
+  height: 0;
+  border-top: 2px dashed var(--text-3);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.legend-line.health {
+  border-top-color: transparent;
+  background: linear-gradient(90deg, #219D98 0 36%, #F57D00 36% 72%, #C0392B 72% 100%);
+  height: 2px;
+}
 
 /* ── SERVICE AVAILABILITY TILES ── */
 .svc-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
@@ -668,21 +1036,21 @@ body { font-family: Arial, sans-serif; background: #D8DDE3; color: var(--text); 
 /* ── TICKET TABLE ── */
 .tix-list { display: flex; flex-direction: column; gap: 0; }
 .tix-row {
-  display: grid; grid-template-columns: 90px 1fr 100px 60px 70px;
-  gap: 12px; align-items: center;
-  padding: 10px 0; border-bottom: 1px solid var(--rule-l);
+  display: grid; grid-template-columns: 86px 1fr 96px 54px 54px;
+  gap: 10px; align-items: center;
+  padding: 6px 0; border-bottom: 1px solid var(--rule-l);
 }
 .tix-row:last-child { border-bottom: none; }
-.tix-row.head .tix-cell { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; color: var(--text-3); }
-.tix-id    { font-size: 10px; font-weight: 700; color: var(--blue); font-family: 'Courier New', monospace; }
-.tix-title { font-size: 11px; color: var(--text); font-weight: 500; line-height: 1.4; }
-.tix-cat   { font-size: 10px; color: var(--text-2); }
-.tix-cell  { font-size: 11px; color: var(--text-2); }
-.tix-age   { font-family: 'Arial Black', Arial, sans-serif; font-size: 14px; font-weight: 700; }
+.tix-row.head .tix-cell { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; color: var(--text-3); }
+.tix-id    { font-size: 9px; font-weight: 700; color: var(--blue); font-family: 'Courier New', monospace; }
+.tix-title { font-size: 10px; color: var(--text); font-weight: 500; line-height: 1.3; }
+.tix-cat   { font-size: 9px; color: var(--text-2); }
+.tix-cell  { font-size: 10px; color: var(--text-2); }
+.tix-age   { font-family: 'Arial Black', Arial, sans-serif; font-size: 12px; font-weight: 700; }
 .tix-age.crit { color: var(--red); }
 .tix-age.warn { color: var(--amber); }
 .tix-age.ok   { color: var(--text-2); }
-.tix-crit  { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+.tix-crit  { display: inline-block; width: 7px; height: 7px; border-radius: 50%; }
 .tix-crit.yes { background: var(--red); }
 .tix-crit.no  { background: var(--grey); }
 
@@ -852,33 +1220,33 @@ body { font-family: Arial, sans-serif; background: #D8DDE3; color: var(--text); 
 .gantt-empty-btn.primary:hover { background: #d96d00; border-color: #d96d00; color: #fff; }
 .gantt-empty-note { margin-top: 12px; font-size: 11px; color: var(--text-3); }
 
-.summary-shell { position: relative; padding: 34px 38px 30px; border: 1px solid var(--rule); background: linear-gradient(180deg, rgba(245,125,0,0.05) 0%, rgba(255,255,255,0.98) 18%, rgba(0,82,146,0.03) 100%); overflow: hidden; }
+.summary-shell { position: relative; padding: 24px 28px 20px; border: 1px solid var(--rule); background: linear-gradient(180deg, rgba(245,125,0,0.05) 0%, rgba(255,255,255,0.98) 18%, rgba(0,82,146,0.03) 100%); overflow: hidden; }
 .summary-shell::before { content: ""; position: absolute; inset: 0 auto auto 0; width: 100%; height: 6px; background: linear-gradient(90deg, var(--orange) 0%, var(--blue) 100%); }
-.summary-ribbon { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 999px; background: rgba(0,82,146,0.08); color: var(--blue); font-size: 10px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; }
-.summary-header { margin-top: 20px; display: flex; gap: 18px; justify-content: space-between; align-items: flex-start; }
-.summary-title { font-family: 'Arial Black', Arial, sans-serif; font-size: 36px; line-height: 1.05; color: var(--text); letter-spacing: -0.5px; margin: 0; max-width: 760px; }
-.summary-sub { margin-top: 10px; max-width: 720px; color: var(--text-2); font-size: 15px; line-height: 1.7; }
+.summary-ribbon { display: inline-flex; align-items: center; gap: 8px; padding: 7px 11px; border-radius: 999px; background: rgba(0,82,146,0.08); color: var(--blue); font-size: 10px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; }
+.summary-header { margin-top: 14px; display: flex; gap: 18px; justify-content: space-between; align-items: flex-start; }
+.summary-title { font-family: 'Arial Black', Arial, sans-serif; font-size: 32px; line-height: 1.05; color: var(--text); letter-spacing: -0.5px; margin: 0; max-width: 760px; }
+.summary-sub { margin-top: 8px; max-width: 720px; color: var(--text-2); font-size: 14px; line-height: 1.6; }
 .summary-controls { display: flex; align-items: center; justify-content: flex-end; min-width: 160px; }
-.summary-meta-row { margin-top: 18px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.summary-meta-row { margin-top: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .summary-state-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: 0.7px; text-transform: uppercase; }
 .summary-state-badge.explicit { background: rgba(0,82,146,0.08); color: var(--blue); }
 .summary-state-badge.carried-forward { background: rgba(245,125,0,0.12); color: var(--orange); }
 .summary-state-badge.empty { background: rgba(169,169,170,0.14); color: var(--text-3); }
 .summary-state-badge.demo-readonly { background: rgba(33,157,152,0.12); color: var(--teal); }
-.summary-updated { font-size: 11px; color: var(--text-3); }
-.summary-layout { margin-top: 26px; display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 24px; align-items: start; }
-.summary-aside { padding: 18px 18px 16px; border: 1px solid rgba(0,82,146,0.12); background: rgba(255,255,255,0.75); }
+.summary-updated { font-size: 10px; color: var(--text-3); }
+.summary-layout { margin-top: 16px; display: grid; grid-template-columns: minmax(0, 1fr) 244px; gap: 18px; align-items: start; }
+.summary-aside { padding: 16px 16px 14px; border: 1px solid rgba(0,82,146,0.12); background: rgba(255,255,255,0.75); }
 .summary-aside-label { font-size: 10px; font-weight: 700; letter-spacing: 0.9px; text-transform: uppercase; color: var(--orange); }
-.summary-aside-value { margin-top: 10px; font-family: 'Arial Black', Arial, sans-serif; font-size: 24px; color: var(--text); line-height: 1.15; }
-.summary-aside-copy { margin-top: 10px; font-size: 12px; line-height: 1.6; color: var(--text-2); }
-.summary-prose { min-height: 220px; font-size: 16px; color: var(--text); line-height: 1.8; }
+.summary-aside-value { margin-top: 8px; font-family: 'Arial Black', Arial, sans-serif; font-size: 22px; color: var(--text); line-height: 1.12; }
+.summary-aside-copy { margin-top: 8px; font-size: 11px; line-height: 1.5; color: var(--text-2); }
+.summary-prose { min-height: 0; font-size: 15px; color: var(--text); line-height: 1.7; }
 .summary-prose h2, .summary-prose h3 { margin: 0 0 12px; font-family: 'Arial Black', Arial, sans-serif; color: var(--blue); line-height: 1.18; }
-.summary-prose h2 { font-size: 24px; }
-.summary-prose h3 { font-size: 18px; color: var(--orange); }
-.summary-prose p { margin: 0 0 16px; }
+.summary-prose h2 { font-size: 22px; }
+.summary-prose h3 { font-size: 17px; color: var(--orange); }
+.summary-prose p { margin: 0 0 14px; }
 .summary-prose strong { font-weight: 700; color: var(--text); }
-.summary-prose ul, .summary-prose ol { margin: 0 0 18px 22px; padding: 0; }
-.summary-prose li { margin: 0 0 10px; }
+.summary-prose ul, .summary-prose ol { margin: 0 0 16px 20px; padding: 0; }
+.summary-prose li { margin: 0 0 8px; }
 .summary-prose a { color: var(--blue); font-weight: 700; text-decoration: none; }
 .summary-prose a:hover { color: var(--orange); }
 .summary-empty-state { display: none; padding: 26px; border: 1px dashed rgba(0,82,146,0.22); background: rgba(255,255,255,0.76); }
@@ -913,11 +1281,9 @@ __REPORT_OVERRIDES__
 <nav class="sidebar">
   <div class="sidebar-toggle-slot" id="sidebar-toggle-slot"></div>
   <div class="sidebar-logo">
-    <div class="sidebar-mark">TA</div>
-    <div class="sidebar-brand-copy">
-      <div class="sidebar-name">TeacherActive</div>
-      <div class="sidebar-sub">IT Executive Report</div>
-    </div>
+    <img class="sidebar-logo-full" src="/brand/ta-logo.png" alt="TeacherActive">
+    <img class="sidebar-logo-icon" src="/brand/ta-icon.png" alt="TeacherActive">
+    <div class="sidebar-sub">IT Reporting</div>
   </div>
   <div class="sidebar-group" id="sidebar-period-slot"></div>
   <div class="nav-section">Report Sections</div>
@@ -989,7 +1355,7 @@ __REPORT_OVERRIDES__
 </div>
 
 <!-- ══════════════════════════════════ PAGE 2: EXEC SCORECARD ══ -->
-<div class="report-page" id="p-exec">
+<div class="report-page" id="p-exec-overview" data-page-id="p-exec" data-tab-id="overview">
   <div class="ph">
     <div class="ph-brand"><div class="ph-mark">TA</div><div><div class="ph-org">TeacherActive</div><div class="ph-dept">Information Technology</div></div></div>
     <div class="ph-meta">
@@ -1006,14 +1372,27 @@ __REPORT_OVERRIDES__
     <!-- Cross-domain KPIs -->
     <div class="kpi-row cols-5" style="margin-bottom:20px;" id="exec-kpis"></div>
 
-    <!-- Narrative wins / concerns / decisions -->
+  </div>
+  <div class="pf"><div class="pf-source">Sources: TABS · Microsoft Defender · Sentry · Internal systems</div><div class="pf-page">EXECUTIVE SCORECARD · OVERVIEW · PAGE 2 OF 15</div></div>
+</div>
+
+<div class="report-page" id="p-exec-highlights" data-page-id="p-exec" data-tab-id="highlights">
+  <div class="ph">
+    <div class="ph-brand"><div class="ph-mark">TA</div><div><div class="ph-org">TeacherActive</div><div class="ph-dept">Information Technology</div></div></div>
+    <div class="ph-meta">
+      <div><div class="ph-title">Executive IT Scorecard</div><div class="ph-sub">Leadership highlights, concerns and decisions across the month</div></div>
+      <div><div class="ph-period-label">Reporting Period</div><div class="ph-period-val">June 2026</div></div>
+    </div>
+  </div>
+  <div class="pb">
+    <div class="sl"><div class="sl-tag">Executive Summary</div><div class="sl-title">Leadership Highlights</div><div class="sl-sub">June 2026 · Wins, concerns and decisions to carry into the leadership discussion</div></div>
     <div class="nar-grid" id="exec-narrative"></div>
   </div>
-  <div class="pf"><div class="pf-source">Sources: TABS · Microsoft Defender · Sentry · Internal systems</div><div class="pf-page">EXECUTIVE SCORECARD · PAGE 1 OF 11</div></div>
+  <div class="pf"><div class="pf-source">Sources: TABS · Microsoft Defender · Sentry · Internal systems</div><div class="pf-page">EXECUTIVE SCORECARD · HIGHLIGHTS · PAGE 3 OF 15</div></div>
 </div>
 
 <!-- ══════════════════════════════════ PAGE 2: SERVICE AVAILABILITY ══ -->
-<div class="report-page" id="p-avail">
+<div class="report-page" id="p-avail-overview" data-page-id="p-avail" data-tab-id="overview">
   <div class="ph">
     <div class="ph-brand"><div class="ph-mark">TA</div><div><div class="ph-org">TeacherActive</div><div class="ph-dept">Information Technology</div></div></div>
     <div class="ph-meta">
@@ -1024,6 +1403,24 @@ __REPORT_OVERRIDES__
   <div class="pb">
     <div class="sl"><div class="sl-tag">Infrastructure &amp; Platforms</div><div class="sl-title">Service Availability</div><div class="sl-sub">June 2026 · Target: Network/Cloud 99.90% · Critical Apps 99.50%</div></div>
     <div class="svc-grid" id="avail-svc-grid"></div>
+    <div class="insight" id="avail-note-block" data-export-id="avail-note-block" data-export-label="Availability analyst note">
+      <div class="insight-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#005292" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+      <div><div class="insight-label">Analyst Note · June 2026</div><div class="insight-text" id="avail-note"></div></div>
+    </div>
+  </div>
+  <div class="pf"><div class="pf-source">Source: Platform monitoring · Internal SLA framework</div><div class="pf-page">SERVICE AVAILABILITY · OVERVIEW · PAGE 4 OF 15</div></div>
+</div>
+
+<div class="report-page" id="p-avail-detail" data-page-id="p-avail" data-tab-id="detail">
+  <div class="ph">
+    <div class="ph-brand"><div class="ph-mark">TA</div><div><div class="ph-org">TeacherActive</div><div class="ph-dept">Information Technology</div></div></div>
+    <div class="ph-meta">
+      <div><div class="ph-title">Service Availability</div><div class="ph-sub">Trend and outage profile across key services</div></div>
+      <div><div class="ph-period-label">Reporting Period</div><div class="ph-period-val">June 2026</div></div>
+    </div>
+  </div>
+  <div class="pb">
+    <div class="sl"><div class="sl-tag">Infrastructure &amp; Platforms</div><div class="sl-title">Service Trend Detail</div><div class="sl-sub">June 2026 · Six-month trend and cumulative outage profile</div></div>
     <div class="grid-2">
       <div class="block" id="avail-trend-block" data-export-id="avail-trend-block" data-export-label="Availability trend chart">
         <div class="bh"><div><div class="bh-title">6-Month Availability Trend</div><div class="bh-sub">Key services · Jan – Jun 2026</div></div></div>
@@ -1034,16 +1431,12 @@ __REPORT_OVERRIDES__
         <div class="bb" id="avail-outage-bars"></div>
       </div>
     </div>
-    <div class="insight" id="avail-note-block" data-export-id="avail-note-block" data-export-label="Availability analyst note">
-      <div class="insight-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#005292" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
-      <div><div class="insight-label">Analyst Note · June 2026</div><div class="insight-text" id="avail-note"></div></div>
-    </div>
   </div>
-  <div class="pf"><div class="pf-source">Source: Platform monitoring · Internal SLA framework</div><div class="pf-page">SERVICE AVAILABILITY · PAGE 2 OF 11</div></div>
+  <div class="pf"><div class="pf-source">Source: Platform monitoring · Internal SLA framework</div><div class="pf-page">SERVICE AVAILABILITY · TREND DETAIL · PAGE 5 OF 15</div></div>
 </div>
 
 <!-- ══════════════════════════════════ PAGE 3: NETWORK & OFFICES ══ -->
-<div class="report-page" id="p-network">
+<div class="report-page" id="p-network-map" data-page-id="p-network" data-tab-id="map">
   <div class="ph">
     <div class="ph-brand"><div class="ph-mark">TA</div><div><div class="ph-org">TeacherActive</div><div class="ph-dept">Information Technology</div></div></div>
     <div class="ph-meta">
@@ -1054,48 +1447,67 @@ __REPORT_OVERRIDES__
   <div class="pb">
     <div class="sl"><div class="sl-tag">Infrastructure</div><div class="sl-title">Office Network Availability</div><div class="sl-sub">June 2026 · 22 offices across England and Wales · Source: Network monitoring</div></div>
 
-    <div class="kpi-row cols-4" id="net-kpis"></div>
+    <div class="kpi-row cols-4" id="net-kpis-map"></div>
 
-    <div style="display:grid;grid-template-columns:1fr 340px;gap:20px;margin-bottom:20px;">
-      <div class="block mb-0" id="network-map-block" data-export-id="network-map-block" data-export-label="Office network map" style="overflow:hidden;">
-        <div class="bh"><div><div class="bh-title">Office Network Status</div><div class="bh-sub">Orange = TeacherActive location</div></div><div class="bh-badge" id="net-map-badge">22 offices</div></div>
-        <div class="uk-map-frame">
-          <svg class="uk-map-svg" id="uk-map" viewBox="0 0 675 1180" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
-            <image href="/maps/great-britain-locator.svg" x="0" y="0" width="675" height="1180" preserveAspectRatio="xMidYMid meet" />
-            <g id="office-dots"></g>
-            <g id="map-tooltip" style="display:none;">
-              <rect id="tt-bg" rx="5" fill="#1D2D44" opacity="0.95"/>
-              <text id="tt-name" fill="white" font-size="10" font-family="Arial" font-weight="bold"/>
-              <text id="tt-avail" fill="#F57D00" font-size="10" font-family="Arial"/>
-              <text id="tt-status" font-size="9" font-family="Arial"/>
-            </g>
-          </svg>
-        </div>
-      </div>
-
-      <div class="block mb-0" id="office-list-block" data-export-id="office-list-block" data-export-label="Office availability list" style="overflow-y:auto;max-height:560px;">
-        <div class="bh"><div><div class="bh-title">All Offices</div><div class="bh-sub">Sorted by availability</div></div></div>
-        <div style="padding:0;" id="office-list"></div>
-      </div>
-    </div>
-
-    <div class="block mb-0" id="net-trend-block" data-export-id="net-trend-block" data-export-label="Network availability trend">
-      <div class="bh"><div><div class="bh-title">Network Availability Trend</div><div class="bh-sub">Monthly · Jan – Jun 2026 · All office network connections</div></div></div>
-      <div class="bb">
-        <div class="legend">
-          <div class="legend-item"><div class="legend-swatch" style="background:#219D98"></div>100% — No incidents</div>
-          <div class="legend-item"><div class="legend-swatch" style="background:#F57D00"></div>99–99.9% — Minor</div>
-          <div class="legend-item"><div class="legend-swatch" style="background:#C0392B"></div>&lt;99% — Impacted</div>
-        </div>
-        <div style="height:140px;position:relative;"><canvas id="c-net-trend"></canvas></div>
+    <div class="block mb-0" id="network-map-block" data-export-id="network-map-block" data-export-label="Office network map" style="overflow:hidden;">
+      <div class="bh"><div><div class="bh-title">Office Network Status</div><div class="bh-sub">Orange = TeacherActive location</div></div><div class="bh-badge" id="net-map-badge">22 offices</div></div>
+      <div class="uk-map-frame">
+        <svg class="uk-map-svg" id="uk-map" viewBox="0 0 675 1180" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+          <image href="/maps/great-britain-locator.svg" x="0" y="0" width="675" height="1180" preserveAspectRatio="xMidYMid meet" />
+          <g id="office-dots"></g>
+          <g id="map-tooltip" style="display:none;">
+            <rect id="tt-bg" rx="5" fill="#1D2D44" opacity="0.95"/>
+            <text id="tt-name" fill="white" font-size="10" font-family="Arial" font-weight="bold"/>
+            <text id="tt-avail" fill="#F57D00" font-size="10" font-family="Arial"/>
+            <text id="tt-status" font-size="9" font-family="Arial"/>
+          </g>
+        </svg>
       </div>
     </div>
   </div>
-  <div class="pf"><div class="pf-source">Source: Network monitoring · Carrier SLA reporting · Office IT leads</div><div class="pf-page">NETWORK &amp; OFFICES · PAGE 3 OF 12</div></div>
+  <div class="pf"><div class="pf-source">Source: Network monitoring · Carrier SLA reporting · Office IT leads</div><div class="pf-page">NETWORK &amp; OFFICES · MAP VIEW · PAGE 3 OF 13</div></div>
 </div>
 
-<!-- ══════════════════════════════════ PAGE 3: SUPPORT OPERATIONS ══ -->
-<div class="report-page" id="p-support">
+<div class="report-page" id="p-network-detail" data-page-id="p-network" data-tab-id="detail">
+  <div class="ph">
+    <div class="ph-brand"><div class="ph-mark">TA</div><div><div class="ph-org">TeacherActive</div><div class="ph-dept">Information Technology</div></div></div>
+    <div class="ph-meta">
+      <div><div class="ph-title">Network &amp; Office Availability</div><div class="ph-sub">Office-by-office availability and estate-wide trend review</div></div>
+      <div><div class="ph-period-label">Reporting Period</div><div class="ph-period-val">June 2026</div></div>
+    </div>
+  </div>
+  <div class="pb">
+    <div class="sl"><div class="sl-tag">Infrastructure</div><div class="sl-title">Network Detail &amp; Office Exceptions</div><div class="sl-sub">June 2026 · Estate-wide network trend · office ranking · exceptions to monitor</div></div>
+
+    <div class="network-detail-grid">
+      <div class="block mb-0" id="net-trend-block" data-export-id="net-trend-block" data-export-label="Network availability trend">
+        <div class="bh"><div><div class="bh-title">Network Availability Trend</div><div class="bh-sub">Monthly · Jan – Jun 2026 · All office network connections</div></div></div>
+        <div class="bb">
+          <div class="legend">
+            <div class="legend-item"><div class="legend-swatch" style="background:#219D98"></div>100% — No incidents</div>
+            <div class="legend-item"><div class="legend-swatch" style="background:#F57D00"></div>99–99.9% — Minor</div>
+            <div class="legend-item"><div class="legend-swatch" style="background:#C0392B"></div>&lt;99% — Impacted</div>
+          </div>
+          <div style="height:168px;position:relative;"><canvas id="c-net-trend"></canvas></div>
+        </div>
+      </div>
+
+      <div class="block mb-0" id="office-list-block" data-export-id="office-list-block" data-export-label="Office availability list">
+        <div class="bh"><div><div class="bh-title">All Offices</div><div class="bh-sub">Sorted by availability · compact estate view</div></div></div>
+        <div class="office-list-grid" id="office-list"></div>
+      </div>
+    </div>
+
+    <div class="insight orange" id="network-detail-note-block" data-export-id="network-detail-note-block" data-export-label="Network detail note">
+      <div class="insight-icon" style="background:var(--orange-l)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F57D00" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"></path></svg></div>
+      <div><div class="insight-label" style="color:var(--orange)">Office Exception Note</div><div class="insight-text" id="network-detail-note"></div></div>
+    </div>
+  </div>
+  <div class="pf"><div class="pf-source">Source: Network monitoring · Carrier SLA reporting · Office IT leads</div><div class="pf-page">NETWORK &amp; OFFICES · OFFICE DETAIL · PAGE 4 OF 13</div></div>
+</div>
+
+<!-- ══════════════════════════════════ PAGE 4: SUPPORT OPERATIONS ══ -->
+<div class="report-page" id="p-support-overview" data-page-id="p-support" data-tab-id="overview">
   <div class="ph">
     <div class="ph-brand"><div class="ph-mark">TA</div><div><div class="ph-org">TeacherActive</div><div class="ph-dept">Information Technology</div></div></div>
     <div class="ph-meta">
@@ -1120,25 +1532,55 @@ __REPORT_OVERRIDES__
       </div>
     </div>
     <div class="kpi-row cols-5" id="support-kpis"></div>
-    <div class="grid-6-4">
-      <div class="block" id="support-vol-block" data-export-id="support-vol-block" data-export-label="Monthly ticket volumes">
-        <div class="bh"><div><div class="bh-title">Monthly Ticket Volumes</div><div class="bh-sub">Opened vs Closed · Jan – Jun 2026</div></div></div>
-        <div class="bb">
-          <div class="legend"><div class="legend-item"><div class="legend-swatch" style="background:#005292"></div>Opened</div><div class="legend-item"><div class="legend-swatch" style="background:#F57D00"></div>Closed</div></div>
-          <div class="chart-wrap" style="height:200px"><canvas id="c-support-vol"></canvas></div>
-        </div>
+  </div>
+  <div class="pf"><div class="pf-source">Source: TABS · SLA framework · User satisfaction surveys</div><div class="pf-page">SUPPORT OPERATIONS · SLA OVERVIEW · PAGE 8 OF 15</div></div>
+</div>
+
+<div class="report-page" id="p-support-volumes" data-page-id="p-support" data-tab-id="volumes">
+  <div class="ph">
+    <div class="ph-brand"><div class="ph-mark">TA</div><div><div class="ph-org">TeacherActive</div><div class="ph-dept">Information Technology</div></div></div>
+    <div class="ph-meta">
+      <div><div class="ph-title">Support Operations</div><div class="ph-sub">Ticket inflow, close balance and service desk pressure</div></div>
+      <div><div class="ph-period-label">Reporting Period</div><div class="ph-period-val">June 2026</div></div>
+    </div>
+  </div>
+  <div class="pb">
+    <div class="sl"><div class="sl-tag">Service Desk</div><div class="sl-title">Monthly Ticket Volumes</div><div class="sl-sub">Opened vs closed · close balance overlay · workload pressure narrative</div></div>
+    <div class="block" id="support-vol-block" data-export-id="support-vol-block" data-export-label="Monthly ticket volumes">
+      <div class="bh"><div><div class="bh-title">Monthly Ticket Volumes</div><div class="bh-sub">Opened vs Closed · Jan – Jun 2026</div></div></div>
+      <div class="bb">
+        <div class="legend" id="support-vol-legend"></div>
+        <div class="chart-wrap" style="height:300px"><canvas id="c-support-vol"></canvas></div>
       </div>
-      <div class="block" id="support-cats-block" data-export-id="support-cats-block" data-export-label="Tickets by category">
-        <div class="bh"><div><div class="bh-title">Tickets by Category</div><div class="bh-sub">Last 6 months · top categories</div></div></div>
-        <div class="bb" id="support-cats"></div>
-      </div>
+    </div>
+    <div class="insight orange mb-0" id="support-detail-note-block" data-export-id="support-detail-note-block" data-export-label="Support pressure note" style="margin-top:18px;">
+      <div class="insight-icon" style="background:var(--orange-l)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F57D00" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"></path></svg></div>
+      <div><div class="insight-label" style="color:var(--orange)">Support Pressure Note</div><div class="insight-text" id="support-detail-note"></div></div>
+    </div>
+  </div>
+  <div class="pf"><div class="pf-source">Source: TABS · Ticket flow analysis · Service desk performance review</div><div class="pf-page">SUPPORT OPERATIONS · TICKET VOLUMES · PAGE 9 OF 15</div></div>
+</div>
+
+<div class="report-page" id="p-support-detail" data-page-id="p-support" data-tab-id="detail">
+  <div class="ph">
+    <div class="ph-brand"><div class="ph-mark">TA</div><div><div class="ph-org">TeacherActive</div><div class="ph-dept">Information Technology</div></div></div>
+    <div class="ph-meta">
+      <div><div class="ph-title">Support Operations</div><div class="ph-sub">Queue composition, ageing risk and active service desk pressure</div></div>
+      <div><div class="ph-period-label">Reporting Period</div><div class="ph-period-val">June 2026</div></div>
+    </div>
+  </div>
+  <div class="pb">
+    <div class="sl"><div class="sl-tag">Service Desk</div><div class="sl-title">Ticket Detail &amp; Ageing Risk</div><div class="sl-sub">June 2026 · Queue mix · critical ageing tickets · support pressure</div></div>
+    <div class="block" id="support-cats-block" data-export-id="support-cats-block" data-export-label="Tickets by category" style="margin-bottom:18px;">
+      <div class="bh"><div><div class="bh-title">Tickets by Category</div><div class="bh-sub">Last 6 months · top categories</div></div></div>
+      <div class="bb" id="support-cats"></div>
     </div>
     <div class="block mb-0" id="support-tickets-block" data-export-id="support-tickets-block" data-export-label="Oldest open tickets">
       <div class="bh"><div><div class="bh-title">Top 10 Oldest Open Tickets</div><div class="bh-sub">As at June 2026 · business-critical flagged</div></div><div class="bh-badge" id="tix-age-badge"></div></div>
       <div class="bb" id="oldest-tickets"></div>
     </div>
   </div>
-  <div class="pf"><div class="pf-source">Source: TABS · SLA framework · User satisfaction surveys</div><div class="pf-page">SUPPORT OPERATIONS · PAGE 3 OF 11</div></div>
+  <div class="pf"><div class="pf-source">Source: TABS · Ticket queue analysis · Service desk ageing review</div><div class="pf-page">SUPPORT OPERATIONS · TICKET DETAIL · PAGE 10 OF 15</div></div>
 </div>
 
 <!-- ══════════════════════════════════ PAGE 4: SECURITY & PATCHING ══ -->
@@ -1231,7 +1673,7 @@ __REPORT_OVERRIDES__
       <div class="bh"><div><div class="bh-title">Monthly Change Breakdown</div><div class="bh-sub">Standard · Normal · Emergency · Jan – Jun 2026</div></div></div>
       <div class="bb">
         <div class="legend"><div class="legend-item"><div class="legend-swatch" style="background:#005292"></div>Standard</div><div class="legend-item"><div class="legend-swatch" style="background:#219D98"></div>Normal</div><div class="legend-item"><div class="legend-swatch" style="background:#F57D00"></div>Emergency</div></div>
-        <div class="chart-wrap" style="height:180px"><canvas id="c-change-breakdown"></canvas></div>
+        <div class="chart-wrap" style="height:132px"><canvas id="c-change-breakdown"></canvas></div>
       </div>
     </div>
   </div>
@@ -1358,7 +1800,7 @@ __REPORT_OVERRIDES__
         <div class="gantt-empty-copy" id="gantt-empty-copy"></div>
         <div class="gantt-empty-actions">
           <a class="gantt-empty-btn primary" href="/?report=demo&amp;month=2026-06&amp;page=p-gantt" id="gantt-open-demo-link">Open bundled demo</a>
-          <button class="gantt-empty-btn" id="gantt-upload-btn" type="button">Upload v3 workbook</button>
+          <button class="gantt-empty-btn" id="gantt-upload-btn" type="button">Upload v4 workbook</button>
         </div>
         <div class="gantt-empty-note">The existing workbook remains usable for the rest of the report pack; only the Portfolio Gantt page needs v3 inputs.</div>
       </div>

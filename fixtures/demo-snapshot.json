@@ -1,8 +1,8 @@
 {
   "metadata": {
-    "templateKey": "IT_EXEC_TEMPLATE_V3",
-    "templateVersion": 3,
-    "sourceFilename": "IT_Exec_Reporting_Ingestion_Template_v3_dummy_data.xlsx",
+    "templateKey": "IT_EXEC_TEMPLATE_V4",
+    "templateVersion": 4,
+    "sourceFilename": "IT_Exec_Reporting_Ingestion_Template_v4_dummy_data.xlsx",
     "tableMap": {
       "README": [],
       "Reporting_Framework": [
@@ -65,6 +65,9 @@
       ],
       "INPUT_Narrative_Notes": [
         "TNarrativeNotes"
+      ],
+      "INPUT_Chart_Settings": [
+        "TChartSettings"
       ]
     }
   },
@@ -4418,6 +4421,74 @@
       "milestoneLabel": "Project closure",
       "milestoneDate": "2026-02-16",
       "displayOrder": 8
+    }
+  ],
+  "chartSettings": [
+    {
+      "reportingMonth": "2026-01",
+      "page": "Support Operations",
+      "chartKey": "support_ticket_volumes",
+      "overlayEnabled": true,
+      "overlayMetric": "Close Balance %",
+      "rollingWindow": 3,
+      "healthyMin": 100,
+      "amberMin": 97,
+      "commentary": "Overlay highlights whether ticket closures are keeping pace with incoming demand."
+    },
+    {
+      "reportingMonth": "2026-02",
+      "page": "Support Operations",
+      "chartKey": "support_ticket_volumes",
+      "overlayEnabled": true,
+      "overlayMetric": "Close Balance %",
+      "rollingWindow": 3,
+      "healthyMin": 100,
+      "amberMin": 97,
+      "commentary": "Overlay highlights whether ticket closures are keeping pace with incoming demand."
+    },
+    {
+      "reportingMonth": "2026-03",
+      "page": "Support Operations",
+      "chartKey": "support_ticket_volumes",
+      "overlayEnabled": true,
+      "overlayMetric": "Close Balance %",
+      "rollingWindow": 3,
+      "healthyMin": 100,
+      "amberMin": 97,
+      "commentary": "Overlay highlights whether ticket closures are keeping pace with incoming demand."
+    },
+    {
+      "reportingMonth": "2026-04",
+      "page": "Support Operations",
+      "chartKey": "support_ticket_volumes",
+      "overlayEnabled": true,
+      "overlayMetric": "Close Balance %",
+      "rollingWindow": 3,
+      "healthyMin": 100,
+      "amberMin": 97,
+      "commentary": "Overlay highlights whether ticket closures are keeping pace with incoming demand."
+    },
+    {
+      "reportingMonth": "2026-05",
+      "page": "Support Operations",
+      "chartKey": "support_ticket_volumes",
+      "overlayEnabled": true,
+      "overlayMetric": "Close Balance %",
+      "rollingWindow": 3,
+      "healthyMin": 100,
+      "amberMin": 97,
+      "commentary": "Overlay highlights whether ticket closures are keeping pace with incoming demand."
+    },
+    {
+      "reportingMonth": "2026-06",
+      "page": "Support Operations",
+      "chartKey": "support_ticket_volumes",
+      "overlayEnabled": true,
+      "overlayMetric": "Close Balance %",
+      "rollingWindow": 3,
+      "healthyMin": 100,
+      "amberMin": 97,
+      "commentary": "Overlay highlights whether ticket closures are keeping pace with incoming demand."
     }
   ],
   "budgetCommercials": [

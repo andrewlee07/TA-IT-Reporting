@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { ReportAppShell, type AppReportRecord } from "@/components/report-app-shell";
-import { REPORT_PAGES, isValidPageId } from "@/lib/report/blocks";
+import { REPORT_PAGES, hasPageTabs, isValidPageId, resolveTabId } from "@/lib/report/blocks";
 import { loadTemplateBodyMarkup, loadTemplateStyles } from "@/lib/report/template-source";
 import { getBundledDemoSnapshot, getExecSummaryState, getStoredReport, listReports, type ReportListItem } from "@/lib/reports/service";
 
@@ -21,6 +21,23 @@ function normalizeListEntry(report: ReportListItem) {
 
 function resolvePage(page: string | undefined): string {
   return page && isValidPageId(page) ? page : REPORT_PAGES[0].id;
+}
+
+function resolveTab(pageId: string, tab: string | undefined): string | null {
+  return resolveTabId(pageId, tab);
+}
+
+function buildCanonicalUrl(reportId: string, month: string, pageId: string, tabId: string | null): string {
+  const params = new URLSearchParams();
+  params.set("report", reportId);
+  params.set("month", month);
+  params.set("page", pageId);
+
+  if (tabId) {
+    params.set("tab", tabId);
+  }
+
+  return `/?${params.toString()}`;
 }
 
 function resolveMonth(report: Pick<AppReportRecord, "availableMonths" | "currentMonth">, month: string | undefined): string {
@@ -86,6 +103,7 @@ interface HomePageProps {
     report?: string | string[];
     month?: string | string[];
     page?: string | string[];
+    tab?: string | string[];
   }>;
 }
 
@@ -96,6 +114,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const requestedReportId = getSingleValue(query.report);
   const requestedMonth = getSingleValue(query.month);
   const requestedPageId = getSingleValue(query.page);
+  const requestedTabId = getSingleValue(query.tab);
 
   let activeReport = requestedReportId
     ? await loadAppReport(requestedReportId)
@@ -112,9 +131,17 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const canonicalReportId = activeReport.id;
   const canonicalMonth = resolveMonth(activeReport, requestedMonth);
   const canonicalPageId = resolvePage(requestedPageId);
+  const canonicalTabId = resolveTab(canonicalPageId, requestedTabId);
+  const shouldRedirectForTab =
+    hasPageTabs(canonicalPageId) ? requestedTabId !== canonicalTabId : typeof requestedTabId !== "undefined";
 
-  if (requestedReportId !== canonicalReportId || requestedMonth !== canonicalMonth || requestedPageId !== canonicalPageId) {
-    redirect(`/?report=${canonicalReportId}&month=${canonicalMonth}&page=${canonicalPageId}`);
+  if (
+    requestedReportId !== canonicalReportId ||
+    requestedMonth !== canonicalMonth ||
+    requestedPageId !== canonicalPageId ||
+    shouldRedirectForTab
+  ) {
+    redirect(buildCanonicalUrl(canonicalReportId, canonicalMonth, canonicalPageId, canonicalTabId));
   }
 
   const [templateStyles, templateBody, initialExecSummary] = await Promise.all([
@@ -129,6 +156,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       <ReportAppShell
         initialMonth={canonicalMonth}
         initialPageId={canonicalPageId}
+        initialTabId={canonicalTabId}
         initialReport={activeReport}
         initialReports={normalizedReports}
         initialExecSummary={initialExecSummary}

@@ -3,9 +3,24 @@ export interface ReportPageDefinition {
   label: string;
 }
 
+export interface ReportPageTabDefinition {
+  id: string;
+  label: string;
+  slideLabel?: string;
+}
+
 export interface ReportBlockDefinition {
   id: string;
   label: string;
+}
+
+export interface ReportSlideDefinition {
+  id: string;
+  pageId: string;
+  pageLabel: string;
+  tabId: string | null;
+  tabLabel: string | null;
+  slideLabel: string;
 }
 
 export const REPORT_PAGES: ReportPageDefinition[] = [
@@ -25,37 +40,72 @@ export const REPORT_PAGES: ReportPageDefinition[] = [
   { id: "p-risks", label: "Risks & Decisions" },
 ];
 
+export const REPORT_PAGE_TABS: Record<string, ReportPageTabDefinition[]> = {
+  "p-exec": [
+    { id: "overview", label: "Overview", slideLabel: "Executive Scorecard · Overview" },
+    { id: "highlights", label: "Highlights", slideLabel: "Executive Scorecard · Highlights" },
+  ],
+  "p-avail": [
+    { id: "overview", label: "Overview", slideLabel: "Service Availability · Overview" },
+    { id: "detail", label: "Trend Detail", slideLabel: "Service Availability · Trend Detail" },
+  ],
+  "p-network": [
+    { id: "map", label: "Map View", slideLabel: "Network & Offices · Map View" },
+    { id: "detail", label: "Office Detail", slideLabel: "Network & Offices · Office Detail" },
+  ],
+  "p-support": [
+    { id: "overview", label: "Overview", slideLabel: "Support Operations · SLA Overview" },
+    { id: "volumes", label: "Ticket Volumes", slideLabel: "Support Operations · Ticket Volumes" },
+    { id: "detail", label: "Ticket Detail", slideLabel: "Support Operations · Ticket Detail" },
+  ],
+};
+
 export const REPORT_BLOCKS: Record<string, ReportBlockDefinition[]> = {
   "p-summary": [{ id: "summary-content-block", label: "Exec summary content" }],
-  "p-exec": [
+  "p-exec-overview": [
     { id: "exec-kpi-support-sla", label: "Support SLA KPI" },
     { id: "exec-kpi-user-csat", label: "User CSAT KPI" },
     { id: "exec-kpi-critical-vulns", label: "Critical vulnerabilities KPI" },
     { id: "exec-kpi-change-success", label: "Change success KPI" },
     { id: "exec-kpi-dev-backlog", label: "Dev backlog KPI" },
   ],
-  "p-avail": [
-    { id: "avail-trend-block", label: "Availability trend chart" },
-    { id: "avail-outage-block", label: "Outage minutes by service" },
+  "p-exec-highlights": [
+    { id: "exec-svc-grid", label: "Executive service tiles" },
+    { id: "exec-narrative", label: "Executive narrative highlights" },
+  ],
+  "p-avail-overview": [
+    { id: "avail-svc-grid", label: "Availability service tiles" },
     { id: "avail-note-block", label: "Availability analyst note" },
   ],
-  "p-network": [
+  "p-avail-detail": [
+    { id: "avail-trend-block", label: "Availability trend chart" },
+    { id: "avail-outage-block", label: "Outage minutes by service" },
+  ],
+  "p-network-map": [
     { id: "net-kpi-avg-availability", label: "Average availability KPI" },
     { id: "net-kpi-total-offices", label: "Total offices KPI" },
     { id: "net-kpi-below-99", label: "Below 99 percent KPI" },
     { id: "net-kpi-below-99-9", label: "Below 99.9 percent KPI" },
     { id: "network-map-block", label: "Office network map" },
+  ],
+  "p-network-detail": [
     { id: "office-list-block", label: "Office availability list" },
     { id: "net-trend-block", label: "Network trend chart" },
+    { id: "network-detail-note-block", label: "Network detail note" },
   ],
-  "p-support": [
+  "p-support-overview": [
     { id: "support-hero", label: "Support hero panel" },
     { id: "support-kpi-opened", label: "Opened KPI" },
     { id: "support-kpi-closed", label: "Closed KPI" },
     { id: "support-kpi-backlog", label: "Backlog end KPI" },
     { id: "support-kpi-avg-resolution", label: "Average resolution KPI" },
     { id: "support-kpi-major-incidents", label: "Major incidents KPI" },
+  ],
+  "p-support-volumes": [
     { id: "support-vol-block", label: "Ticket volume chart" },
+    { id: "support-detail-note-block", label: "Support pressure note" },
+  ],
+  "p-support-detail": [
     { id: "support-cats-block", label: "Tickets by category" },
     { id: "support-tickets-block", label: "Oldest tickets table" },
   ],
@@ -132,6 +182,89 @@ export function isValidPageId(pageId: string): boolean {
   return REPORT_PAGES.some((page) => page.id === pageId);
 }
 
-export function isValidBlockId(pageId: string, blockId: string): boolean {
-  return (REPORT_BLOCKS[pageId] ?? []).some((block) => block.id === blockId);
+export function getPageDefinition(pageId: string): ReportPageDefinition | undefined {
+  return REPORT_PAGES.find((page) => page.id === pageId);
+}
+
+export function getPageTabs(pageId: string): ReportPageTabDefinition[] {
+  return REPORT_PAGE_TABS[pageId] ?? [];
+}
+
+export function hasPageTabs(pageId: string): boolean {
+  return getPageTabs(pageId).length > 0;
+}
+
+export function getDefaultTabId(pageId: string): string | null {
+  return getPageTabs(pageId)[0]?.id ?? null;
+}
+
+export function resolveTabId(pageId: string, tabId?: string | null): string | null {
+  const tabs = getPageTabs(pageId);
+  if (tabs.length === 0) {
+    return null;
+  }
+
+  if (tabId && tabs.some((tab) => tab.id === tabId)) {
+    return tabId;
+  }
+
+  return tabs[0]?.id ?? null;
+}
+
+export function getSlideId(pageId: string, tabId?: string | null): string {
+  const resolvedTabId = resolveTabId(pageId, tabId);
+  return resolvedTabId ? `${pageId}-${resolvedTabId}` : pageId;
+}
+
+export function getSlideDefinition(pageId: string, tabId?: string | null): ReportSlideDefinition | null {
+  const page = getPageDefinition(pageId);
+  if (!page) {
+    return null;
+  }
+
+  const resolvedTabId = resolveTabId(pageId, tabId);
+  const resolvedTab = resolvedTabId ? getPageTabs(pageId).find((entry) => entry.id === resolvedTabId) ?? null : null;
+
+  return {
+    id: getSlideId(pageId, resolvedTabId),
+    pageId,
+    pageLabel: page.label,
+    tabId: resolvedTabId,
+    tabLabel: resolvedTab?.label ?? null,
+    slideLabel: resolvedTab?.slideLabel ?? page.label,
+  };
+}
+
+export function getReportSlides(): ReportSlideDefinition[] {
+  return REPORT_PAGES.reduce<ReportSlideDefinition[]>((slides, page) => {
+    const tabs = getPageTabs(page.id);
+    if (tabs.length === 0) {
+      slides.push({
+        id: page.id,
+        pageId: page.id,
+        pageLabel: page.label,
+        tabId: null,
+        tabLabel: null,
+        slideLabel: page.label,
+      });
+      return slides;
+    }
+
+    tabs.forEach((tab) => {
+      slides.push({
+        id: `${page.id}-${tab.id}`,
+        pageId: page.id,
+        pageLabel: page.label,
+        tabId: tab.id,
+        tabLabel: tab.label,
+        slideLabel: tab.slideLabel ?? `${page.label} · ${tab.label}`,
+      });
+    });
+
+    return slides;
+  }, []);
+}
+
+export function isValidBlockId(pageId: string, blockId: string, tabId?: string | null): boolean {
+  return (REPORT_BLOCKS[getSlideId(pageId, tabId)] ?? []).some((block) => block.id === blockId);
 }

@@ -11,6 +11,7 @@ export function initReportApp(root, options) {
   var D = options.data;
   var ACTIVE_MONTH = options.activeMonth;
   var INITIAL_PAGE_ID = options.initialPageId || "p-summary";
+  var INITIAL_TAB_ID = options.initialTabId || null;
   var SHOW_ALL_PAGES = Boolean(options.showAllPages);
   var document = {
     getElementById: function getElementById(id) {
@@ -62,6 +63,8 @@ export function initReportApp(root, options) {
     "Business transformation": "#A9A9AA",
   };
   var CHARTS = Object.create(null);
+  var PAGE_TABS = (D.meta && D.meta.pageTabs) || {};
+  var activeTabsByPage = Object.create(null);
 
   var orderedMonths = D.meta.availableMonths || [];
   var activeMonth = orderedMonths.indexOf(ACTIVE_MONTH) >= 0 ? ACTIVE_MONTH : D.meta.activeMonth;
@@ -73,6 +76,32 @@ export function initReportApp(root, options) {
   });
   var monthLabel = D.meta.activeMonthLabel || activeMonth;
   var previousMonth = visibleMonths[visibleMonths.length - 2] || activeMonth;
+
+  function getPageTabs(pageId) {
+    return PAGE_TABS[pageId] || [];
+  }
+
+  function resolveTabId(pageId, tabId) {
+    var tabs = getPageTabs(pageId);
+    if (!tabs.length) {
+      return null;
+    }
+
+    if (tabId && tabs.some(function matchesTab(tab) { return tab.id === tabId; })) {
+      return tabId;
+    }
+
+    return tabs[0].id;
+  }
+
+  function getSlideId(pageId, tabId) {
+    var resolvedTabId = resolveTabId(pageId, tabId);
+    return resolvedTabId ? pageId + "-" + resolvedTabId : pageId;
+  }
+
+  function getActiveTabId(pageId) {
+    return resolveTabId(pageId, activeTabsByPage[pageId] || (pageId === INITIAL_PAGE_ID ? INITIAL_TAB_ID : null));
+  }
 
   function fmt(value) {
     return value >= 1000 ? (value / 1000).toFixed(0) + "k" : String(value);
@@ -187,6 +216,91 @@ export function initReportApp(root, options) {
       .filter(function filterMetric(value) {
         return value !== null;
       });
+  }
+
+  function roundTo(value, decimals) {
+    var precision = typeof decimals === "number" ? decimals : 1;
+    var factor = Math.pow(10, precision);
+    return Math.round(value * factor) / factor;
+  }
+
+  function findChartSetting(chartKey, page) {
+    return (D.chartSettings || []).find(function findSetting(setting) {
+      return setting.Month === activeMonth && setting.ChartKey === chartKey && (!page || setting.Page === page);
+    }) || null;
+  }
+
+  function buildRollingAverageSeries(values, windowSize) {
+    return values.map(function mapRolling(_, index) {
+      var windowValues = values
+        .slice(Math.max(0, index - windowSize + 1), index + 1)
+        .filter(function filterValue(value) {
+          return value !== null;
+        });
+
+      if (windowValues.length === 0) {
+        return null;
+      }
+
+      var total = windowValues.reduce(function reduceTotal(sum, value) {
+        return sum + value;
+      }, 0);
+
+      return roundTo(total / windowValues.length, 1);
+    });
+  }
+
+  function buildCloseBalanceSeries(openedSeries, closedSeries) {
+    return openedSeries.map(function mapBalance(openedValue, index) {
+      var closedValue = closedSeries[index];
+
+      if (openedValue === null || closedValue === null || openedValue <= 0) {
+        return null;
+      }
+
+      return roundTo((closedValue / openedValue) * 100, 1);
+    });
+  }
+
+  function overlayHealthColor(value, setting) {
+    if (value === null || typeof value === "undefined") {
+      return COLORS.grey;
+    }
+
+    if (value >= setting.HealthyMin) {
+      return COLORS.teal;
+    }
+
+    if (value >= setting.AmberMin) {
+      return COLORS.orange;
+    }
+
+    return COLORS.alert;
+  }
+
+  function buildSupportVolumeLegend(setting) {
+    var legend = document.getElementById("support-vol-legend");
+
+    if (!legend) {
+      return;
+    }
+
+    var html =
+      '<div class="legend-item"><div class="legend-swatch" style="background:' +
+      COLORS.blue +
+      '"></div>Opened</div>' +
+      '<div class="legend-item"><div class="legend-swatch" style="background:' +
+      COLORS.orange +
+      '"></div>Closed</div>';
+
+    if (setting && setting.OverlayEnabled === "Yes") {
+      html +=
+        '<div class="legend-item"><div class="legend-line health"></div>' +
+        setting.RollingWindow +
+        'M close balance %</div>';
+    }
+
+    legend.innerHTML = html;
   }
 
   function sparkSegmentColor(value, baseColor, cfg) {
@@ -389,12 +503,94 @@ export function initReportApp(root, options) {
     );
   }
 
-  function updateStaticChrome() {
-    document.title = "TeacherActive — IT Executive Report · " + monthLabel;
+  function rebuildSlideHeaders() {
+    document.querySelectorAll(".report-page").forEach(function rebuildHeader(page) {
+      var header = page.querySelector(".ph");
+      if (!header) {
+        return;
+      }
 
-    document.querySelectorAll(".ph-period-val").forEach(function updatePeriod(el) {
-      el.textContent = monthLabel;
+      var pageId = page.getAttribute("data-page-id") || page.id;
+      var tabId = page.getAttribute("data-tab-id");
+      var titleEl = header.querySelector(".ph-title");
+      var subtitleEl = header.querySelector(".ph-sub");
+      var periodLabelEl = header.querySelector(".ph-period-label");
+      var periodValueEl = header.querySelector(".ph-period-val");
+
+      if (!page.dataset.headerTitle && titleEl) {
+        page.dataset.headerTitle = titleEl.textContent.trim();
+      }
+      if (!page.dataset.headerSubtitle && subtitleEl) {
+        page.dataset.headerSubtitle = subtitleEl.textContent.trim();
+      }
+      if (!page.dataset.headerPeriodLabel && periodLabelEl) {
+        page.dataset.headerPeriodLabel = periodLabelEl.textContent.trim();
+      }
+      if (!page.dataset.headerPeriodValue && periodValueEl) {
+        page.dataset.headerPeriodValue = periodValueEl.textContent.trim();
+      }
+      if (!page.dataset.headerPeriodValueId && periodValueEl && periodValueEl.id) {
+        page.dataset.headerPeriodValueId = periodValueEl.id;
+      }
+
+      var title = page.dataset.headerTitle || "";
+      var subtitle = (subtitleEl ? subtitleEl.textContent : page.dataset.headerSubtitle) || "";
+      var periodLabel = (periodLabelEl ? periodLabelEl.textContent : page.dataset.headerPeriodLabel) || "";
+      var periodValue = (periodValueEl ? periodValueEl.textContent : page.dataset.headerPeriodValue) || "";
+      var periodValueId = page.dataset.headerPeriodValueId || "";
+      var activeTab = tabId
+        ? getPageTabs(pageId).find(function matchesTab(tab) {
+            return tab.id === tabId;
+          }) || null
+        : null;
+      var accentHtml = activeTab
+        ? '<span class="ph-title-sep">-</span><span class="ph-title-accent">' + escapeHtml(activeTab.label) + "</span>"
+        : "";
+      var metaLine = "";
+
+      if (subtitle) {
+        metaLine += '<span class="ph-sub">' + escapeHtml(subtitle) + "</span>";
+      }
+
+      if (periodLabel && periodValue) {
+        if (metaLine) {
+          metaLine += '<span class="ph-meta-divider">·</span>';
+        }
+        metaLine +=
+          '<span class="ph-period-label">' +
+          escapeHtml(periodLabel) +
+          '</span><span class="ph-period-val"' +
+          (periodValueId ? ' id="' + escapeAttr(periodValueId) + '"' : "") +
+          ">" +
+          escapeHtml(periodValue) +
+          "</span>";
+      }
+
+      header.innerHTML =
+        '<div class="ph-stack">' +
+        '<div class="ph-title-line"><span class="ph-title">' +
+        escapeHtml(title) +
+        "</span>" +
+        accentHtml +
+        "</div>" +
+        '<div class="ph-meta-line">' +
+        metaLine +
+        "</div></div>";
     });
+  }
+
+  function updateStaticChrome() {
+    document.title = "TeacherActive — IT Reporting · " + monthLabel;
+
+    document.querySelectorAll(".report-page").forEach(function updatePeriod(page) {
+      var labelEl = page.querySelector(".ph-period-label");
+      var valueEl = page.querySelector(".ph-period-val");
+      if (labelEl && valueEl && labelEl.textContent.trim() === "Reporting Period") {
+        valueEl.textContent = monthLabel;
+      }
+    });
+
+    rebuildSlideHeaders();
 
     var sidebarFooter = document.querySelector(".sidebar-footer");
     if (sidebarFooter) {
@@ -415,7 +611,7 @@ export function initReportApp(root, options) {
     if (SHOW_ALL_PAGES) {
       pages.forEach(function activatePage(page) {
         page.classList.add("active");
-        page.style.display = "block";
+        page.style.display = "flex";
       });
       document.querySelectorAll(".nav-link").forEach(function clearNav(link) {
         link.classList.remove("active");
@@ -431,7 +627,8 @@ export function initReportApp(root, options) {
       link.classList.remove("active");
     });
 
-    var page = document.getElementById(INITIAL_PAGE_ID);
+    var initialTabId = getActiveTabId(INITIAL_PAGE_ID);
+    var page = document.getElementById(getSlideId(INITIAL_PAGE_ID, initialTabId));
     if (page) {
       page.classList.add("active");
     }
@@ -440,6 +637,68 @@ export function initReportApp(root, options) {
     if (nav) {
       nav.classList.add("active");
     }
+  }
+
+  function ensureTabSlot(pageId, tabId) {
+    var slideId = getSlideId(pageId, tabId);
+    var page = document.getElementById(slideId);
+    if (!page) {
+      return null;
+    }
+
+    var slot = page.querySelector(".slide-tabs-slot");
+    if (slot) {
+      return slot;
+    }
+
+    var createdSlot = nativeDocument.createElement("div");
+    createdSlot.className = "slide-tabs-slot";
+    createdSlot.setAttribute("data-page-id", pageId);
+    var body = page.querySelector(".pb");
+    if (body && body.parentNode) {
+      body.parentNode.insertBefore(createdSlot, body);
+    } else {
+      page.appendChild(createdSlot);
+    }
+    return createdSlot;
+  }
+
+  function renderPageTabs(pageId) {
+    var tabs = getPageTabs(pageId);
+    if (!tabs.length) {
+      return;
+    }
+
+    tabs.forEach(function renderTabSlot(tab) {
+      var slot = ensureTabSlot(pageId, tab.id);
+      if (!slot) {
+        return;
+      }
+
+      slot.innerHTML =
+        '<div class="slide-tabs" role="tablist" aria-label="' +
+        pageId +
+        ' tabs">' +
+        tabs
+          .map(function renderButton(entry) {
+            var isActive = entry.id === tab.id;
+            return (
+              '<button class="slide-tab' +
+              (isActive ? " active" : "") +
+              '" role="tab" aria-selected="' +
+              (isActive ? "true" : "false") +
+              `" onclick='showPageTab(` +
+              JSON.stringify(pageId) +
+              "," +
+              JSON.stringify(entry.id) +
+              `)'>` +
+              entry.label +
+              "</button>"
+            );
+          })
+          .join("") +
+        "</div>";
+    });
   }
 
   function registerChart(id, createChart) {
@@ -605,6 +864,9 @@ export function initReportApp(root, options) {
       return;
     }
 
+    var nextTabId = resolveTabId(id, runtimeOptions && Object.prototype.hasOwnProperty.call(runtimeOptions, "tabId") ? runtimeOptions.tabId : getActiveTabId(id));
+    activeTabsByPage[id] = nextTabId;
+
     document.querySelectorAll(".report-page").forEach(function deactivatePage(page) {
       page.classList.remove("active");
     });
@@ -612,7 +874,7 @@ export function initReportApp(root, options) {
       link.classList.remove("active");
     });
 
-    var page = document.getElementById(id);
+    var page = document.getElementById(getSlideId(id, nextTabId));
     if (page) {
       page.classList.add("active");
     }
@@ -623,15 +885,20 @@ export function initReportApp(root, options) {
     }
 
     rebuildVisiblePage(id);
+    renderPageTabs(id);
     window.scrollTo(0, 0);
 
     if ((!runtimeOptions || runtimeOptions.silent !== true) && typeof options.onPageChange === "function") {
-      options.onPageChange(id);
+      options.onPageChange(id, nextTabId);
     }
+
   }
 
   if (options.attachGlobals !== false) {
     window.showPage = showPage;
+    window.showPageTab = function showPageTab(pageId, tabId) {
+      showPage(pageId, null, { tabId: tabId });
+    };
   }
 
   function buildSvcTiles(containerId, rows) {
@@ -889,15 +1156,25 @@ export function initReportApp(root, options) {
     var officeRows = byMonth(D.officeNetwork, activeMonth).sort(function sortRows(a, b) {
       return a.DisplayOrder - b.DisplayOrder;
     });
-    var networkMetric = latest(D.derivedNetwork);
+    var networkMetric =
+      D.derivedNetwork.find(function findMetric(item) {
+        return item.Month === activeMonth;
+      }) || latest(D.derivedNetwork);
     var averageAvailability = pctNum(networkMetric.Availability);
     var perfect = networkMetric.PerfectOffices;
     var below99 = networkMetric.Below99Offices;
     var below999 = networkMetric.Below99_9Offices;
-    var netKpis = document.getElementById("net-kpis");
+    var netKpis = document.getElementById("net-kpis-map");
     var mapBadge = document.getElementById("net-map-badge");
     var dots = document.getElementById("office-dots");
     var officeList = document.getElementById("office-list");
+    var detailNote = document.getElementById("network-detail-note");
+    var sortedOffices = officeRows
+      .slice()
+      .sort(function sortOffice(a, b) {
+        return pctNum(b.Availability) - pctNum(a.Availability);
+      });
+    var worstOffice = sortedOffices.length ? sortedOffices[sortedOffices.length - 1] : null;
 
     if (netKpis) {
       netKpis.innerHTML =
@@ -966,47 +1243,64 @@ export function initReportApp(root, options) {
     }
 
     if (officeList) {
-      officeList.innerHTML = officeRows
-        .slice()
-        .sort(function sortOffice(a, b) {
-          return pctNum(b.Availability) - pctNum(a.Availability);
-        })
+      officeList.innerHTML = sortedOffices
         .map(function renderOffice(office) {
           var pct = pctNum(office.Availability);
           var color = pct === 100 ? COLORS.teal : pct >= 99.9 ? COLORS.orange : COLORS.alert;
           var label = pct === 100 ? "Perfect" : pct >= 99.9 ? "Good" : pct >= 99 ? "Minor" : "Impacted";
           return (
-            '<div style="padding:8px 14px;border-bottom:1px solid var(--rule-l);display:grid;grid-template-columns:1fr 58px;gap:8px;align-items:center;">' +
-            "<div>" +
-            '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">' +
-            '<span style="width:7px;height:7px;border-radius:50%;background:' +
+            '<div class="office-list-item">' +
+            '<div class="office-list-meta">' +
+            '<div class="office-list-name">' +
+            '<span class="office-list-dot" style="background:' +
             color +
-            ';flex-shrink:0;display:inline-block"></span>' +
-            '<span style="font-size:11px;font-weight:700;color:var(--text)">' +
+            ';"></span>' +
+            "<strong>" +
             office.OfficeName +
-            "</span>" +
-            '<span style="font-size:9px;color:var(--text-3)">' +
+            "</strong>" +
+            "<span>" +
             office.Region +
             "</span>" +
             "</div>" +
-            '<div style="height:3px;background:var(--rule);border-radius:2px;overflow:hidden;">' +
-            '<div style="height:100%;width:' +
+            '<div class="office-list-track"><div class="office-list-fill" style="width:' +
             Math.max(0, ((pct - 97) / 3) * 100).toFixed(1) +
             "%;background:" +
             color +
-            ';border-radius:2px;"></div></div>' +
+            ';"></div></div>' +
             "</div>" +
-            '<div style="text-align:right;"><div style="font-family:\'Arial Black\',Arial;font-size:11px;font-weight:700;color:' +
+            '<div class="office-list-value"><strong style="color:' +
             color +
             '">' +
             office.Availability +
-            '</div><div style="font-size:9px;color:var(--text-3)">' +
+            "</strong><span>" +
             label +
-            "</div></div>" +
+            "</span></div>" +
             "</div>"
           );
         })
         .join("");
+    }
+
+    if (detailNote) {
+      detailNote.innerHTML =
+        "<strong>" +
+        monthLabel +
+        "</strong> closed with estate-wide average availability of <strong>" +
+        averageAvailability.toFixed(2) +
+        "%</strong>. " +
+        (below99 === 0
+          ? "No offices fell below the 99% material-impact threshold, and "
+          : "<strong>" + below99 + "</strong> offices fell below 99%, while ") +
+        "<strong>" +
+        below999 +
+        "</strong> offices sat below 99.9%. " +
+        (worstOffice
+          ? "Lowest-performing site was <strong>" +
+            worstOffice.OfficeName +
+            "</strong> at <strong>" +
+            worstOffice.Availability +
+            "</strong>, so that office remains the priority focus for follow-up."
+          : "All offices remained at or above the expected service range.");
     }
 
     registerChart("c-net-trend", function createNetworkTrendChart() {
@@ -1110,6 +1404,7 @@ export function initReportApp(root, options) {
       return ticket.AgeDays > max ? ticket.AgeDays : max;
     }, 0);
     var categoryColors = [COLORS.blue, COLORS.orange, COLORS.teal, COLORS.grey];
+    renderPageTabs("p-support");
 
     document.getElementById("sh-number").innerHTML = support.ResolutionSLA.replace("%", "") + "<sup>%</sup>";
     document.getElementById("sh-benchmarks").innerHTML =
@@ -1187,21 +1482,145 @@ export function initReportApp(root, options) {
       );
 
     registerChart("c-support-vol", function createSupportVolumeChart() {
+      var supportChartSetting = findChartSetting("support_ticket_volumes", "Support Operations");
+      var overlayEnabled = Boolean(
+        supportChartSetting &&
+          supportChartSetting.OverlayEnabled === "Yes" &&
+          supportChartSetting.OverlayMetric === "Close Balance %",
+      );
+      var rollingWindow = overlayEnabled ? Math.max(1, Number(supportChartSetting.RollingWindow) || 3) : 0;
+      var openedSeries = monthSeries(D.support, "Opened").map(function mapOpened(value) {
+        return toMetricNumber(value);
+      });
+      var closedSeries = monthSeries(D.support, "Closed").map(function mapClosed(value) {
+        return toMetricNumber(value);
+      });
+      var closeBalanceSeries = buildCloseBalanceSeries(openedSeries, closedSeries);
+      var rollingCloseBalanceSeries = overlayEnabled ? buildRollingAverageSeries(closeBalanceSeries, rollingWindow) : [];
+      var overlayValues = rollingCloseBalanceSeries.filter(function filterValue(value) {
+        return value !== null;
+      });
+      var overlayMin = overlayValues.length
+        ? Math.min.apply(null, overlayValues.concat([Number(supportChartSetting.AmberMin) - 2]))
+        : Number(supportChartSetting ? supportChartSetting.AmberMin : 95) - 2;
+      var overlayMax = overlayValues.length
+        ? Math.max.apply(null, overlayValues.concat([Number(supportChartSetting.HealthyMin) + 2]))
+        : Number(supportChartSetting ? supportChartSetting.HealthyMin : 100) + 2;
+      var supportTooltip = {
+        backgroundColor: TIP.backgroundColor,
+        borderColor: TIP.borderColor,
+        borderWidth: TIP.borderWidth,
+        titleColor: TIP.titleColor,
+        bodyColor: TIP.bodyColor,
+        padding: TIP.padding,
+        cornerRadius: TIP.cornerRadius,
+        callbacks: {
+          label: function label(context) {
+            if (context.dataset.yAxisID === "yBalance") {
+              return context.dataset.label + ": " + Number(context.parsed.y).toFixed(1) + "%";
+            }
+
+            return context.dataset.label + ": " + fmt(context.parsed.y);
+          },
+          afterBody: function afterBody(items) {
+            if (!items || items.length === 0) {
+              return [];
+            }
+
+            var itemIndex = items[0].dataIndex;
+            var opened = openedSeries[itemIndex];
+            var closed = closedSeries[itemIndex];
+            var closeBalance = closeBalanceSeries[itemIndex];
+            var rollingBalance = overlayEnabled ? rollingCloseBalanceSeries[itemIndex] : null;
+            var lines = [];
+
+            if (opened !== null && closed !== null) {
+              var netFlow = closed - opened;
+              lines.push("Net flow: " + (netFlow > 0 ? "+" : "") + fmt(netFlow));
+            }
+
+            if (closeBalance !== null) {
+              lines.push("Close balance: " + closeBalance.toFixed(1) + "%");
+            }
+
+            if (rollingBalance !== null) {
+              lines.push(rollingWindow + "M rolling close balance: " + rollingBalance.toFixed(1) + "%");
+            }
+
+            return lines;
+          },
+        },
+      };
+
+      buildSupportVolumeLegend(supportChartSetting);
+
+      var datasets = [
+        { label: "Opened", data: openedSeries, backgroundColor: COLORS.blue, borderRadius: 3, barPercentage: 0.45, order: 2 },
+        { label: "Closed", data: closedSeries, backgroundColor: COLORS.orange, borderRadius: 3, barPercentage: 0.45, order: 3 },
+      ];
+
+      if (overlayEnabled) {
+        datasets.push({
+          type: "line",
+          label: rollingWindow + "M close balance %",
+          data: rollingCloseBalanceSeries,
+          yAxisID: "yBalance",
+          borderWidth: 2,
+          borderDash: [6, 4],
+          tension: 0.32,
+          spanGaps: true,
+          pointRadius: 2.5,
+          pointHoverRadius: 4,
+          pointBorderWidth: 0,
+          fill: false,
+          order: 1,
+          segment: {
+            borderColor: function borderColor(context) {
+              var startY = context.p0 && context.p0.parsed ? context.p0.parsed.y : null;
+              var endY = context.p1 && context.p1.parsed ? context.p1.parsed.y : null;
+              var average = startY === null || endY === null ? (startY !== null ? startY : endY) : (startY + endY) / 2;
+              return overlayHealthColor(average, supportChartSetting);
+            },
+          },
+          pointBackgroundColor: function pointBackgroundColor(context) {
+            return overlayHealthColor(context.raw, supportChartSetting);
+          },
+          pointHoverBackgroundColor: function pointHoverBackgroundColor(context) {
+            return overlayHealthColor(context.raw, supportChartSetting);
+          },
+        });
+      }
+
       return new Chart(resetChartCanvas("c-support-vol"), {
-      type: "bar",
-      data: {
-        labels: visibleLabels,
-        datasets: [
-          { label: "Opened", data: monthSeries(D.support, "Opened"), backgroundColor: COLORS.blue, borderRadius: 3, barPercentage: 0.45 },
-          { label: "Closed", data: monthSeries(D.support, "Closed"), backgroundColor: COLORS.orange, borderRadius: 3, barPercentage: 0.45 },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: NO_LEGEND,
-        scales: { x: { grid: { display: false } }, y: { grid: GRID, border: { display: false }, ticks: { callback: fmt } } },
-      },
+        type: "bar",
+        data: {
+          labels: visibleLabels,
+          datasets: datasets,
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false }, tooltip: supportTooltip },
+          scales: {
+            x: { grid: { display: false } },
+            y: { grid: GRID, border: { display: false }, ticks: { callback: fmt } },
+            yBalance: overlayEnabled
+              ? {
+                  position: "right",
+                  grid: { display: false },
+                  border: { display: false },
+                  min: Math.floor(overlayMin),
+                  max: Math.ceil(overlayMax),
+                  ticks: {
+                    callback: function balanceTick(value) {
+                      return value + "%";
+                    },
+                    color: COLORS.teal,
+                  },
+                }
+              : { display: false, grid: { display: false }, border: { display: false } },
+          },
+        },
       });
     });
 
@@ -1213,11 +1632,39 @@ export function initReportApp(root, options) {
         categories[row.TopCategory] = (categories[row.TopCategory] || 0) + 1;
       });
     var categoryMax = Math.max.apply(Math, Object.values(categories).length ? Object.values(categories) : [1]);
+    var sortedCategories = Object.entries(categories).sort(function sortCategories(a, b) {
+      return b[1] - a[1];
+    });
+    var criticalTickets = tickets.filter(function filterCritical(ticket) {
+      return ticket.BusinessCritical === "Yes";
+    }).length;
+    var supportDetailNote = document.getElementById("support-detail-note");
 
-    document.getElementById("support-cats").innerHTML = Object.entries(categories)
-      .sort(function sortCategories(a, b) {
-        return b[1] - a[1];
-      })
+    if (supportDetailNote) {
+      var topCategory = sortedCategories.length ? sortedCategories[0][0] : support.TopCategory;
+      var ageingPressure = tickets.filter(function filterAgeing(ticket) {
+        return ticket.AgeDays >= 40;
+      }).length;
+      supportDetailNote.innerHTML =
+        "<strong>" +
+        topCategory +
+        "</strong> remains the highest-volume support theme in the visible period. " +
+        (criticalTickets > 0
+          ? criticalTickets +
+            " business-critical ticket" +
+            (criticalTickets === 1 ? " is" : "s are") +
+            " still open, with the oldest ticket sitting at <strong>" +
+            oldestTicket +
+            " days</strong>."
+          : "There are no business-critical tickets currently open.") +
+        " " +
+        ageingPressure +
+        " ticket" +
+        (ageingPressure === 1 ? " is" : "s are") +
+        " older than 40 days, which is the primary ageing pressure on the queue.";
+    }
+
+    document.getElementById("support-cats").innerHTML = sortedCategories
       .map(function renderCategory(entry, index) {
         return (
           '<div class="bar-row cols-3" style="grid-template-columns:150px 1fr 48px;">' +
@@ -1858,11 +2305,11 @@ export function initReportApp(root, options) {
 
     var WEEKS = 12;
     var LEFT_W = 210;
-    var ROW_H = 46;
-    var ROW_PAD = 8;
+    var ROW_H = 40;
+    var ROW_PAD = 7;
     var BAR_H = ROW_H - ROW_PAD * 2;
-    var HEADER_H = 52;
-    var FOOTER_H = 12;
+    var HEADER_H = 46;
+    var FOOTER_H = 8;
     var WEEK_W = 74;
     var CHART_W = LEFT_W + WEEKS * WEEK_W;
     var CHART_H = HEADER_H + workstreams.length * ROW_H + FOOTER_H;
@@ -2016,8 +2463,8 @@ export function initReportApp(root, options) {
       if (emptyCopy) {
         emptyCopy.textContent =
           templateVersion >= 3 && hasAnyGanttSourceData
-            ? "This v3 workbook does not include any in-scope Gantt workstreams for the selected month. Open the bundled demo for a populated example, or upload a refreshed v3 workbook with Gantt inputs."
-            : "The active report was created from a legacy workbook that predates the Portfolio Gantt sheets. Open the bundled demo to see the page populated, or upload a v3 workbook to render this view from your own data.";
+            ? "This workbook does not include any in-scope Gantt workstreams for the selected month. Open the bundled demo for a populated example, or upload a refreshed v4 workbook with Gantt inputs."
+            : "The active report was created from a legacy workbook that predates the Portfolio Gantt sheets. Open the bundled demo to see the page populated, or upload a v4 workbook to render this view from your own data.";
       }
 
       if (legend) {
@@ -2622,8 +3069,8 @@ export function initReportApp(root, options) {
   window.__REPORT_READY = true;
 
   return {
-    showPage: function showPageController(id) {
-      showPage(id, null, { silent: true });
+    showPage: function showPageController(id, tabId) {
+      showPage(id, null, { silent: true, tabId: tabId });
     },
     destroy: function destroy() {
       Object.keys(CHARTS).forEach(function destroyChart(id) {
@@ -2632,6 +3079,7 @@ export function initReportApp(root, options) {
       });
       if (options.attachGlobals !== false) {
         delete window.showPage;
+        delete window.showPageTab;
         delete window.showMapTip;
         delete window.hideMapTip;
       }

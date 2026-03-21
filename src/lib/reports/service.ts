@@ -65,6 +65,7 @@ function normalizeSnapshot(snapshot: unknown): NormalizedReportSnapshot {
     })),
     portfolioGanttWorkstreams: rawSnapshot.portfolioGanttWorkstreams ?? [],
     portfolioGanttMilestones: rawSnapshot.portfolioGanttMilestones ?? [],
+    chartSettings: rawSnapshot.chartSettings ?? [],
   } as NormalizedReportSnapshot;
 }
 
@@ -336,7 +337,12 @@ export async function saveGeneratedExport(input: {
   contentType: string;
   data: Buffer;
 }): Promise<string> {
-  const extension = input.contentType === "application/pdf" ? "pdf" : "png";
+  const extension =
+    input.contentType === "application/pdf"
+      ? "pdf"
+      : input.contentType === "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        ? "pptx"
+        : "png";
   const key = path.posix.join("exports", input.reportId, `${input.exportType}-${nanoid()}.${extension}`);
   const storage = getObjectStorage();
 
@@ -385,7 +391,7 @@ export async function getBundledDemoSnapshot(): Promise<NormalizedReportSnapshot
     return cachedDemoSnapshot;
   }
 
-  const workbookPath = path.resolve(process.cwd(), "fixtures", "IT_Exec_Reporting_Ingestion_Template_v3_dummy_data.xlsx");
+  const workbookPath = path.resolve(process.cwd(), "fixtures", "IT_Exec_Reporting_Ingestion_Template_v4_dummy_data.xlsx");
   const workbookBuffer = await fs.readFile(workbookPath);
   const parsed = await parseWorkbookBuffer(workbookBuffer, path.basename(workbookPath));
 

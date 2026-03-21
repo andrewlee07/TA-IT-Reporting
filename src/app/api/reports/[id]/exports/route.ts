@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { isValidBlockId, isValidPageId } from "@/lib/report/blocks";
+import { isValidBlockId, isValidPageId, resolveTabId } from "@/lib/report/blocks";
 import { exportReportArtifact } from "@/lib/reports/export-service";
 import { getBundledDemoSnapshot, getExecSummaryState, getStoredReport } from "@/lib/reports/service";
 
@@ -9,9 +9,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const exportSchema = z.object({
-  exportType: z.enum(["page-png", "block-png", "full-pdf"]),
+  exportType: z.enum(["page-png", "block-png", "full-pdf", "full-pptx"]),
   month: z.string(),
   pageId: z.string().optional(),
+  tabId: z.string().optional(),
   blockId: z.string().optional(),
 });
 
@@ -36,14 +37,20 @@ export async function POST(request: Request, { params }: RouteProps) {
       return NextResponse.json({ error: "Invalid month." }, { status: 400 });
     }
 
-    if (payload.exportType !== "full-pdf") {
+    if (payload.exportType !== "full-pdf" && payload.exportType !== "full-pptx") {
       if (!payload.pageId || !isValidPageId(payload.pageId)) {
         return NextResponse.json({ error: "A valid pageId is required." }, { status: 400 });
       }
     }
 
+    const resolvedTabId = payload.pageId ? resolveTabId(payload.pageId, payload.tabId) : null;
+
+    if (payload.pageId && payload.tabId && resolvedTabId !== payload.tabId) {
+      return NextResponse.json({ error: "A valid tabId is required for this page." }, { status: 400 });
+    }
+
     if (payload.exportType === "block-png") {
-      if (!payload.pageId || !payload.blockId || !isValidBlockId(payload.pageId, payload.blockId)) {
+      if (!payload.pageId || !payload.blockId || !isValidBlockId(payload.pageId, payload.blockId, resolvedTabId)) {
         return NextResponse.json({ error: "A valid blockId is required for block exports." }, { status: 400 });
       }
     }
@@ -55,6 +62,7 @@ export async function POST(request: Request, { params }: RouteProps) {
       exportType: payload.exportType,
       month: payload.month,
       pageId: payload.pageId,
+      tabId: resolvedTabId,
       blockId: payload.blockId,
       persist: id !== "demo",
       execSummary: await getExecSummaryState(id, payload.month),

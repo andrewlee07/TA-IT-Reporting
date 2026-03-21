@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { createPortal } from "react-dom";
 import Chart from "chart.js/auto";
 
-import { REPORT_PAGES, isValidPageId } from "@/lib/report/blocks";
+import { REPORT_PAGES, getSlideId, hasPageTabs, isValidPageId, resolveTabId } from "@/lib/report/blocks";
 import { buildTemplateData, formatMonthLabel } from "@/lib/report/template-data";
 import { initReportApp } from "@/lib/report/runtime";
 import type { ExecSummaryState } from "@/lib/reports/exec-summary";
@@ -33,6 +33,7 @@ interface ReportAppShellProps {
   initialExecSummary: ExecSummaryState;
   initialMonth: string;
   initialPageId: string;
+  initialTabId: string | null;
   templateBody: string;
 }
 
@@ -65,11 +66,19 @@ interface ExecSummaryApiPayload {
   error?: string;
 }
 
-function buildCanonicalUrl(reportId: string, month: string, pageId: string): string {
+function buildCanonicalUrl(reportId: string, month: string, pageId: string, tabId?: string | null): string {
   const params = new URLSearchParams();
   params.set("report", reportId);
   params.set("month", month);
   params.set("page", pageId);
+
+  if (hasPageTabs(pageId)) {
+    const resolvedTabId = resolveTabId(pageId, tabId);
+    if (resolvedTabId) {
+      params.set("tab", resolvedTabId);
+    }
+  }
+
   return `/?${params.toString()}`;
 }
 
@@ -84,6 +93,11 @@ function sanitizeFilename(value: string): string {
 
 function buildClientExportFilename(reportTitle: string, month: string, label: string, format: ClientExportFormat): string {
   return `${sanitizeFilename(reportTitle)}-${month}-${sanitizeFilename(label)}.${format === "jpeg" ? "jpg" : "png"}`;
+}
+
+function formatSidebarReportTitle(title: string, currentMonth: string): string {
+  const monthSuffixPattern = new RegExp(`\\s*·\\s*${currentMonth.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`);
+  return title.replace(monthSuffixPattern, "").trim();
 }
 
 function toReportListEntry(report: AppReportRecord): ReportListEntry {
@@ -111,6 +125,10 @@ function ensureMonth(report: Pick<AppReportRecord, "availableMonths" | "currentM
 
 function ensurePage(pageId: string | null | undefined): string {
   return pageId && isValidPageId(pageId) ? pageId : REPORT_PAGES[0].id;
+}
+
+function ensureTab(pageId: string, tabId: string | null | undefined): string | null {
+  return resolveTabId(pageId, tabId);
 }
 
 async function fetchJson<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
@@ -205,6 +223,7 @@ export function ReportAppShell({
   initialExecSummary,
   initialMonth,
   initialPageId,
+  initialTabId,
   templateBody,
 }: ReportAppShellProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
@@ -215,12 +234,18 @@ export function ReportAppShell({
   const activeReportRef = useRef(initialReport);
   const selectedMonthRef = useRef(initialMonth);
   const selectedPageRef = useRef(initialPageId);
+  const selectedTabByPageRef = useRef<Record<string, string | null>>(
+    initialTabId ? { [initialPageId]: initialTabId } : {},
+  );
   const exportTargetsRef = useRef(new Map<string, ClientExportTarget>());
 
   const [reports, setReports] = useState<ReportListEntry[]>(initialReports);
   const [activeReport, setActiveReport] = useState<AppReportRecord>(initialReport);
   const [selectedMonth, setSelectedMonth] = useState(initialMonth);
   const [selectedPageId, setSelectedPageId] = useState(initialPageId);
+  const [selectedTabByPage, setSelectedTabByPage] = useState<Record<string, string | null>>(
+    initialTabId ? { [initialPageId]: initialTabId } : {},
+  );
   const [targets, setTargets] = useState<PortalTargets>({
     toggle: null,
     period: null,
@@ -253,6 +278,10 @@ export function ReportAppShell({
     () => buildTemplateData(activeReport.snapshot, selectedMonth, execSummary),
     [activeReport.snapshot, execSummary, selectedMonth],
   );
+  const selectedTabId = useMemo(
+    () => ensureTab(selectedPageId, selectedTabByPage[selectedPageId]),
+    [selectedPageId, selectedTabByPage],
+  );
   const reportOptions = useMemo(() => {
     const saved = reports.map((report) => ({
       id: report.id,
@@ -279,6 +308,10 @@ export function ReportAppShell({
   useEffect(() => {
     selectedPageRef.current = selectedPageId;
   }, [selectedPageId]);
+
+  useEffect(() => {
+    selectedTabByPageRef.current = selectedTabByPage;
+  }, [selectedTabByPage]);
 
   const loadExecSummary = useCallback(async (reportId: string, month: string) => {
     const cacheKey = `${reportId}:${month}`;
@@ -381,11 +414,14 @@ export function ReportAppShell({
     return () => window.removeEventListener("ta:request-upload", handleUploadRequest);
   }, []);
 
-  const syncUrl = useCallback((reportId: string, month: string, pageId: string, historyMode: "push" | "replace" = "push") => {
-    const url = buildCanonicalUrl(reportId, month, pageId);
-    const method = historyMode === "replace" ? "replaceState" : "pushState";
-    window.history[method]({}, "", url);
-  }, []);
+  const syncUrl = useCallback(
+    (reportId: string, month: string, pageId: string, tabId: string | null, historyMode: "push" | "replace" = "push") => {
+      const url = buildCanonicalUrl(reportId, month, pageId, tabId);
+      const method = historyMode === "replace" ? "replaceState" : "pushState";
+      window.history[method]({}, "", url);
+    },
+    [],
+  );
 
   const refreshReportList = useCallback(async (newReport?: AppReportRecord) => {
     try {
@@ -430,6 +466,7 @@ export function ReportAppShell({
       options: {
         month?: string | null;
         pageId?: string | null;
+        tabId?: string | null;
         historyMode?: "push" | "replace" | "none";
       } = {},
     ) => {
@@ -448,14 +485,19 @@ export function ReportAppShell({
         const report = await loadReport(reportId);
         const nextMonth = ensureMonth(report, options.month);
         const nextPageId = ensurePage(options.pageId);
+        const nextTabId = ensureTab(nextPageId, options.tabId);
 
         setActiveReport(report);
         setSelectedMonth(nextMonth);
         setSelectedPageId(nextPageId);
+        setSelectedTabByPage((current) => ({
+          ...current,
+          [nextPageId]: nextTabId,
+        }));
         setStatusMessage(`Viewing ${report.title}`);
 
         if (options.historyMode !== "none") {
-          syncUrl(report.id, nextMonth, nextPageId, options.historyMode ?? "push");
+          syncUrl(report.id, nextMonth, nextPageId, nextTabId, options.historyMode ?? "push");
         }
       } catch (error) {
         setUploadError(error instanceof Error ? error.message : "Failed to load report.");
@@ -471,11 +513,13 @@ export function ReportAppShell({
     const currentReport = activeReportRef.current;
     const nextReportId = params.get("report") ?? currentReport.id;
     const nextPageId = ensurePage(params.get("page"));
+    const nextTabId = ensureTab(nextPageId, params.get("tab"));
 
     if (nextReportId !== currentReport.id) {
       await activateReport(nextReportId, {
         month: params.get("month"),
         pageId: nextPageId,
+        tabId: nextTabId,
         historyMode: "none",
       });
       return;
@@ -483,6 +527,10 @@ export function ReportAppShell({
 
     setSelectedMonth(ensureMonth(currentReport, params.get("month")));
     setSelectedPageId(nextPageId);
+    setSelectedTabByPage((current) => ({
+      ...current,
+      [nextPageId]: nextTabId,
+    }));
   }, [activateReport]);
 
   useEffect(() => {
@@ -499,17 +547,24 @@ export function ReportAppShell({
     setSelectedExportIds([]);
     setExportError(null);
     setActiveExportTargets([]);
-  }, [activeReport.id, selectedMonth, selectedPageId]);
+  }, [activeReport.id, selectedMonth, selectedPageId, selectedTabId]);
 
   const handlePageChange = useCallback(
-    (pageId: string) => {
-      if (selectedPageRef.current === pageId) {
+    (pageId: string, tabId: string | null) => {
+      const resolvedTabId = ensureTab(pageId, tabId);
+      const currentTabId = ensureTab(pageId, selectedTabByPageRef.current[pageId]);
+
+      if (selectedPageRef.current === pageId && currentTabId === resolvedTabId) {
         return;
       }
 
       selectedPageRef.current = pageId;
       setSelectedPageId(pageId);
-      syncUrl(activeReportRef.current.id, selectedMonthRef.current, pageId);
+      setSelectedTabByPage((current) => ({
+        ...current,
+        [pageId]: resolvedTabId,
+      }));
+      syncUrl(activeReportRef.current.id, selectedMonthRef.current, pageId, resolvedTabId);
     },
     [syncUrl],
   );
@@ -543,6 +598,7 @@ export function ReportAppShell({
       data: templateData,
       activeMonth: selectedMonth,
       initialPageId: selectedPageRef.current,
+      initialTabId: ensureTab(selectedPageRef.current, selectedTabByPageRef.current[selectedPageRef.current]),
       showAllPages: false,
       attachGlobals: true,
       onPageChange: handlePageChange,
@@ -584,8 +640,8 @@ export function ReportAppShell({
   }, [isSummaryEditing, selectedPageId]);
 
   useEffect(() => {
-    controllerRef.current?.showPage(selectedPageId);
-  }, [selectedPageId]);
+    controllerRef.current?.showPage(selectedPageId, selectedTabId);
+  }, [selectedPageId, selectedTabId]);
 
   useEffect(() => {
     const shellRoot = mountRef.current?.querySelector(".shell");
@@ -731,7 +787,7 @@ export function ReportAppShell({
         <div style="display:flex;align-items:center;gap:12px;">
           <div style="width:28px;height:28px;border-radius:4px;background:#F57D00;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;">TA</div>
           <div>
-            <div style="font-size:15px;font-weight:700;color:#005292;">TeacherActive · Information Technology</div>
+            <div style="font-size:15px;font-weight:700;color:#005292;">TeacherActive · IT Reporting</div>
             <div style="font-size:11px;color:#9CA3AF;margin-top:2px;">${activeReportRef.current.title} · ${formatMonthLabel(selectedMonthRef.current)}</div>
           </div>
         </div>
@@ -767,7 +823,7 @@ export function ReportAppShell({
           buildClientExportFilename(
             activeReportRef.current.title,
             selectedMonthRef.current,
-            `${selectedPageRef.current}-selection`,
+            `${getSlideId(selectedPageRef.current, ensureTab(selectedPageRef.current, selectedTabByPageRef.current[selectedPageRef.current]))}-selection`,
             clientExportFormat,
           ),
         );
@@ -788,7 +844,7 @@ export function ReportAppShell({
       return;
     }
 
-    const activePage = shellRoot.querySelector(`#${selectedPageId}`);
+    const activePage = shellRoot.querySelector(`#${getSlideId(selectedPageId, selectedTabId)}`);
     if (!(activePage instanceof HTMLElement)) {
       return;
     }
@@ -868,13 +924,18 @@ export function ReportAppShell({
       setActiveExportTargets([]);
       cleanupCallbacks.forEach((cleanup) => cleanup());
     };
-  }, [activeReport.id, exportMode, exportSingleTarget, selectedExportIds, selectedMonth, selectedPageId]);
+  }, [activeReport.id, exportMode, exportSingleTarget, selectedExportIds, selectedMonth, selectedPageId, selectedTabId]);
 
   const handleMonthChange = useCallback(
     (month: string) => {
       const nextMonth = ensureMonth(activeReportRef.current, month);
       setSelectedMonth(nextMonth);
-      syncUrl(activeReportRef.current.id, nextMonth, selectedPageRef.current);
+      syncUrl(
+        activeReportRef.current.id,
+        nextMonth,
+        selectedPageRef.current,
+        ensureTab(selectedPageRef.current, selectedTabByPageRef.current[selectedPageRef.current]),
+      );
     },
     [syncUrl],
   );
@@ -884,6 +945,7 @@ export function ReportAppShell({
       await activateReport(reportId, {
         month: selectedMonthRef.current,
         pageId: selectedPageRef.current,
+        tabId: selectedTabByPageRef.current[selectedPageRef.current],
         historyMode: "push",
       });
     },
@@ -925,8 +987,9 @@ export function ReportAppShell({
         setActiveReport(payload.report);
         setSelectedMonth(payload.report.currentMonth);
         setSelectedPageId(nextPageId);
+        setSelectedTabByPage({});
         setStatusMessage(`Uploaded ${payload.report.originalFilename}`);
-        syncUrl(payload.report.id, payload.report.currentMonth, nextPageId);
+        syncUrl(payload.report.id, payload.report.currentMonth, nextPageId, null);
       } catch (error) {
         setUploadError(error instanceof Error ? error.message : "Upload failed.");
       } finally {
@@ -946,11 +1009,12 @@ export function ReportAppShell({
     [handleUpload],
   );
 
-  const downloadExport = useCallback(async (exportType: "page-png" | "full-pdf") => {
+  const downloadExport = useCallback(async (exportType: "page-png" | "full-pdf" | "full-pptx") => {
     setBusyExport(exportType);
     setExportError(null);
 
     try {
+      const activeTabId = ensureTab(selectedPageRef.current, selectedTabByPageRef.current[selectedPageRef.current]);
       const payload: Record<string, string> = {
         exportType,
         month: selectedMonthRef.current,
@@ -958,6 +1022,9 @@ export function ReportAppShell({
 
       if (exportType !== "full-pdf") {
         payload.pageId = selectedPageRef.current;
+        if (activeTabId) {
+          payload.tabId = activeTabId;
+        }
       }
 
       const response = await fetch(`/api/reports/${activeReportRef.current.id}/exports`, {
@@ -1150,7 +1217,7 @@ export function ReportAppShell({
           >
             {isUploading ? "Uploading workbook..." : "Upload workbook"}
           </button>
-          <a className="sidebar-link" href="/templates/IT_Exec_Reporting_Ingestion_Template_v3_dummy_data.xlsx">
+          <a className="sidebar-link" href="/templates/IT_Exec_Reporting_Ingestion_Template_v4_dummy_data.xlsx">
             Download template
           </a>
         </div>
@@ -1175,6 +1242,14 @@ export function ReportAppShell({
               {busyExport === "full-pdf" ? "Rendering..." : "Full PDF"}
             </button>
           </div>
+          <button
+            className="sidebar-button secondary"
+            disabled={busyExport !== null || busyClientExport !== null}
+            onClick={() => void downloadExport("full-pptx")}
+            type="button"
+          >
+            {busyExport === "full-pptx" ? "Rendering..." : "Full PPTX"}
+          </button>
           <button
             className={`sidebar-button ${exportMode ? "primary is-active" : "secondary"}`}
             disabled={busyExport !== null || busyClientExport !== null || activeExportTargets.length === 0}
@@ -1255,7 +1330,10 @@ export function ReportAppShell({
           type="button"
         >
           <div className="sidebar-report-title">Bundled Demo Report</div>
-          <div className="sidebar-report-sub">Prototype snapshot · 2026-06</div>
+          <div className="sidebar-report-meta">
+            <div className="sidebar-report-sub">Prototype snapshot · 2026-06</div>
+            <div className="sidebar-report-chip">Demo</div>
+          </div>
         </button>
 
         {reports.length === 0 ? (
@@ -1267,11 +1345,13 @@ export function ReportAppShell({
               disabled={isSwitchingReport || isUploading}
               key={report.id}
               onClick={() => void handleReportSelect(report.id)}
+              title={report.title}
               type="button"
             >
-              <div className="sidebar-report-title">{report.title}</div>
-              <div className="sidebar-report-sub">
-                {formatMonthLabel(report.currentMonth)} · v{report.templateVersion}
+              <div className="sidebar-report-title">{formatSidebarReportTitle(report.title, report.currentMonth)}</div>
+              <div className="sidebar-report-meta">
+                <div className="sidebar-report-sub">{formatMonthLabel(report.currentMonth)}</div>
+                <div className="sidebar-report-chip">v{report.templateVersion}</div>
               </div>
             </button>
           ))
