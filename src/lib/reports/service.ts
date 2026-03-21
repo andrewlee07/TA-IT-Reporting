@@ -11,9 +11,11 @@ import {
   createLocalReport,
   findLocalCarryForwardExecSummary,
   getLocalExecSummary,
+  getLocalPrepState,
   getLocalReport,
   listLocalReports,
   saveLocalExport,
+  upsertLocalPrepState,
   upsertLocalExecSummary,
 } from "@/lib/reports/local-report-store";
 import {
@@ -23,6 +25,11 @@ import {
   sanitizeExecSummaryHtml,
   type ExecSummaryState,
 } from "@/lib/reports/exec-summary";
+import {
+  buildReportPrepView,
+  filterAcknowledgeableCheckIds,
+  type ReportPrepView,
+} from "@/lib/reports/prep-center";
 import { parseWorkbookBuffer } from "@/lib/workbook/parser";
 import type { NormalizedReportSnapshot } from "@/lib/workbook/types";
 
@@ -399,6 +406,73 @@ export async function getBundledDemoSnapshot(): Promise<NormalizedReportSnapshot
   return cachedDemoSnapshot;
 }
 
+async function getOwnedExecSummaryForMonth(reportId: string, reportingMonth: string): Promise<ExecSummaryState> {
+  if (reportId === "demo") {
+    return createDemoExecSummary(reportingMonth);
+  }
+
+  const report = await getStoredReport(reportId);
+  if (!report) {
+    throw new Error("Report not found.");
+  }
+
+  if (!report.availableMonths.includes(reportingMonth)) {
+    throw new Error("Invalid month.");
+  }
+
+  return withLocalFallback(
+    async () => {
+      const prisma = getPrisma();
+      const explicit = await prisma.reportExecSummary.findUnique({
+        where: {
+          reportId_reportingMonth: {
+            reportId,
+            reportingMonth,
+          },
+        },
+      });
+
+      if (!explicit) {
+        return {
+          mode: "empty",
+          contentHtml: "",
+          excerpt: "",
+          updatedAt: null,
+          sourceReportId: null,
+        } satisfies ExecSummaryState;
+      }
+
+      return {
+        mode: "explicit",
+        contentHtml: explicit.contentHtml,
+        excerpt: explicit.excerpt,
+        updatedAt: explicit.updatedAt.toISOString(),
+        sourceReportId: explicit.sourceReportId ?? null,
+      } satisfies ExecSummaryState;
+    },
+    async () => {
+      const explicit = await getLocalExecSummary(reportId, reportingMonth);
+      if (!explicit) {
+        return {
+          mode: "empty",
+          contentHtml: "",
+          excerpt: "",
+          updatedAt: null,
+          sourceReportId: null,
+        } satisfies ExecSummaryState;
+      }
+
+      return {
+        mode: "explicit",
+        contentHtml: explicit.contentHtml,
+        excerpt: explicit.excerpt,
+        updatedAt: explicit.updatedAt,
+        sourceReportId: explicit.sourceReportId ?? null,
+      } satisfies ExecSummaryState;
+    },
+  );
+}
+
 export async function getExecSummaryState(reportId: string, reportingMonth: string): Promise<ExecSummaryState> {
   if (reportId === "demo") {
     return createDemoExecSummary(reportingMonth);
@@ -563,4 +637,138 @@ export async function saveExecSummary(reportId: string, reportingMonth: string, 
         sourceReportId,
       }),
   );
+}
+
+export async function getReportPrepView(reportId: string, reportingMonth: string): Promise<ReportPrepView> {
+  const mode = reportId === "demo" ? "demo-readonly" : "editable";
+  const snapshot =
+    reportId === "demo"
+      ? await getBundledDemoSnapshot()
+      : (await getStoredReport(reportId))?.snapshot;
+
+  if (!snapshot) {
+    throw new Error("Report not found.");
+  }
+
+  if (!snapshot.availableMonths.includes(reportingMonth)) {
+    throw new Error("Invalid month.");
+  }
+
+  const [currentSummary, previousMonthState] = await Promise.all([
+    getExecSummaryState(reportId, reportingMonth),
+    (async () => {
+      const currentIndex = snapshot.availableMonths.indexOf(reportingMonth);
+      if (currentIndex <= 0) {
+        return null;
+      }
+
+      const previousMonth = snapshot.availableMonths[currentIndex - 1];
+      return getOwnedExecSummaryForMonth(reportId, previousMonth);
+    })(),
+  ]);
+
+  if (reportId === "demo") {
+    return buildReportPrepView({
+      snapshot,
+      reportingMonth,
+      currentSummary,
+      previousMonthSummary: previousMonthState,
+      mode,
+      acknowledgedCheckIds: [],
+      updatedAt: null,
+    });
+  }
+
+  return withLocalFallback(
+    async () => {
+      const prisma = getPrisma();
+      const prepState = await prisma.reportPrepState.findUnique({
+        where: {
+          reportId_reportingMonth: {
+            reportId,
+            reportingMonth,
+          },
+        },
+      });
+
+      return buildReportPrepView({
+        snapshot,
+        reportingMonth,
+        currentSummary,
+        previousMonthSummary: previousMonthState,
+        mode,
+        acknowledgedCheckIds: (prepState?.acknowledgedCheckIds as string[] | null | undefined) ?? [],
+        updatedAt: prepState?.updatedAt.toISOString() ?? null,
+      });
+    },
+    async () => {
+      const prepState = await getLocalPrepState(reportId, reportingMonth);
+      return buildReportPrepView({
+        snapshot,
+        reportingMonth,
+        currentSummary,
+        previousMonthSummary: previousMonthState,
+        mode,
+        acknowledgedCheckIds: prepState?.acknowledgedCheckIds ?? [],
+        updatedAt: prepState?.updatedAt ?? null,
+      });
+    },
+  );
+}
+
+export async function saveReportPrepAcknowledgements(
+  reportId: string,
+  reportingMonth: string,
+  requestedCheckIds: string[],
+): Promise<ReportPrepView> {
+  if (reportId === "demo") {
+    throw new Error("The bundled demo prep center is read-only.");
+  }
+
+  const report = await getStoredReport(reportId);
+  if (!report) {
+    throw new Error("Report not found.");
+  }
+
+  if (!report.availableMonths.includes(reportingMonth)) {
+    throw new Error("Invalid month.");
+  }
+
+  const currentView = await getReportPrepView(reportId, reportingMonth);
+  const acknowledgedCheckIds = filterAcknowledgeableCheckIds(
+    [...currentView.readiness.checks, ...currentView.readiness.reviewedChecks],
+    requestedCheckIds,
+  );
+
+  await withLocalFallback(
+    async () => {
+      const prisma = getPrisma();
+      await prisma.reportPrepState.upsert({
+        where: {
+          reportId_reportingMonth: {
+            reportId,
+            reportingMonth,
+          },
+        },
+        update: {
+          acknowledgedCheckIds: toJsonValue(acknowledgedCheckIds),
+        },
+        create: {
+          reportId,
+          reportingMonth,
+          acknowledgedCheckIds: toJsonValue(acknowledgedCheckIds),
+        },
+      });
+    },
+    async () =>
+      {
+        await upsertLocalPrepState({
+          reportId,
+          reportingMonth,
+          acknowledgedCheckIds,
+        });
+      },
+  );
+
+  return getReportPrepView(reportId, reportingMonth);
 }

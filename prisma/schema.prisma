@@ -28,8 +28,22 @@ model Report {
   updatedAt         DateTime               @updatedAt
   exports           ReportExport[]
   execSummaries     ReportExecSummary[]
+  prepStates        ReportPrepState[]
 
   @@index([createdAt(sort: Desc)])
+}
+
+model ReportPrepState {
+  id                  String   @id @default(cuid())
+  reportId            String
+  reportingMonth      String
+  acknowledgedCheckIds Json    @db.JsonB
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  report              Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@unique([reportId, reportingMonth])
+  @@index([updatedAt(sort: Desc)])
 }
 
 model ReportExecSummary {

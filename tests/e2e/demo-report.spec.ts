@@ -83,7 +83,8 @@ test("bundled demo report renders directly in the app shell", async ({ page }) =
 
   await expect(page.locator("iframe")).toHaveCount(0);
   await expect(page.locator(".sidebar")).toBeVisible();
-  await expect(page.locator("#report-month-select")).toHaveValue("2026-06");
+  await expect(page.locator("select#report-month-select")).toHaveCount(0);
+  await expect(page.locator("#report-month-trigger")).toContainText("June 2026");
   await expect(page.locator(".nav-link.active")).toContainText("Executive Scorecard");
   await expect(page.locator(".report-page.active .ph-title")).toHaveText("Executive IT Scorecard");
   await expect(page.locator(".report-page.active .ph-title-accent")).toHaveText("Overview");
@@ -98,6 +99,39 @@ test("bundled demo report renders directly in the app shell", async ({ page }) =
 
   const boxShadow = await page.locator(".report-page.active").evaluate((element) => getComputedStyle(element).boxShadow);
   expect(boxShadow).toBe("none");
+});
+
+test("reporting period uses a branded month dropdown with keyboard support", async ({ page }) => {
+  await page.goto("/?report=demo&month=2026-06&page=p-exec");
+
+  const trigger = page.locator("#report-month-trigger");
+  await expect(trigger).toContainText("June 2026");
+  await trigger.click();
+
+  const listbox = page.locator("#report-month-listbox");
+  await expect(listbox).toBeVisible();
+  await expect(page.locator("#report-month-option-2026-06 .month-picker-option-text")).toHaveCSS("color", "rgb(255, 255, 255)");
+  await expect(page.locator("#report-month-option-2026-05 .month-picker-option-text")).toHaveCSS("color", "rgba(245, 125, 0, 0.92)");
+  await expect(page.locator("#report-month-option-2026-06")).toContainText("Current");
+
+  await page.locator("#report-month-option-2026-04").click();
+  await expect(trigger).toContainText("April 2026");
+  await expect(listbox).toHaveCount(0);
+  await expect(page).toHaveURL(/month=2026-04/);
+
+  await trigger.focus();
+  await page.keyboard.press("ArrowDown");
+  await expect(listbox).toBeVisible();
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("Enter");
+  await expect(trigger).toContainText("March 2026");
+  await expect(page).toHaveURL(/month=2026-03/);
+
+  await trigger.focus();
+  await page.keyboard.press("Enter");
+  await expect(listbox).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(listbox).toHaveCount(0);
 });
 
 test("major KPI strips render sparkline trends derived from workbook history", async ({ page }) => {
@@ -211,6 +245,93 @@ test("exec summaries carry forward for refreshed uploads in the same report fami
   const payload = (await summaryResponse.json()) as { summary: { mode: string; contentHtml: string } };
   expect(payload.summary.mode).toBe("carried-forward");
   expect(payload.summary.contentHtml).toContain("Carry-forward");
+});
+
+test("prep API returns readiness data and persists acknowledged warnings for saved reports", async ({ request }) => {
+  const originalFilename = `prep-warning-seed-${Date.now()}.xlsx`;
+  const seedReportId = await seedDemoReport(originalFilename);
+
+  const saveResponse = await request.put(`/api/reports/${seedReportId}/exec-summary?month=2026-06`, {
+    data: {
+      contentHtml: "<p><strong>Carry-forward</strong> readiness warning seed.</p>",
+    },
+  });
+  expect(saveResponse.ok()).toBeTruthy();
+
+  const refreshedReportId = await seedDemoReport(originalFilename);
+  const prepResponse = await request.get(`/api/reports/${refreshedReportId}/prep?month=2026-06`);
+  expect(prepResponse.ok()).toBeTruthy();
+
+  const prepPayload = (await prepResponse.json()) as { prep: { readiness: { checks: Array<{ id: string }> } } };
+  expect(prepPayload.prep.readiness.checks.some((check) => check.id === "summary-carried-forward")).toBe(true);
+
+  const ackResponse = await request.put(`/api/reports/${refreshedReportId}/prep?month=2026-06`, {
+    data: {
+      acknowledgedCheckIds: ["summary-carried-forward"],
+    },
+  });
+  expect(ackResponse.ok()).toBeTruthy();
+
+  const ackPayload = (await ackResponse.json()) as {
+    prep: { acknowledgedCheckIds: string[]; readiness: { reviewedChecks: Array<{ id: string }> } };
+  };
+  expect(ackPayload.prep.acknowledgedCheckIds).toContain("summary-carried-forward");
+  expect(ackPayload.prep.readiness.reviewedChecks.some((check) => check.id === "summary-carried-forward")).toBe(true);
+
+  const demoWriteResponse = await request.put("/api/reports/demo/prep?month=2026-06", {
+    data: {
+      acknowledgedCheckIds: ["summary-carried-forward"],
+    },
+  });
+  expect(demoWriteResponse.status()).toBe(400);
+});
+
+test("readiness drawer can acknowledge a warning and persist it after reload", async ({ page, request }) => {
+  const originalFilename = `prep-ui-seed-${Date.now()}.xlsx`;
+  const sourceReportId = await seedDemoReport(originalFilename);
+
+  const saveResponse = await request.put(`/api/reports/${sourceReportId}/exec-summary?month=2026-06`, {
+    data: {
+      contentHtml: "<p>Carry-forward warning for the readiness center.</p>",
+    },
+  });
+  expect(saveResponse.ok()).toBeTruthy();
+
+  const refreshedReportId = await seedDemoReport(originalFilename);
+  await page.goto(`/?report=${refreshedReportId}&month=2026-06&page=p-exec&tab=overview`);
+
+  await page.getByRole("button", { name: "Readiness & Rollover" }).click();
+  const drawer = page.getByRole("dialog", { name: "Readiness and rollover center" });
+  await expect(drawer).toBeVisible();
+  await expect(drawer.getByText("Exec summary is still carried forward")).toBeVisible();
+  await page.getByRole("button", { name: "Acknowledge" }).first().click();
+  await expect(page.locator(".prep-check-card.is-reviewed .prep-check-title")).toContainText("Exec summary is still carried forward");
+
+  await page.reload();
+  await page.getByRole("button", { name: "Readiness & Rollover" }).click();
+  await expect(page.locator(".prep-check-card.is-reviewed .prep-check-title")).toContainText("Exec summary is still carried forward");
+});
+
+test("rollover tab can copy the previous month summary into the current month editor", async ({ page, request }) => {
+  const reportId = await seedDemoReport(`rollover-summary-seed-${Date.now()}.xlsx`);
+
+  const saveResponse = await request.put(`/api/reports/${reportId}/exec-summary?month=2026-05`, {
+    data: {
+      contentHtml: "<p>Previous month summary draft for rollover.</p>",
+    },
+  });
+  expect(saveResponse.ok()).toBeTruthy();
+
+  await page.goto(`/?report=${reportId}&month=2026-06&page=p-exec&tab=overview`);
+
+  await page.getByRole("button", { name: "Readiness & Rollover" }).click();
+  const drawer = page.getByRole("dialog", { name: "Readiness and rollover center" });
+  await drawer.getByRole("button", { name: "Rollover", exact: true }).click();
+  await page.getByRole("button", { name: "Copy previous month summary" }).click();
+
+  await expect(page).toHaveURL(/page=p-summary$/);
+  await expect(page.locator(".summary-editor")).toBeVisible();
+  await expect(page.locator(".summary-editor")).toContainText("Previous month summary draft for rollover.");
 });
 
 test("sidebar collapses into an icon rail and persists across refresh", async ({ page }) => {

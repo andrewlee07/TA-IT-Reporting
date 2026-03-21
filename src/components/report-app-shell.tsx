@@ -1,13 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import Chart from "chart.js/auto";
 
+import { ReportPrepDrawer } from "@/components/report-prep-drawer";
 import { REPORT_PAGES, getSlideId, hasPageTabs, isValidPageId, resolveTabId } from "@/lib/report/blocks";
 import { buildTemplateData, formatMonthLabel } from "@/lib/report/template-data";
 import { initReportApp } from "@/lib/report/runtime";
 import type { ExecSummaryState } from "@/lib/reports/exec-summary";
+import type { ReportPrepView } from "@/lib/reports/prep-center";
 import type { NormalizedReportSnapshot } from "@/lib/workbook/types";
 
 interface ReportListEntry {
@@ -63,6 +65,11 @@ interface ReportApiPayload {
 
 interface ExecSummaryApiPayload {
   summary?: ExecSummaryState;
+  error?: string;
+}
+
+interface PrepApiPayload {
+  prep?: ReportPrepView;
   error?: string;
 }
 
@@ -149,6 +156,220 @@ interface ExecSummaryEditorProps {
   onSave: (contentHtml: string) => Promise<void>;
 }
 
+interface MonthPickerProps {
+  availableMonths: string[];
+  selectedMonth: string;
+  onChange: (month: string) => void;
+}
+
+const MONTH_PICKER_LABEL_ID = "report-month-picker-label";
+const MONTH_PICKER_TRIGGER_ID = "report-month-trigger";
+const MONTH_PICKER_LISTBOX_ID = "report-month-listbox";
+
+function MonthPicker({ availableMonths, selectedMonth, onChange }: MonthPickerProps) {
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const listboxRef = useRef<HTMLDivElement | null>(null);
+  const selectedIndex = Math.max(availableMonths.indexOf(selectedMonth), 0);
+  const [isOpen, setIsOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(selectedIndex);
+
+  const closePicker = useCallback((restoreFocus = true) => {
+    setIsOpen(false);
+
+    if (restoreFocus) {
+      window.requestAnimationFrame(() => {
+        buttonRef.current?.focus();
+      });
+    }
+  }, []);
+
+  const openPicker = useCallback(
+    (nextIndex = selectedIndex) => {
+      const boundedIndex = Math.min(Math.max(nextIndex, 0), Math.max(availableMonths.length - 1, 0));
+      setActiveIndex(boundedIndex);
+      setIsOpen(true);
+    },
+    [availableMonths.length, selectedIndex],
+  );
+
+  const commitSelection = useCallback(
+    (index: number) => {
+      const nextMonth = availableMonths[index];
+      if (!nextMonth) {
+        return;
+      }
+
+      onChange(nextMonth);
+      setActiveIndex(index);
+      closePicker();
+    },
+    [availableMonths, closePicker, onChange],
+  );
+
+  useEffect(() => {
+    setActiveIndex(selectedIndex);
+  }, [selectedIndex]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      listboxRef.current?.focus();
+    });
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        closePicker(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [closePicker, isOpen]);
+
+  const handleTriggerKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLButtonElement>) => {
+      switch (event.key) {
+        case "ArrowDown":
+          event.preventDefault();
+          openPicker(Math.min(selectedIndex + 1, availableMonths.length - 1));
+          return;
+        case "ArrowUp":
+          event.preventDefault();
+          openPicker(Math.max(selectedIndex - 1, 0));
+          return;
+        case "Enter":
+        case " ":
+          event.preventDefault();
+          if (isOpen) {
+            closePicker();
+          } else {
+            openPicker(selectedIndex);
+          }
+          return;
+        case "Escape":
+          if (isOpen) {
+            event.preventDefault();
+            closePicker();
+          }
+          return;
+        default:
+          return;
+      }
+    },
+    [availableMonths.length, closePicker, isOpen, openPicker, selectedIndex],
+  );
+
+  const handleListboxKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      switch (event.key) {
+        case "ArrowDown":
+          event.preventDefault();
+          setActiveIndex((current) => Math.min(current + 1, availableMonths.length - 1));
+          return;
+        case "ArrowUp":
+          event.preventDefault();
+          setActiveIndex((current) => Math.max(current - 1, 0));
+          return;
+        case "Home":
+          event.preventDefault();
+          setActiveIndex(0);
+          return;
+        case "End":
+          event.preventDefault();
+          setActiveIndex(Math.max(availableMonths.length - 1, 0));
+          return;
+        case "Enter":
+        case " ":
+          event.preventDefault();
+          commitSelection(activeIndex);
+          return;
+        case "Escape":
+          event.preventDefault();
+          closePicker();
+          return;
+        case "Tab":
+          closePicker(false);
+          return;
+        default:
+          return;
+      }
+    },
+    [activeIndex, availableMonths.length, closePicker, commitSelection],
+  );
+
+  return (
+    <div className={`sidebar-month-picker${isOpen ? " is-open" : ""}`} ref={rootRef}>
+      <label className="sidebar-field-label" id={MONTH_PICKER_LABEL_ID}>
+        Reporting Period
+      </label>
+      <button
+        aria-controls={MONTH_PICKER_LISTBOX_ID}
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
+        aria-labelledby={`${MONTH_PICKER_LABEL_ID} ${MONTH_PICKER_TRIGGER_ID}`}
+        className="month-picker-trigger"
+        id={MONTH_PICKER_TRIGGER_ID}
+        onClick={() => {
+          if (isOpen) {
+            closePicker(false);
+            return;
+          }
+          openPicker(selectedIndex);
+        }}
+        onKeyDown={handleTriggerKeyDown}
+        ref={buttonRef}
+        type="button"
+      >
+        <span className="month-picker-trigger-value">{formatMonthLabel(selectedMonth)}</span>
+        <span aria-hidden="true" className="month-picker-trigger-icon">
+          <svg fill="none" viewBox="0 0 12 12" xmlns="http://www.w3.org/2000/svg">
+            <path d="M2 4.25 6 8l4-3.75" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
+          </svg>
+        </span>
+      </button>
+
+      {isOpen ? (
+        <div
+          aria-activedescendant={`report-month-option-${availableMonths[activeIndex]}`}
+          aria-labelledby={MONTH_PICKER_LABEL_ID}
+          className="month-picker-panel"
+          id={MONTH_PICKER_LISTBOX_ID}
+          onKeyDown={handleListboxKeyDown}
+          ref={listboxRef}
+          role="listbox"
+          tabIndex={-1}
+        >
+          {availableMonths.map((month, index) => {
+            const isSelected = month === selectedMonth;
+            const isActive = index === activeIndex;
+
+            return (
+              <button
+                aria-selected={isSelected}
+                className={`month-picker-option${isSelected ? " is-selected" : ""}${isActive ? " is-active" : ""}`}
+                id={`report-month-option-${month}`}
+                key={month}
+                onClick={() => commitSelection(index)}
+                onMouseEnter={() => setActiveIndex(index)}
+                onMouseDown={(event) => event.preventDefault()}
+                role="option"
+                type="button"
+              >
+                <span className="month-picker-option-text">{formatMonthLabel(month)}</span>
+                {isSelected ? <span className="month-picker-option-badge">Current</span> : null}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function ExecSummaryEditor({ initialHtml, isSaving, onCancel, onSave }: ExecSummaryEditorProps) {
   const editorRef = useRef<HTMLDivElement | null>(null);
   const [value, setValue] = useState(initialHtml);
@@ -231,6 +452,7 @@ export function ReportAppShell({
   const controllerRef = useRef<ReturnType<typeof initReportApp> | null>(null);
   const reportCacheRef = useRef(new Map<string, AppReportRecord>([[initialReport.id, initialReport]]));
   const execSummaryCacheRef = useRef(new Map<string, ExecSummaryState>([[`${initialReport.id}:${initialMonth}`, initialExecSummary]]));
+  const prepCacheRef = useRef(new Map<string, ReportPrepView>());
   const activeReportRef = useRef(initialReport);
   const selectedMonthRef = useRef(initialMonth);
   const selectedPageRef = useRef(initialPageId);
@@ -273,6 +495,11 @@ export function ReportAppShell({
   const [isSummarySaving, setIsSummarySaving] = useState(false);
   const [isSummaryEditing, setIsSummaryEditing] = useState(false);
   const [summaryEditorHtml, setSummaryEditorHtml] = useState(initialExecSummary.contentHtml);
+  const [prepView, setPrepView] = useState<ReportPrepView | null>(null);
+  const [isPrepLoading, setIsPrepLoading] = useState(false);
+  const [isPrepSaving, setIsPrepSaving] = useState(false);
+  const [isPrepOpen, setIsPrepOpen] = useState(false);
+  const [activePrepTab, setActivePrepTab] = useState<"readiness" | "rollover">("readiness");
 
   const templateData = useMemo(
     () => buildTemplateData(activeReport.snapshot, selectedMonth, execSummary),
@@ -361,13 +588,46 @@ export function ReportAppShell({
     }
   }, []);
 
+  const loadPrep = useCallback(async (reportId: string, month: string) => {
+    const cacheKey = `${reportId}:${month}`;
+    const cached = prepCacheRef.current.get(cacheKey);
+
+    if (cached) {
+      setPrepView(cached);
+      setIsPrepLoading(false);
+      return;
+    }
+
+    setIsPrepLoading(true);
+
+    try {
+      const payload = await fetchJson<PrepApiPayload>(`/api/reports/${reportId}/prep?month=${encodeURIComponent(month)}`);
+      const nextPrep = payload.prep ?? null;
+      if (nextPrep) {
+        prepCacheRef.current.set(cacheKey, nextPrep);
+      }
+      setPrepView(nextPrep);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Failed to load readiness data.");
+      setPrepView(null);
+    } finally {
+      setIsPrepLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     setIsSummaryEditing(false);
     void loadExecSummary(activeReport.id, selectedMonth);
   }, [activeReport.id, loadExecSummary, selectedMonth]);
 
   useEffect(() => {
-    setIsSummaryEditing(false);
+    void loadPrep(activeReport.id, selectedMonth);
+  }, [activeReport.id, loadPrep, selectedMonth]);
+
+  useEffect(() => {
+    if (selectedPageId !== "p-summary") {
+      setIsSummaryEditing(false);
+    }
   }, [selectedPageId]);
 
   useEffect(() => {
@@ -1102,6 +1362,8 @@ export function ReportAppShell({
         setExecSummary(payload.summary);
         setSummaryEditorHtml(payload.summary.contentHtml);
         setIsSummaryEditing(false);
+        prepCacheRef.current.delete(cacheKey);
+        void loadPrep(activeReportRef.current.id, selectedMonthRef.current);
         setStatusMessage("Exec summary saved.");
       } catch (error) {
         setUploadError(error instanceof Error ? error.message : "Failed to save exec summary.");
@@ -1109,29 +1371,99 @@ export function ReportAppShell({
         setIsSummarySaving(false);
       }
     },
+    [loadPrep],
+  );
+
+  const togglePrepDrawer = useCallback(() => {
+    setIsSidebarCollapsed(false);
+    setIsPrepOpen((current) => !current);
+  }, []);
+
+  const jumpToPrepTarget = useCallback(
+    (pageId: string, tabId: string | null) => {
+      handlePageChange(pageId, tabId);
+    },
+    [handlePageChange],
+  );
+
+  const saveAcknowledgedChecks = useCallback(
+    async (acknowledgedCheckIds: string[]) => {
+      if (activeReportRef.current.id === "demo") {
+        return;
+      }
+
+      setIsPrepSaving(true);
+      setUploadError(null);
+
+      try {
+        const payload = await fetchJson<PrepApiPayload>(
+          `/api/reports/${activeReportRef.current.id}/prep?month=${encodeURIComponent(selectedMonthRef.current)}`,
+          {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ acknowledgedCheckIds }),
+          },
+        );
+
+        if (!payload.prep) {
+          throw new Error("Failed to save readiness review state.");
+        }
+
+        const cacheKey = `${activeReportRef.current.id}:${selectedMonthRef.current}`;
+        prepCacheRef.current.set(cacheKey, payload.prep);
+        setPrepView(payload.prep);
+      } catch (error) {
+        setUploadError(error instanceof Error ? error.message : "Failed to save readiness review state.");
+      } finally {
+        setIsPrepSaving(false);
+      }
+    },
     [],
   );
+
+  const toggleAcknowledgedCheck = useCallback(
+    (checkId: string, nextAcknowledged: boolean) => {
+      const currentPrep = prepView;
+      if (!currentPrep) {
+        return;
+      }
+
+      const nextIds = nextAcknowledged
+        ? [...currentPrep.acknowledgedCheckIds, checkId]
+        : currentPrep.acknowledgedCheckIds.filter((id) => id !== checkId);
+
+      void saveAcknowledgedChecks(nextIds);
+    },
+    [prepView, saveAcknowledgedChecks],
+  );
+
+  const copyPreviousMonthSummary = useCallback(() => {
+    const previousSummary = prepView?.rollover.previousExecSummary;
+    if (!previousSummary?.available || activeReportRef.current.id === "demo") {
+      return;
+    }
+
+    setSummaryEditorHtml(previousSummary.contentHtml);
+    setIsSummaryEditing(true);
+    selectedPageRef.current = "p-summary";
+    selectedTabByPageRef.current = {
+      ...selectedTabByPageRef.current,
+      "p-summary": null,
+    };
+    setSelectedPageId("p-summary");
+    setSelectedTabByPage((current) => ({
+      ...current,
+      "p-summary": null,
+    }));
+    syncUrl(activeReportRef.current.id, selectedMonthRef.current, "p-summary", null);
+    setIsPrepOpen(false);
+    setStatusMessage(`Copied ${previousSummary.monthLabel} summary into the editor.`);
+  }, [prepView, syncUrl]);
 
   const periodPortal =
     targets.period &&
     createPortal(
-      <div className="sidebar-stack-tight">
-        <label className="sidebar-field-label" htmlFor="report-month-select">
-          Reporting Period
-        </label>
-        <select
-          className="sidebar-select"
-          id="report-month-select"
-          onChange={(event) => handleMonthChange(event.target.value)}
-          value={selectedMonth}
-        >
-          {activeReport.availableMonths.map((month) => (
-            <option key={month} value={month}>
-              {formatMonthLabel(month)}
-            </option>
-          ))}
-        </select>
-      </div>,
+      <MonthPicker availableMonths={activeReport.availableMonths} onChange={handleMonthChange} selectedMonth={selectedMonth} />,
       targets.period,
     );
 
@@ -1198,6 +1530,25 @@ export function ReportAppShell({
             </button>
           </div>
           <div className="sidebar-meta">Collapsed rail style</div>
+        </div>
+
+        <div className="sidebar-stack-tight">
+          <span className="sidebar-field-label">Author Workspace</span>
+          <button
+            className={`sidebar-button ${isPrepOpen ? "primary is-active" : "secondary"}`}
+            disabled={isUploading || isSwitchingReport || isPrepSaving}
+            onClick={togglePrepDrawer}
+            type="button"
+          >
+            {isPrepOpen ? "Close Readiness Center" : "Readiness & Rollover"}
+          </button>
+          <div className="sidebar-meta">
+            {isPrepLoading || !prepView
+              ? "Loading author checks..."
+              : prepView.readiness.summary.status === "ready"
+                ? "Ready to export"
+                : `${prepView.readiness.summary.blockingCount} blocking · ${prepView.readiness.summary.warningCount} warning${prepView.readiness.summary.warningCount === 1 ? "" : "s"}`}
+          </div>
         </div>
 
         <div className="sidebar-stack-tight">
@@ -1418,6 +1769,18 @@ export function ReportAppShell({
       {reportsPortal}
       {summaryControlsPortal}
       {summaryEditorPortal}
+      <ReportPrepDrawer
+        activeTab={activePrepTab}
+        isLoading={isPrepLoading}
+        isOpen={isPrepOpen}
+        isSaving={isPrepSaving}
+        onClose={() => setIsPrepOpen(false)}
+        onCopyPreviousSummary={copyPreviousMonthSummary}
+        onJump={jumpToPrepTarget}
+        onTabChange={setActivePrepTab}
+        onToggleAcknowledged={toggleAcknowledgedCheck}
+        prep={prepView}
+      />
     </>
   );
 }
