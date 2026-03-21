@@ -3262,9 +3262,9 @@ export function PlatformStudio({
 
       <main className={styles.studioMain}>
         <nav className={styles.breadcrumb}>
-          <span>Studio</span>
+          <button type="button" className={styles.breadcrumbLink} onClick={() => { setActiveTab(0); window.scrollTo({ top: 0, behavior: "smooth" }); }}>Studio</button>
           <span className={styles.breadcrumbSep}>/</span>
-          <span>{activeWorkspace.label}</span>
+          <button type="button" className={styles.breadcrumbLink} onClick={() => setActiveTab(0)}>{activeWorkspace.label}</button>
           <span className={styles.breadcrumbSep}>/</span>
           <span className={styles.breadcrumbActive}>{WORKSPACE_TABS[workspace][activeTab]}</span>
         </nav>
@@ -3300,6 +3300,17 @@ export function PlatformStudio({
 
         {message ? <div className={styles.successBanner}>{message}</div> : null}
         {error ? <div className={styles.errorBanner}>{error}</div> : null}
+
+        {renderTabBar()}
+
+        {workspace === "data-model" ? renderDataModelWorkspace() : null}
+        {workspace === "pages" ? renderPagesWorkspace() : null}
+        {workspace === "navigation" ? renderNavigationWorkspace() : null}
+        {workspace === "workflows" ? renderWorkflowsWorkspace() : null}
+        {workspace === "agents" ? renderAgentsWorkspace() : null}
+        {workspace === "models" ? renderModelsWorkspace() : null}
+        {workspace === "security" ? renderSecurityWorkspace() : null}
+        {workspace === "audit" ? renderAuditWorkspace() : null}
 
         {publishPreview ? (
           <section className={styles.publishPreviewStrip}>
@@ -3357,17 +3368,6 @@ export function PlatformStudio({
             </div>
           </section>
         ) : null}
-
-        {renderTabBar()}
-
-        {workspace === "data-model" ? renderDataModelWorkspace() : null}
-        {workspace === "pages" ? renderPagesWorkspace() : null}
-        {workspace === "navigation" ? renderNavigationWorkspace() : null}
-        {workspace === "workflows" ? renderWorkflowsWorkspace() : null}
-        {workspace === "agents" ? renderAgentsWorkspace() : null}
-        {workspace === "models" ? renderModelsWorkspace() : null}
-        {workspace === "security" ? renderSecurityWorkspace() : null}
-        {workspace === "audit" ? renderAuditWorkspace() : null}
       </main>
     </div>
   );

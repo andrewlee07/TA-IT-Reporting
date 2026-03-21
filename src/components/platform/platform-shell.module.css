@@ -16,12 +16,37 @@
   --success-soft: #e8f6f2;
   --danger: #9f2d22;
   --danger-soft: #fdeceb;
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+
+  /* Shadows */
+  --shadow-xs: 0 1px 2px rgba(17, 24, 39, 0.04);
+  --shadow-sm: 0 1px 3px rgba(17, 24, 39, 0.06), 0 1px 2px rgba(17, 24, 39, 0.04);
+  --shadow-md: 0 4px 6px -1px rgba(17, 24, 39, 0.06), 0 2px 4px -2px rgba(17, 24, 39, 0.04);
+  --shadow-lg: 0 10px 15px -3px rgba(17, 24, 39, 0.06), 0 4px 6px -4px rgba(17, 24, 39, 0.04);
+  --shadow-xl: 0 20px 25px -5px rgba(17, 24, 39, 0.08), 0 8px 10px -6px rgba(17, 24, 39, 0.04);
+  --shadow-hover: 0 10px 24px -4px rgba(17, 24, 39, 0.1), 0 4px 8px -2px rgba(17, 24, 39, 0.05);
+
+  /* Easing */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
   display: flex;
   min-height: 100vh;
   color: var(--text);
   background: #ffffff;
-  font-family: Arial, sans-serif;
+  font-family: var(--font-inter, 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
   -webkit-font-smoothing: antialiased;
+}
+
+/* ── Focus-visible ── */
+.studioShell :focus-visible,
+.runtimeShell :focus-visible {
+  outline: 2px solid rgba(0, 82, 146, 0.4);
+  outline-offset: 2px;
 }
 
 .studioSidebar,
@@ -39,13 +64,31 @@
   height: 100vh;
   overflow-y: auto;
   overflow-x: hidden;
+  box-shadow: 2px 0 12px rgba(0, 0, 0, 0.08);
   transition: width 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ── Sidebar scrollbar (dark) ── */
+.studioSidebar::-webkit-scrollbar,
+.runtimeSidebar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.studioSidebar::-webkit-scrollbar-thumb,
+.runtimeSidebar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+}
+
+.studioSidebar::-webkit-scrollbar-track,
+.runtimeSidebar::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .brandBlock {
   display: grid;
   gap: 12px;
-  padding: 18px 18px 16px;
+  padding: 20px 20px 18px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
@@ -58,7 +101,7 @@
 .brandMark {
   width: 32px;
   height: 32px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   background: var(--orange);
   display: inline-flex;
   align-items: center;
@@ -77,6 +120,7 @@
   margin: 0;
   font-size: 13px;
   font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 .sidebarSub {
@@ -87,7 +131,7 @@
 
 .sidebarModePill {
   padding: 8px 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.06);
   color: var(--orange);
   font-size: 10px;
@@ -99,7 +143,7 @@
 .sidebarSection {
   display: grid;
   gap: 8px;
-  padding: 0 14px;
+  padding: 0 16px;
 }
 
 .sidebarLabel {
@@ -116,7 +160,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 10px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.06);
   font-size: 10px;
   line-height: 1.4;
@@ -133,7 +177,7 @@
 
 .sidebarPanel {
   padding: 10px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.04);
   color: rgba(255, 255, 255, 0.68);
   font-size: 10px;
@@ -162,7 +206,7 @@
   padding: 7px 14px;
   color: inherit;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition: background 0.15s var(--ease-out), border-color 0.15s var(--ease-out), color 0.15s var(--ease-out);
 }
 
 .navItem:hover,
@@ -183,12 +227,12 @@
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.06em;
-  transition: width 0.2s ease, height 0.2s ease, border-radius 0.2s ease, font-size 0.2s ease;
+  transition: width 0.2s var(--ease-out), height 0.2s var(--ease-out), border-radius 0.2s var(--ease-out), font-size 0.2s var(--ease-out);
 }
 
 .navCopy {
   min-width: 0;
-  transition: opacity 0.18s ease;
+  transition: opacity 0.18s var(--ease-out);
 }
 
 .navCopy span {
@@ -219,17 +263,18 @@
 .activeListItem {
   border: 1px solid var(--rule);
   background: var(--surface-alt);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   text-align: left;
   padding: 12px 14px;
   color: inherit;
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+  transition: border-color 0.15s var(--ease-out), background 0.15s var(--ease-out), transform 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out);
 }
 
 .listItem:hover,
 .activeListItem:hover {
   transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
 }
 
 .listItem span,
@@ -257,13 +302,13 @@
 .ghostButtonDanger,
 .secondaryButton,
 .primaryButton {
-  min-height: 34px;
-  border-radius: 6px;
-  padding: 0 12px;
+  min-height: 36px;
+  border-radius: var(--radius-md);
+  padding: 0 14px;
   font-size: 11px;
   font-weight: 700;
   cursor: pointer;
-  transition: transform 0.16s ease, filter 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+  transition: transform 0.16s var(--ease-out), box-shadow 0.16s var(--ease-out), filter 0.16s var(--ease-out), border-color 0.16s var(--ease-out), background 0.16s var(--ease-out);
   text-decoration: none;
 }
 
@@ -273,17 +318,34 @@
 .secondaryButton:hover,
 .primaryButton:hover {
   transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.secondaryLink:active,
+.ghostButton:active,
+.ghostButtonDanger:active,
+.secondaryButton:active,
+.primaryButton:active {
+  transform: translateY(0) scale(0.98);
+  box-shadow: none;
+  transition-duration: 0.08s;
 }
 
 .primaryButton {
   border: 1px solid var(--orange);
   background: var(--orange);
   color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), var(--shadow-xs);
+}
+
+.primaryButton:hover {
+  filter: brightness(1.06);
 }
 
 .primaryButton:disabled {
   cursor: not-allowed;
-  filter: grayscale(0.35);
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 .secondaryButton,
@@ -325,7 +387,7 @@
 .studioMain,
 .runtimeMain {
   flex: 1;
-  padding: 14px 16px 14px 10px;
+  padding: 16px 20px 20px 16px;
   display: grid;
   align-content: start;
   gap: 16px;
@@ -338,10 +400,11 @@
   display: flex;
   justify-content: space-between;
   gap: 20px;
-  padding: 22px 24px;
+  padding: 24px 28px;
   border: 1px solid var(--rule);
-  border-radius: 2px;
+  border-radius: var(--radius-md);
   background: #fff;
+  box-shadow: var(--shadow-sm);
 }
 
 .headerLead {
@@ -391,8 +454,8 @@
 }
 
 .metricCard {
-  padding: 12px 14px;
-  border-radius: 4px;
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--rule);
   background: var(--surface-alt);
 }
@@ -414,8 +477,8 @@
 }
 
 .headerNote {
-  padding: 12px 14px;
-  border-radius: 4px;
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
   border: 1px solid rgba(0, 82, 146, 0.12);
   background: var(--blue-soft);
 }
@@ -448,10 +511,10 @@
 
 .successBanner,
 .errorBanner {
-  padding: 12px 14px;
-  border-radius: 4px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .successBanner {
@@ -482,9 +545,9 @@
 .auditRow,
 .fieldCard {
   border: 1px solid var(--rule);
-  border-radius: 2px;
+  border-radius: var(--radius-md);
   background: #fff;
-  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.04);
+  box-shadow: var(--shadow-sm);
 }
 
 .panel,
@@ -492,7 +555,7 @@
 .runtimeCard,
 .runtimeHero,
 .runtimeSection {
-  padding: 18px 20px;
+  padding: 20px 24px;
 }
 
 .panelWide {
@@ -523,7 +586,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   padding: 5px 10px;
   background: var(--orange-soft);
   color: var(--orange);
@@ -570,14 +633,14 @@
 .inlineSelect {
   width: 100%;
   border: 1px solid var(--rule);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: #fff;
   color: var(--text);
-  min-height: 38px;
-  padding: 8px 10px;
+  min-height: 40px;
+  padding: 8px 12px;
   font: inherit;
   font-size: 13px;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out);
 }
 
 .input:focus,
@@ -587,7 +650,13 @@
 .inlineSelect:focus {
   outline: none;
   border-color: rgba(0, 82, 146, 0.48);
-  box-shadow: 0 0 0 2px rgba(0, 82, 146, 0.12);
+  box-shadow: 0 0 0 3px rgba(0, 82, 146, 0.1);
+}
+
+.input::placeholder,
+.textarea::placeholder {
+  color: var(--text-muted);
+  opacity: 0.7;
 }
 
 .textarea {
@@ -605,7 +674,7 @@
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--rule);
   background: var(--surface-alt);
   font-size: 12px;
@@ -630,7 +699,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  padding: 12px 14px;
+  padding: 14px 16px;
 }
 
 .fieldCard strong,
@@ -671,7 +740,7 @@
 
 .layoutComponentCard {
   border: 1px dashed rgba(0, 82, 146, 0.22);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: var(--surface-alt);
 }
 
@@ -715,7 +784,7 @@
 
 .table th,
 .table td {
-  padding: 10px 8px;
+  padding: 12px 10px;
   border-bottom: 1px solid var(--rule);
   text-align: left;
   font-size: 12px;
@@ -727,14 +796,27 @@
   text-transform: uppercase;
   letter-spacing: 0.12em;
   color: var(--text-soft);
+  border-bottom: 2px solid var(--rule);
+  background: var(--surface-alt);
+}
+
+.table tbody tr {
+  transition: background 0.12s var(--ease-out);
+}
+
+.table tbody tr:hover {
+  background: rgba(0, 82, 146, 0.03);
 }
 
 .emptyState {
-  padding: 16px;
-  border-radius: 4px;
+  padding: 32px 24px;
+  border-radius: var(--radius-md);
   background: var(--surface-alt);
   color: var(--text-soft);
   text-align: center;
+  font-size: 13px;
+  line-height: 1.6;
+  border: 1px dashed var(--rule);
 }
 
 .sidebarFooter {
@@ -759,7 +841,7 @@
   width: 32px;
   height: 32px;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: rgba(255, 255, 255, 0.08);
   color: rgba(255, 255, 255, 0.78);
   display: inline-flex;
@@ -767,19 +849,25 @@
   justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: background 0.15s var(--ease-out), border-color 0.15s var(--ease-out), transform 0.15s var(--ease-out);
 }
 
 .sidebarToggleButton:hover {
   background: rgba(255, 255, 255, 0.16);
   border-color: rgba(245, 125, 0, 0.34);
   color: #fff;
+  transform: scale(1.05);
+}
+
+.sidebarToggleButton:active {
+  transform: scale(0.95);
+  transition-duration: 0.08s;
 }
 
 .sidebarToggleIcon {
   width: 12px;
   height: 12px;
-  transition: transform 0.24s ease;
+  transition: transform 0.24s var(--ease-out);
 }
 
 /* ── Collapsed sidebar ── */
@@ -865,7 +953,7 @@
   top: 50%;
   transform: translateY(-50%) translateX(-4px);
   padding: 7px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: rgba(17, 24, 39, 0.96);
   color: #fff;
   font-size: 10px;
@@ -877,7 +965,7 @@
   opacity: 0;
   pointer-events: none;
   z-index: 40;
-  transition: opacity 0.14s ease, transform 0.14s ease;
+  transition: opacity 0.14s var(--ease-out), transform 0.14s var(--ease-out);
 }
 
 .navTooltip::before {
@@ -915,9 +1003,21 @@
   color: var(--text-muted);
 }
 
+.breadcrumbLink {
+  all: unset;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: color 0.15s var(--ease-out);
+}
+
+.breadcrumbLink:hover {
+  color: var(--blue);
+}
+
 .breadcrumbSep {
-  color: var(--rule);
+  color: var(--text-muted);
   font-weight: 400;
+  opacity: 0.5;
 }
 
 .breadcrumbActive {
@@ -929,9 +1029,10 @@
   display: flex;
   gap: 0;
   border: 1px solid var(--rule);
-  border-radius: 2px;
+  border-radius: var(--radius-md);
   background: #fff;
   overflow: hidden;
+  box-shadow: var(--shadow-xs);
 }
 
 .tab,
@@ -946,7 +1047,7 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
   cursor: pointer;
-  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  transition: color 0.15s var(--ease-out), border-color 0.15s var(--ease-out), background 0.15s var(--ease-out);
 }
 
 .tab:hover {
@@ -964,7 +1065,7 @@
 .sidebarNavSection {
   display: grid;
   gap: 8px;
-  padding: 0 14px;
+  padding: 0 16px;
 }
 
 @media (max-width: 1100px) {
@@ -1032,7 +1133,7 @@
   align-items: center;
   padding: 16px 18px;
   border: 1px solid rgba(245, 125, 0, 0.22);
-  border-radius: 2px;
+  border-radius: var(--radius-md);
   background: linear-gradient(180deg, #fff9f3 0%, #fff 100%);
 }
 
@@ -1049,9 +1150,9 @@
 }
 
 .previewMetric {
-  padding: 12px 14px;
+  padding: 14px 16px;
   border: 1px solid var(--rule);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: #fff;
 }
 
@@ -1086,9 +1187,9 @@
 .runCard,
 .agentPolicyCard {
   border: 1px solid var(--rule);
-  border-radius: 2px;
+  border-radius: var(--radius-md);
   background: #fff;
-  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.04);
+  box-shadow: var(--shadow-sm);
 }
 
 .workflowCanvasCard,
@@ -1117,10 +1218,23 @@
   gap: 4px;
   padding: 12px;
   border: 1px solid var(--rule);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: var(--surface-alt);
   text-align: left;
   cursor: pointer;
+  transition: border-color 0.15s var(--ease-out), transform 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out);
+}
+
+.paletteButton:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+  border-color: rgba(0, 82, 146, 0.2);
+}
+
+.paletteButton:active {
+  transform: translateY(0) scale(0.98);
+  box-shadow: none;
+  transition-duration: 0.08s;
 }
 
 .paletteButton strong {
@@ -1137,7 +1251,7 @@
   position: relative;
   min-height: 360px;
   border: 1px dashed rgba(0, 82, 146, 0.18);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background:
     linear-gradient(rgba(0, 82, 146, 0.03) 1px, transparent 1px),
     linear-gradient(90deg, rgba(0, 82, 146, 0.03) 1px, transparent 1px),
@@ -1152,11 +1266,17 @@
   width: 210px;
   padding: 12px 14px;
   border: 1px solid var(--rule);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: #fff;
   text-align: left;
   cursor: pointer;
   box-shadow: 0 8px 18px rgba(17, 24, 39, 0.08);
+  transition: border-color 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out), transform 0.15s var(--ease-out);
+}
+
+.canvasNode:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-hover);
 }
 
 .canvasNode small,
@@ -1242,7 +1362,7 @@
   grid-template-columns: auto 1fr;
   gap: 10px;
   padding: 8px 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: var(--surface-alt);
   font-size: 11px;
   line-height: 1.45;
@@ -1258,7 +1378,7 @@
 .previewCode {
   margin: 0;
   padding: 12px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: #0f172a;
   color: #dbeafe;
   font-size: 11px;
@@ -1298,7 +1418,7 @@
   grid-template-columns: auto 1fr;
   gap: 12px;
   padding: 10px 12px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: rgba(15, 23, 42, 0.06);
   font-size: 11px;
 }
@@ -1328,7 +1448,7 @@
   padding: 18px;
   border: 1px solid rgba(196, 106, 10, 0.2);
   background: linear-gradient(135deg, rgba(196, 106, 10, 0.08), rgba(15, 23, 42, 0.04));
-  border-radius: 4px;
+  border-radius: var(--radius-md);
 }
 
 .designerGrid {
@@ -1341,8 +1461,8 @@
 .designerCanvasPanel,
 .designerInspector {
   background: #fff;
-  border: 1px solid var(--border);
-  border-radius: 4px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-md);
   box-shadow: 0 12px 34px rgba(15, 23, 42, 0.07);
 }
 
@@ -1371,7 +1491,7 @@
   min-height: 640px;
   padding: 18px;
   border: 1px solid rgba(15, 23, 42, 0.08);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background:
     linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(241, 245, 249, 0.96)),
     repeating-linear-gradient(
@@ -1402,7 +1522,7 @@
   gap: 14px;
   padding: 16px;
   border: 1px solid rgba(15, 23, 42, 0.08);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.88);
 }
 
@@ -1430,20 +1550,20 @@
   min-height: 180px;
   padding: 14px;
   border: 1px solid rgba(15, 23, 42, 0.12);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: #fff;
   text-align: left;
   cursor: pointer;
   transition:
-    border-color 140ms ease,
-    transform 140ms ease,
-    box-shadow 140ms ease;
+    border-color 140ms var(--ease-out),
+    transform 140ms var(--ease-out),
+    box-shadow 140ms var(--ease-out);
 }
 
 .designerComponentCard:hover {
   border-color: rgba(196, 106, 10, 0.45);
   transform: translateY(-1px);
-  box-shadow: 0 10px 18px rgba(15, 23, 42, 0.08);
+  box-shadow: var(--shadow-hover);
 }
 
 .designerComponentActive {

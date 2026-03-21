@@ -1,0 +1,763 @@
+{
+  "schemaVersion": 1,
+  "tenant": {
+    "slug": "agent-preview",
+    "name": "agent-preview",
+    "description": "Adaptive platform control plane for TeacherActive operational apps."
+  },
+  "environment": {
+    "slug": "development",
+    "name": "Development"
+  },
+  "roles": [
+    "SUPER_ADMIN",
+    "BUILDER_ADMIN",
+    "USER"
+  ],
+  "objects": [
+    {
+      "id": "obj-booking-request",
+      "key": "booking_request",
+      "label": "Booking Request",
+      "pluralLabel": "Booking Requests",
+      "description": "Core booking workflow entity used to orchestrate supply coverage.",
+      "icon": "calendar",
+      "primaryFieldKey": "request_title",
+      "allowCreate": true,
+      "allowUpdate": true,
+      "allowDelete": false,
+      "fields": [
+        {
+          "id": "fld-request-title",
+          "key": "request_title",
+          "label": "Request Title",
+          "type": "text",
+          "required": true,
+          "unique": true,
+          "sensitivity": "internal",
+          "placeholder": "Year 4 maternity cover",
+          "validations": [
+            {
+              "id": "val-request-title-required",
+              "type": "required",
+              "message": "A booking request title is required."
+            }
+          ]
+        },
+        {
+          "id": "fld-school-name",
+          "key": "school_name",
+          "label": "School Name",
+          "type": "text",
+          "required": true,
+          "unique": false,
+          "sensitivity": "internal",
+          "placeholder": "Leeds Central Academy",
+          "validations": [
+            {
+              "id": "val-school-name-required",
+              "type": "required",
+              "message": "School name is required."
+            }
+          ]
+        },
+        {
+          "id": "fld-contact-email",
+          "key": "contact_email",
+          "label": "Contact Email",
+          "type": "text",
+          "required": true,
+          "unique": false,
+          "sensitivity": "pii",
+          "placeholder": "ops@school.example",
+          "validations": [
+            {
+              "id": "val-contact-email-required",
+              "type": "required",
+              "message": "Contact email is required."
+            },
+            {
+              "id": "val-contact-email-pattern",
+              "type": "regex",
+              "message": "Enter a valid email address.",
+              "value": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"
+            }
+          ]
+        },
+        {
+          "id": "fld-vacancies",
+          "key": "vacancies",
+          "label": "Vacancies",
+          "type": "number",
+          "required": true,
+          "unique": false,
+          "sensitivity": "internal",
+          "defaultValue": 1,
+          "validations": [
+            {
+              "id": "val-vacancies-min",
+              "type": "min",
+              "message": "Vacancies must be at least 1.",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "id": "fld-daily-rate",
+          "key": "daily_rate",
+          "label": "Daily Rate",
+          "type": "currency",
+          "required": true,
+          "unique": false,
+          "sensitivity": "internal",
+          "validations": [
+            {
+              "id": "val-daily-rate-min",
+              "type": "min",
+              "message": "Daily rate must be positive.",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "id": "fld-days-requested",
+          "key": "days_requested",
+          "label": "Days Requested",
+          "type": "number",
+          "required": true,
+          "unique": false,
+          "sensitivity": "internal",
+          "defaultValue": 5,
+          "validations": [
+            {
+              "id": "val-days-min",
+              "type": "min",
+              "message": "Days requested must be at least 1.",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "id": "fld-total-value",
+          "key": "total_value",
+          "label": "Total Value",
+          "type": "computed",
+          "required": false,
+          "unique": false,
+          "sensitivity": "internal",
+          "validations": [],
+          "calculation": {
+            "id": "calc-total-value",
+            "expression": "daily_rate * days_requested * vacancies",
+            "outputType": "currency",
+            "description": "Estimated total booking value."
+          }
+        },
+        {
+          "id": "fld-status",
+          "key": "status",
+          "label": "Status",
+          "type": "select",
+          "required": true,
+          "unique": false,
+          "sensitivity": "internal",
+          "defaultValue": "Open",
+          "options": [
+            "Open",
+            "Review",
+            "Matched",
+            "Filled"
+          ],
+          "validations": []
+        }
+      ],
+      "relationships": [],
+      "views": [
+        {
+          "id": "view-booking-default",
+          "key": "default",
+          "label": "Default View",
+          "objectKey": "booking_request",
+          "visibleFieldKeys": [
+            "request_title",
+            "school_name",
+            "status",
+            "vacancies",
+            "total_value"
+          ],
+          "defaultSortKey": "request_title"
+        }
+      ]
+    },
+    {
+      "id": "obj-agent-brief",
+      "key": "agent_brief",
+      "label": "Agent Brief",
+      "pluralLabel": "Agent Briefs",
+      "description": "Reusable AI instructions and guardrails for operational agents.",
+      "icon": "spark",
+      "primaryFieldKey": "name",
+      "allowCreate": true,
+      "allowUpdate": true,
+      "allowDelete": true,
+      "fields": [
+        {
+          "id": "fld-brief-name",
+          "key": "name",
+          "label": "Name",
+          "type": "text",
+          "required": true,
+          "unique": true,
+          "sensitivity": "internal",
+          "validations": [
+            {
+              "id": "val-brief-name-required",
+              "type": "required",
+              "message": "A brief name is required."
+            }
+          ]
+        },
+        {
+          "id": "fld-brief-prompt",
+          "key": "prompt",
+          "label": "Prompt",
+          "type": "long_text",
+          "required": true,
+          "unique": false,
+          "sensitivity": "internal",
+          "validations": [
+            {
+              "id": "val-brief-prompt-required",
+              "type": "required",
+              "message": "A prompt is required."
+            }
+          ]
+        },
+        {
+          "id": "fld-brief-zero-retention",
+          "key": "zero_retention_required",
+          "label": "Zero Retention Required",
+          "type": "boolean",
+          "required": true,
+          "unique": false,
+          "sensitivity": "internal",
+          "defaultValue": true,
+          "validations": []
+        }
+      ],
+      "relationships": [],
+      "views": [
+        {
+          "id": "view-agent-brief-default",
+          "key": "default",
+          "label": "Default View",
+          "objectKey": "agent_brief",
+          "visibleFieldKeys": [
+            "name",
+            "zero_retention_required"
+          ],
+          "defaultSortKey": "name"
+        }
+      ]
+    }
+  ],
+  "layouts": [
+    {
+      "id": "layout-ops-overview",
+      "key": "operations_overview",
+      "name": "Operations Overview",
+      "pageKey": "operations_overview",
+      "mobileColumns": 1,
+      "tabletColumns": 2,
+      "desktopColumns": 12,
+      "sections": [
+        {
+          "id": "section-ops-hero",
+          "title": "Control Plane",
+          "kind": "grid",
+          "columns": 12,
+          "placement": {
+            "zone": "main",
+            "span": 12,
+            "stackDirection": "column",
+            "variant": "standard",
+            "region": "body",
+            "spacing": "comfortable",
+            "alignment": "start",
+            "minHeight": 440,
+            "responsive": {
+              "mobileSpan": 12,
+              "tabletSpan": 6,
+              "desktopSpan": 12,
+              "hiddenOn": []
+            }
+          },
+          "components": [
+            {
+              "id": "component-ops-hero",
+              "kind": "hero",
+              "title": "Adaptive Operations Platform",
+              "description": "Published metadata drives runtime pages, records, menus, security, and AI controls.",
+              "width": 12,
+              "stylePreset": "hero-banner",
+              "placement": {
+                "zone": "header",
+                "span": 12,
+                "stackDirection": "column",
+                "variant": "full_width",
+                "region": "header",
+                "spacing": "comfortable",
+                "alignment": "start",
+                "minHeight": 300,
+                "responsive": {
+                  "mobileSpan": 12,
+                  "tabletSpan": 6,
+                  "desktopSpan": 12,
+                  "hiddenOn": []
+                }
+              },
+              "props": {
+                "eyebrow": "TeacherActive Platform"
+              },
+              "binding": {}
+            },
+            {
+              "id": "component-ops-stats",
+              "kind": "stat_tiles",
+              "title": "Platform Snapshot",
+              "width": 12,
+              "stylePreset": "metric-strip",
+              "placement": {
+                "zone": "main",
+                "span": 12,
+                "stackDirection": "column",
+                "variant": "standard",
+                "region": "body",
+                "spacing": "comfortable",
+                "alignment": "start",
+                "minHeight": 180,
+                "responsive": {
+                  "mobileSpan": 12,
+                  "tabletSpan": 6,
+                  "desktopSpan": 12,
+                  "hiddenOn": []
+                }
+              },
+              "props": {
+                "metrics": [
+                  {
+                    "label": "Objects",
+                    "metric": "objects"
+                  },
+                  {
+                    "label": "Pages",
+                    "metric": "pages"
+                  },
+                  {
+                    "label": "Workflows",
+                    "metric": "workflows"
+                  },
+                  {
+                    "label": "Agents",
+                    "metric": "agents"
+                  }
+                ]
+              },
+              "binding": {}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "layout-bookings",
+      "key": "booking_requests",
+      "name": "Booking Requests",
+      "pageKey": "booking_requests",
+      "mobileColumns": 1,
+      "tabletColumns": 2,
+      "desktopColumns": 12,
+      "sections": [
+        {
+          "id": "section-booking-runtime",
+          "title": "Booking Operations",
+          "description": "Semi-freeform runtime layout rendered from the published manifest.",
+          "kind": "grid",
+          "columns": 12,
+          "placement": {
+            "zone": "main",
+            "span": 12,
+            "stackDirection": "column",
+            "variant": "standard",
+            "region": "body",
+            "spacing": "comfortable",
+            "alignment": "start",
+            "minHeight": 420,
+            "responsive": {
+              "mobileSpan": 12,
+              "tabletSpan": 6,
+              "desktopSpan": 12,
+              "hiddenOn": []
+            }
+          },
+          "components": [
+            {
+              "id": "component-booking-table",
+              "kind": "record_table",
+              "title": "Booking Requests",
+              "objectKey": "booking_request",
+              "width": 8,
+              "stylePreset": "record-grid",
+              "placement": {
+                "zone": "main",
+                "span": 8,
+                "stackDirection": "column",
+                "variant": "standard",
+                "region": "body",
+                "spacing": "comfortable",
+                "alignment": "start",
+                "minHeight": 360,
+                "responsive": {
+                  "mobileSpan": 12,
+                  "tabletSpan": 6,
+                  "desktopSpan": 8,
+                  "hiddenOn": []
+                }
+              },
+              "binding": {
+                "objectKey": "booking_request"
+              },
+              "props": {}
+            },
+            {
+              "id": "component-booking-form",
+              "kind": "record_form",
+              "title": "Create Booking Request",
+              "objectKey": "booking_request",
+              "width": 4,
+              "stylePreset": "record-form",
+              "placement": {
+                "zone": "rail",
+                "span": 4,
+                "stackDirection": "column",
+                "variant": "rail",
+                "region": "body",
+                "spacing": "comfortable",
+                "alignment": "start",
+                "minHeight": 360,
+                "responsive": {
+                  "mobileSpan": 12,
+                  "tabletSpan": 4,
+                  "desktopSpan": 4,
+                  "hiddenOn": []
+                }
+              },
+              "binding": {
+                "objectKey": "booking_request"
+              },
+              "props": {}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "layout-agents",
+      "key": "agent_briefs",
+      "name": "Agent Briefs",
+      "pageKey": "agent_briefs",
+      "mobileColumns": 1,
+      "tabletColumns": 2,
+      "desktopColumns": 12,
+      "sections": [
+        {
+          "id": "section-agents-runtime",
+          "title": "Agent Configuration",
+          "kind": "grid",
+          "columns": 12,
+          "placement": {
+            "zone": "main",
+            "span": 12,
+            "stackDirection": "column",
+            "variant": "standard",
+            "region": "body",
+            "spacing": "comfortable",
+            "alignment": "start",
+            "minHeight": 420,
+            "responsive": {
+              "mobileSpan": 12,
+              "tabletSpan": 6,
+              "desktopSpan": 12,
+              "hiddenOn": []
+            }
+          },
+          "components": [
+            {
+              "id": "component-agent-table",
+              "kind": "record_table",
+              "title": "Agent Briefs",
+              "objectKey": "agent_brief",
+              "width": 7,
+              "stylePreset": "record-grid",
+              "placement": {
+                "zone": "main",
+                "span": 7,
+                "stackDirection": "column",
+                "variant": "standard",
+                "region": "body",
+                "spacing": "comfortable",
+                "alignment": "start",
+                "minHeight": 360,
+                "responsive": {
+                  "mobileSpan": 12,
+                  "tabletSpan": 6,
+                  "desktopSpan": 7,
+                  "hiddenOn": []
+                }
+              },
+              "binding": {
+                "objectKey": "agent_brief"
+              },
+              "props": {}
+            },
+            {
+              "id": "component-agent-form",
+              "kind": "agent_panel",
+              "title": "Agent Control Panel",
+              "objectKey": "agent_brief",
+              "width": 5,
+              "stylePreset": "agent-panel",
+              "placement": {
+                "zone": "rail",
+                "span": 5,
+                "stackDirection": "column",
+                "variant": "rail",
+                "region": "body",
+                "spacing": "comfortable",
+                "alignment": "start",
+                "minHeight": 360,
+                "responsive": {
+                  "mobileSpan": 12,
+                  "tabletSpan": 5,
+                  "desktopSpan": 5,
+                  "hiddenOn": []
+                }
+              },
+              "binding": {
+                "objectKey": "agent_brief",
+                "agentId": "agent-booking-analyst"
+              },
+              "props": {},
+              "agentId": "agent-booking-analyst"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "page-operations-overview",
+      "key": "operations_overview",
+      "title": "Operations Overview",
+      "route": "operations-overview",
+      "description": "High-level runtime landing page for the active published platform.",
+      "layoutKey": "operations_overview",
+      "isHome": true
+    },
+    {
+      "id": "page-booking-requests",
+      "key": "booking_requests",
+      "title": "Booking Requests",
+      "route": "booking-requests",
+      "description": "Metadata-driven booking request runtime.",
+      "layoutKey": "booking_requests",
+      "objectKey": "booking_request",
+      "isHome": false
+    },
+    {
+      "id": "page-agent-briefs",
+      "key": "agent_briefs",
+      "title": "Agent Briefs",
+      "route": "agent-briefs",
+      "description": "Published runtime surface for governed agent prompt assets.",
+      "layoutKey": "agent_briefs",
+      "objectKey": "agent_brief",
+      "isHome": false
+    }
+  ],
+  "menus": [
+    {
+      "id": "menu-operations-overview",
+      "key": "operations_overview",
+      "label": "Overview",
+      "icon": "home",
+      "pageKey": "operations_overview",
+      "order": 0,
+      "group": "Platform"
+    },
+    {
+      "id": "menu-booking-requests",
+      "key": "booking_requests",
+      "label": "Booking Requests",
+      "icon": "calendar",
+      "pageKey": "booking_requests",
+      "order": 1,
+      "group": "Operations"
+    },
+    {
+      "id": "menu-agent-briefs",
+      "key": "agent_briefs",
+      "label": "Agent Briefs",
+      "icon": "spark",
+      "pageKey": "agent_briefs",
+      "order": 2,
+      "group": "AI"
+    }
+  ],
+  "workflows": [
+    {
+      "id": "wf-booking-triage",
+      "key": "booking_triage",
+      "name": "Booking Triage",
+      "description": "Evaluates new requests, sets status, and routes to the right team.",
+      "objectKey": "booking_request",
+      "status": "draft",
+      "triggers": [
+        {
+          "id": "trigger-booking-created",
+          "type": "record_created",
+          "label": "When a booking request is created",
+          "config": {
+            "objectKey": "booking_request"
+          }
+        }
+      ],
+      "nodes": [
+        {
+          "id": "node-triage-start",
+          "type": "condition",
+          "label": "Value above threshold?",
+          "config": {
+            "expression": "total_value >= 5000"
+          },
+          "position": {
+            "x": 60,
+            "y": 120
+          }
+        },
+        {
+          "id": "node-triage-notify",
+          "type": "notification",
+          "label": "Notify regional ops",
+          "config": {
+            "channel": "email"
+          },
+          "position": {
+            "x": 320,
+            "y": 120
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "edge-triage-1",
+          "sourceId": "node-triage-start",
+          "targetId": "node-triage-notify",
+          "label": "yes"
+        }
+      ]
+    }
+  ],
+  "tools": [
+    {
+      "id": "tool-booking-triage",
+      "key": "booking_triage",
+      "name": "Run Booking Triage",
+      "type": "workflow",
+      "config": {
+        "workflowKey": "booking_triage"
+      }
+    }
+  ],
+  "agents": [
+    {
+      "id": "agent-wOvGfHhU",
+      "key": "coverage_analyst",
+      "name": "Coverage Analyst",
+      "scope": "workspace",
+      "modelProviderId": "provider-openai-gpt5mini",
+      "prompt": "Summarize booking demand with masked values only.",
+      "allowedToolIds": [
+        "tool-booking-triage"
+      ],
+      "objectKeys": [
+        "booking_request"
+      ],
+      "zeroRetentionRequired": true
+    },
+    {
+      "id": "agent-booking-analyst",
+      "key": "booking_analyst",
+      "name": "Booking Analyst",
+      "description": "Reviews demand patterns and produces masked operational summaries.",
+      "scope": "workspace",
+      "modelProviderId": "provider-openai-gpt5mini",
+      "prompt": "Summarize current booking demand without exposing masked or sensitive values.",
+      "allowedToolIds": [
+        "tool-booking-triage"
+      ],
+      "objectKeys": [
+        "booking_request"
+      ],
+      "zeroRetentionRequired": true
+    }
+  ],
+  "modelProviders": [
+    {
+      "id": "provider-openai-gpt5mini",
+      "key": "openai_gpt5_mini",
+      "name": "OpenAI GPT-5 mini",
+      "provider": "openai",
+      "model": "gpt-5-mini",
+      "endpoint": "https://api.openai.com/v1",
+      "apiKeySecretRef": "env:OPENAI_API_KEY",
+      "supportsZeroRetention": true,
+      "allowedForSensitiveData": false,
+      "status": "active"
+    }
+  ],
+  "maskingPolicies": [
+    {
+      "id": "mask-default",
+      "key": "default_mask",
+      "name": "Default Field Mask",
+      "mode": "mask",
+      "targetSensitivities": [
+        "pii",
+        "sensitive"
+      ]
+    },
+    {
+      "id": "mask-internal-anon",
+      "key": "internal_anonymize",
+      "name": "Internal Anonymize",
+      "mode": "anonymize",
+      "targetSensitivities": [
+        "internal"
+      ]
+    }
+  ],
+  "securityPolicy": {
+    "zeroRetentionRequiredForSensitiveData": true,
+    "defaultMaskingPolicyKey": "default_mask",
+    "allowedModelProviderKeys": [
+      "openai_gpt5_mini"
+    ]
+  },
+  "metadata": {
+    "draftUpdatedAt": "2026-03-21T16:45:07.606Z",
+    "publishedAt": "2026-03-21T16:45:07.616Z",
+    "publishedVersionId": "version-4Hashx2I"
+  }
+}
