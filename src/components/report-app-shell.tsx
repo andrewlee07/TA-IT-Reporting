@@ -1568,8 +1568,8 @@ export function ReportAppShell({
           >
             {isUploading ? "Uploading workbook..." : "Upload workbook"}
           </button>
-          <a className="sidebar-link" href="/templates/IT_Exec_Reporting_Ingestion_Template_v4_dummy_data.xlsx">
-            Download template
+          <a className="sidebar-link" href="/templates/IT_Exec_Reporting_Ingestion_Template_master.xlsx">
+            Download master template
           </a>
         </div>
 
