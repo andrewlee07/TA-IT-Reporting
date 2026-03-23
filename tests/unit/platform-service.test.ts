@@ -271,7 +271,7 @@ describe("platform hardening and workflow depth", () => {
     expect(runs[0]?.logs.length).toBeGreaterThan(0);
   });
 
-  it("keeps agents draft-only until publish and enforces preview on the active manifest", async () => {
+  it("allows builder-side agent preview on draft definitions and preserves the published flow", async () => {
     await seedTenant({ tenantSlug: "agent-preview", activeVersion: false });
 
     await saveAgentDefinition({
@@ -288,14 +288,15 @@ describe("platform hardening and workflow depth", () => {
       },
     });
 
-    await expect(
-      previewAgentInvocation({
-        tenantSlug: "agent-preview",
-        agentId: "coverage_analyst",
-        objectKey: "booking_request",
-        request: devRequest(),
-      }),
-    ).rejects.toThrow(/published runtime/i);
+    const draftPreview = await previewAgentInvocation({
+      tenantSlug: "agent-preview",
+      agentId: "coverage_analyst",
+      objectKey: "booking_request",
+      request: devRequest(),
+    });
+
+    expect(draftPreview.agent.key).toBe("coverage_analyst");
+    expect(draftPreview.metadata.allowedByPolicy).toBe(true);
 
     await publishDraftManifest({
       tenantSlug: "agent-preview",
@@ -310,7 +311,7 @@ describe("platform hardening and workflow depth", () => {
       request: devRequest(),
     });
 
-    expect(preview.agent.key).toBe("coverage_analyst");
+    expect(preview.agent.key).toBe(draftPreview.agent.key);
     expect(preview.metadata.allowedByPolicy).toBe(true);
   });
 

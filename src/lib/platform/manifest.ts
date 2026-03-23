@@ -9,6 +9,7 @@ import {
   type ObjectDefinition,
   type PageDefinition,
   type PlatformManifest,
+  type PlatformRole,
 } from "@/lib/platform/types";
 
 function hasRequiredText(value: string | null | undefined): boolean {
@@ -76,7 +77,14 @@ export function ensureManifestConsistency(manifest: PlatformManifest): PlatformM
   }));
   const menus = mergeByKey(manifest.menus, starterManifest.menus).filter(
     (menu) => hasRequiredText(menu.key) && hasRequiredText(menu.label) && hasRequiredText(menu.pageKey),
-  );
+  ).map((menu) => ({
+    ...menu,
+    description: hasRequiredText(menu.description) ? menu.description?.trim() : undefined,
+    groupKey: hasRequiredText(menu.groupKey) ? menu.groupKey?.trim() : undefined,
+    visibleToRoles: menu.visibleToRoles?.length ? menu.visibleToRoles : (["SUPER_ADMIN", "BUILDER_ADMIN", "USER"] satisfies PlatformRole[]),
+    highlight: menu.highlight ?? false,
+    badgeBindingKey: hasRequiredText(menu.badgeBindingKey) ? menu.badgeBindingKey?.trim() : undefined,
+  }));
   const forms = mergeByKey(manifest.forms ?? [], starterManifest.forms).filter(
     (form) => hasRequiredText(form.key) && hasRequiredText(form.title) && hasRequiredText(form.route),
   ).map((form): FormDefinition => ({
@@ -121,7 +129,29 @@ export function ensureManifestConsistency(manifest: PlatformManifest): PlatformM
       hasRequiredText(agent.name) &&
       hasRequiredText(agent.modelProviderId) &&
       hasRequiredText(agent.prompt),
-  );
+  ).map((agent) => ({
+    ...agent,
+    promptBlocks: agent.promptBlocks?.filter((block) => hasRequiredText(block.label) && hasRequiredText(block.content)) ?? [],
+    handoffWorkflowKeys: agent.handoffWorkflowKeys ?? [],
+    outputSchema: hasRequiredText(agent.outputSchema) ? agent.outputSchema?.trim() : undefined,
+    evalPolicy: agent.evalPolicy
+      ? {
+          rubric: hasRequiredText(agent.evalPolicy.rubric) ? agent.evalPolicy.rubric.trim() : "Evaluate safety and operational usefulness.",
+          samplePrompt: hasRequiredText(agent.evalPolicy.samplePrompt)
+            ? agent.evalPolicy.samplePrompt.trim()
+            : "Summarise the current workload.",
+          passingScore: agent.evalPolicy.passingScore ?? 0.8,
+        }
+      : undefined,
+    costBudgetUsd: typeof agent.costBudgetUsd === "number" ? agent.costBudgetUsd : undefined,
+    approvalPolicy: agent.approvalPolicy
+      ? {
+          required: agent.approvalPolicy.required ?? false,
+          approverRole: agent.approvalPolicy.approverRole,
+          notes: hasRequiredText(agent.approvalPolicy.notes) ? agent.approvalPolicy.notes?.trim() : undefined,
+        }
+      : undefined,
+  }));
   const modelProviders = mergeByKey(manifest.modelProviders, starterManifest.modelProviders).filter(
     (provider) =>
       hasRequiredText(provider.key) &&
@@ -155,8 +185,22 @@ export function ensureManifestConsistency(manifest: PlatformManifest): PlatformM
       tagLine: hasRequiredText(manifest.appShell?.tagLine) ? manifest.appShell?.tagLine?.trim() : undefined,
       supportEmail: hasRequiredText(manifest.appShell?.supportEmail) ? manifest.appShell?.supportEmail?.trim() : undefined,
       menuStyle: manifest.appShell?.menuStyle ?? "sidebar",
+      navigationMode: manifest.appShell?.navigationMode ?? manifest.appShell?.menuStyle ?? "sidebar",
+      menuGroups: manifest.appShell?.menuGroups?.length ? manifest.appShell.menuGroups : starterManifest.appShell.menuGroups,
+      quickActions: manifest.appShell?.quickActions ?? starterManifest.appShell.quickActions,
+      defaultLandingPageKey: hasRequiredText(manifest.appShell?.defaultLandingPageKey)
+        ? manifest.appShell?.defaultLandingPageKey?.trim()
+        : undefined,
+      announcementSlots: manifest.appShell?.announcementSlots ?? starterManifest.appShell.announcementSlots,
+      badgeBindings: manifest.appShell?.badgeBindings ?? starterManifest.appShell.badgeBindings,
+      visibilityRules: manifest.appShell?.visibilityRules ?? starterManifest.appShell.visibilityRules,
       profilePageKey: hasRequiredText(manifest.appShell?.profilePageKey) ? manifest.appShell?.profilePageKey?.trim() : undefined,
       settingsPageKey: hasRequiredText(manifest.appShell?.settingsPageKey) ? manifest.appShell?.settingsPageKey?.trim() : undefined,
+    },
+    notifications: {
+      channels: manifest.notifications?.channels ?? starterManifest.notifications.channels,
+      templates: manifest.notifications?.templates ?? starterManifest.notifications.templates,
+      rules: manifest.notifications?.rules ?? starterManifest.notifications.rules,
     },
     profiles: {
       objectKey: manifest.profiles?.objectKey ?? "user_profile",

@@ -1720,6 +1720,43 @@
   border-top: 1px solid rgba(15, 23, 42, 0.08);
 }
 
+.colorChip {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+}
+
+.successPill,
+.warningPill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 54px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.successPill {
+  background: rgba(18, 120, 72, 0.12);
+  color: #0f6b43;
+}
+
+.warningPill {
+  background: rgba(196, 106, 10, 0.12);
+  color: #9a5408;
+}
+
+.errorText {
+  color: #b42318;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 @media (max-width: 1280px) {
   .designerGrid {
     grid-template-columns: 1fr;

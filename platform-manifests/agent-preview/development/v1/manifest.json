@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "tenant": {
     "slug": "agent-preview",
     "name": "agent-preview",
@@ -32,8 +32,163 @@
     "tagLine": "Business automation that stays simple to operate.",
     "supportEmail": "support@teacheractive.local",
     "menuStyle": "sidebar",
+    "navigationMode": "sidebar",
+    "menuGroups": [
+      {
+        "key": "platform",
+        "label": "Platform",
+        "order": 0,
+        "icon": "home",
+        "description": "Control-plane overview and navigation."
+      },
+      {
+        "key": "operations",
+        "label": "Operations",
+        "order": 1,
+        "icon": "calendar",
+        "description": "Operational pages and workflow entry points."
+      },
+      {
+        "key": "ai",
+        "label": "AI",
+        "order": 2,
+        "icon": "spark",
+        "description": "Agent Studio and Control Tower surfaces."
+      },
+      {
+        "key": "account",
+        "label": "Account",
+        "order": 3,
+        "icon": "user",
+        "description": "Profile, settings, and personal runtime controls."
+      }
+    ],
+    "quickActions": [
+      {
+        "key": "new_booking_request",
+        "label": "New Booking Request",
+        "pageKey": "booking_requests",
+        "icon": "plus",
+        "tone": "accent"
+      },
+      {
+        "key": "run_booking_triage",
+        "label": "Run Booking Triage",
+        "workflowKey": "booking_triage",
+        "icon": "play",
+        "tone": "default"
+      }
+    ],
+    "defaultLandingPageKey": "operations_overview",
+    "announcementSlots": [
+      {
+        "key": "pilot_notice",
+        "label": "Pilot notice",
+        "message": "Pilot tenant controls are active. Draft preview, admin preview, and published runtime are isolated.",
+        "tone": "info",
+        "active": true
+      }
+    ],
+    "badgeBindings": [
+      {
+        "key": "booking_request_records",
+        "label": "Open requests",
+        "objectKey": "booking_request",
+        "metric": "records"
+      },
+      {
+        "key": "booking_triage_queue",
+        "label": "Queued triage",
+        "workflowKey": "booking_triage",
+        "metric": "queued_runs"
+      }
+    ],
+    "visibilityRules": [
+      {
+        "key": "builders_only_controls",
+        "summary": "Builder-only tools stay hidden from end users.",
+        "roles": [
+          "SUPER_ADMIN",
+          "BUILDER_ADMIN"
+        ],
+        "menuKeys": [
+          "agent_briefs",
+          "settings"
+        ]
+      }
+    ],
     "profilePageKey": "profile",
     "settingsPageKey": "settings"
+  },
+  "notifications": {
+    "channels": [
+      {
+        "id": "notify-channel-in-app",
+        "key": "in_app_primary",
+        "name": "In-app Inbox",
+        "kind": "in_app",
+        "enabled": true,
+        "description": "Tenant-scoped inbox surfaced in runtime and operator tooling."
+      },
+      {
+        "id": "notify-channel-email",
+        "key": "ops_email",
+        "name": "Ops Email",
+        "kind": "email",
+        "enabled": true,
+        "destination": "ops@teacheractive.local",
+        "description": "Operational email routing for workflow and platform alerts."
+      }
+    ],
+    "templates": [
+      {
+        "id": "notify-template-workflow",
+        "key": "workflow_run_status",
+        "name": "Workflow Run Status",
+        "channelKey": "in_app_primary",
+        "subject": "Workflow update",
+        "body": "{{workflowKey}} changed to {{status}}.",
+        "severity": "info"
+      },
+      {
+        "id": "notify-template-agent-budget",
+        "key": "agent_budget_alert",
+        "name": "Agent Budget Alert",
+        "channelKey": "ops_email",
+        "subject": "Agent budget threshold reached",
+        "body": "{{agentKey}} reached {{costUsd}} USD against the configured budget.",
+        "severity": "warning"
+      }
+    ],
+    "rules": [
+      {
+        "id": "notify-rule-workflow",
+        "key": "workflow_run_changed",
+        "name": "Workflow run changed",
+        "eventType": "workflow.run.updated",
+        "channelKeys": [
+          "in_app_primary"
+        ],
+        "templateKey": "workflow_run_status",
+        "severity": "info",
+        "active": true,
+        "summary": "Post workflow run state changes to the in-app inbox."
+      },
+      {
+        "id": "notify-rule-agent-budget",
+        "key": "agent_budget_threshold",
+        "name": "Agent budget threshold",
+        "eventType": "agent.budget.threshold",
+        "channelKeys": [
+          "in_app_primary",
+          "ops_email"
+        ],
+        "templateKey": "agent_budget_alert",
+        "severity": "warning",
+        "active": true,
+        "summary": "Escalate when an agent breaches its configured spend budget."
+      }
+    ]
   },
   "profiles": {
     "objectKey": "user_profile",
@@ -834,46 +989,87 @@
       "id": "menu-operations-overview",
       "key": "operations_overview",
       "label": "Overview",
+      "description": "Published landing page and operator snapshot.",
       "icon": "home",
       "pageKey": "operations_overview",
       "order": 0,
-      "group": "Platform"
+      "group": "Platform",
+      "groupKey": "platform",
+      "visibleToRoles": [
+        "SUPER_ADMIN",
+        "BUILDER_ADMIN",
+        "USER"
+      ],
+      "highlight": true
     },
     {
       "id": "menu-booking-requests",
       "key": "booking_requests",
       "label": "Booking Requests",
+      "description": "Operational booking runtime and form entry.",
       "icon": "calendar",
       "pageKey": "booking_requests",
       "order": 1,
-      "group": "Operations"
+      "group": "Operations",
+      "groupKey": "operations",
+      "visibleToRoles": [
+        "SUPER_ADMIN",
+        "BUILDER_ADMIN",
+        "USER"
+      ],
+      "badgeBindingKey": "booking_request_records",
+      "highlight": false
     },
     {
       "id": "menu-agent-briefs",
       "key": "agent_briefs",
       "label": "Agent Briefs",
+      "description": "Agent Studio runtime lens and governed prompt surfaces.",
       "icon": "spark",
       "pageKey": "agent_briefs",
       "order": 2,
-      "group": "AI"
+      "group": "AI",
+      "groupKey": "ai",
+      "visibleToRoles": [
+        "SUPER_ADMIN",
+        "BUILDER_ADMIN"
+      ],
+      "badgeBindingKey": "booking_triage_queue",
+      "highlight": false
     },
     {
       "id": "menu-profile",
       "key": "profile",
       "label": "Profile",
+      "description": "Personal profile details and defaults.",
       "icon": "user",
       "pageKey": "profile",
       "order": 3,
-      "group": "Account"
+      "group": "Account",
+      "groupKey": "account",
+      "visibleToRoles": [
+        "SUPER_ADMIN",
+        "BUILDER_ADMIN",
+        "USER"
+      ],
+      "highlight": false
     },
     {
       "id": "menu-settings",
       "key": "settings",
       "label": "Settings",
+      "description": "Runtime preferences and account settings.",
       "icon": "sliders",
       "pageKey": "settings",
       "order": 4,
-      "group": "Account"
+      "group": "Account",
+      "groupKey": "account",
+      "visibleToRoles": [
+        "SUPER_ADMIN",
+        "BUILDER_ADMIN",
+        "USER"
+      ],
+      "highlight": false
     }
   ],
   "forms": [
@@ -1060,18 +1256,20 @@
   ],
   "agents": [
     {
-      "id": "agent-yElcM8Tj",
+      "id": "agent-sKliQbKj",
       "key": "coverage_analyst",
       "name": "Coverage Analyst",
       "scope": "workspace",
       "modelProviderId": "provider-openai-gpt5mini",
       "prompt": "Summarize booking demand with masked values only.",
+      "promptBlocks": [],
       "allowedToolIds": [
         "tool-booking-triage"
       ],
       "objectKeys": [
         "booking_request"
       ],
+      "handoffWorkflowKeys": [],
       "zeroRetentionRequired": true
     },
     {
@@ -1082,12 +1280,39 @@
       "scope": "workspace",
       "modelProviderId": "provider-openai-gpt5mini",
       "prompt": "Summarize current booking demand without exposing masked or sensitive values.",
+      "promptBlocks": [
+        {
+          "id": "agent-block-system",
+          "label": "System role",
+          "kind": "system",
+          "content": "You are the tenant's booking analyst. Keep outputs operational, concise, and policy-safe."
+        },
+        {
+          "id": "agent-block-policy",
+          "label": "Safety policy",
+          "kind": "policy",
+          "content": "Never reveal masked PII. Prefer summarised operational guidance over verbatim record details."
+        }
+      ],
       "allowedToolIds": [
         "tool-booking-triage"
       ],
       "objectKeys": [
         "booking_request"
       ],
+      "handoffWorkflowKeys": [
+        "booking_triage"
+      ],
+      "outputSchema": "{\"summary\":\"string\",\"recommendation\":\"string\",\"riskLevel\":\"low|medium|high\"}",
+      "evalPolicy": {
+        "rubric": "Reward correct masking, operational usefulness, and concise risk articulation.",
+        "samplePrompt": "Summarise the booking queue and identify anything requiring escalation.",
+        "passingScore": 0.8
+      },
+      "costBudgetUsd": 15,
+      "approvalPolicy": {
+        "required": false
+      },
       "zeroRetentionRequired": true
     }
   ],
@@ -1134,8 +1359,8 @@
     ]
   },
   "metadata": {
-    "draftUpdatedAt": "2026-03-21T22:41:46.593Z",
-    "publishedAt": "2026-03-21T22:41:46.601Z",
-    "publishedVersionId": "version-BFByf3U6"
+    "draftUpdatedAt": "2026-03-23T20:06:17.630Z",
+    "publishedAt": "2026-03-23T20:06:17.690Z",
+    "publishedVersionId": "version-TzxiDWUO"
   }
 }

@@ -33,6 +33,7 @@
     "jszip": "^3.10.1",
     "nanoid": "^5.1.7",
     "next": "16.2.0",
+    "nodemailer": "^8.0.3",
     "pg": "^8.20.0",
     "pino": "^10.3.1",
     "playwright": "^1.58.2",
@@ -46,6 +47,7 @@
   "devDependencies": {
     "@playwright/test": "^1.58.2",
     "@types/node": "^20",
+    "@types/nodemailer": "^7.0.11",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitest/coverage-v8": "^4.1.0",

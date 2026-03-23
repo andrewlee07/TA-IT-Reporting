@@ -1,4 +1,4 @@
-export const PLATFORM_SCHEMA_VERSION = 2 as const;
+export const PLATFORM_SCHEMA_VERSION = 3 as const;
 
 export type PlatformRole = "SUPER_ADMIN" | "BUILDER_ADMIN" | "USER";
 export type PlatformVersionStatus = "DRAFT" | "ACTIVE" | "ROLLED_BACK";
@@ -66,6 +66,11 @@ export type FormDeliveryMode = "public" | "embedded" | "authenticated";
 export type FormSubmissionStatus = "draft" | "submitted";
 export type BrandingMode = "draft" | "review" | "approved";
 export type BrandAssetKind = "logo" | "icon" | "brand_book" | "reference";
+export type ShellNavigationMode = "sidebar" | "topbar";
+export type NotificationChannelKind = "in_app" | "email" | "webhook" | "slack_style";
+export type NotificationSeverity = "info" | "success" | "warning" | "critical";
+export type NotificationDeliveryStatus = "pending" | "sent" | "failed";
+export type AgentRunStatus = "queued" | "running" | "succeeded" | "failed" | "blocked";
 
 export interface PlatformActor {
   email: string;
@@ -231,11 +236,70 @@ export interface TenantBrandingDefinition {
   assets: BrandAssetDefinition[];
 }
 
+export interface ThemeAccessibilityCheck {
+  key: string;
+  label: string;
+  ratio: number;
+  requiredRatio: number;
+  passed: boolean;
+}
+
+export interface ThemeAccessibilityReport {
+  score: number;
+  checks: ThemeAccessibilityCheck[];
+  recommendations: string[];
+}
+
+export interface ThemeTokenSuggestion {
+  key: string;
+  label: string;
+  description: string;
+  tokens: Pick<TenantBrandingDefinition, "primaryColor" | "secondaryColor" | "accentColor" | "surfaceColor" | "textColor" | "pageBackground">;
+}
+
 export interface AppShellDefinition {
   productName: string;
   tagLine?: string;
   supportEmail?: string;
-  menuStyle: "sidebar" | "topbar";
+  menuStyle: ShellNavigationMode;
+  navigationMode: ShellNavigationMode;
+  menuGroups: Array<{
+    key: string;
+    label: string;
+    order: number;
+    icon?: string;
+    description?: string;
+  }>;
+  quickActions: Array<{
+    key: string;
+    label: string;
+    pageKey?: string;
+    workflowKey?: string;
+    icon?: string;
+    tone?: "default" | "accent";
+  }>;
+  defaultLandingPageKey?: string;
+  announcementSlots: Array<{
+    key: string;
+    label: string;
+    message: string;
+    tone: NotificationSeverity;
+    active: boolean;
+  }>;
+  badgeBindings: Array<{
+    key: string;
+    label: string;
+    objectKey?: string;
+    workflowKey?: string;
+    metric: "records" | "queued_runs" | "failed_runs" | "draft_changes";
+  }>;
+  visibilityRules?: Array<{
+    key: string;
+    summary: string;
+    roles: PlatformRole[];
+    pageKeys?: string[];
+    menuKeys?: string[];
+  }>;
   profilePageKey?: string;
   settingsPageKey?: string;
 }
@@ -349,10 +413,15 @@ export interface MenuItemDefinition {
   id: string;
   key: string;
   label: string;
+  description?: string;
   icon: string;
   pageKey: string;
   order: number;
   group: string;
+  groupKey?: string;
+  visibleToRoles?: PlatformRole[];
+  highlight?: boolean;
+  badgeBindingKey?: string;
 }
 
 export interface ManualTriggerConfig {
@@ -471,8 +540,27 @@ export interface AgentDefinition {
   scope: AgentScope;
   modelProviderId: string;
   prompt: string;
+  promptBlocks: Array<{
+    id: string;
+    label: string;
+    content: string;
+    kind: "system" | "policy" | "instruction" | "example";
+  }>;
   allowedToolIds: string[];
   objectKeys: string[];
+  handoffWorkflowKeys: string[];
+  outputSchema?: string;
+  evalPolicy?: {
+    rubric: string;
+    samplePrompt: string;
+    passingScore: number;
+  };
+  costBudgetUsd?: number;
+  approvalPolicy?: {
+    required: boolean;
+    approverRole?: PlatformRole;
+    notes?: string;
+  };
   zeroRetentionRequired: boolean;
 }
 
@@ -503,6 +591,105 @@ export interface SecurityPolicyDefinition {
   allowedModelProviderKeys: string[];
 }
 
+export interface NotificationChannelDefinition {
+  id: string;
+  key: string;
+  name: string;
+  kind: NotificationChannelKind;
+  enabled: boolean;
+  destination?: string;
+  description?: string;
+}
+
+export interface NotificationTemplateDefinition {
+  id: string;
+  key: string;
+  name: string;
+  channelKey: string;
+  subject?: string;
+  body: string;
+  severity: NotificationSeverity;
+}
+
+export interface NotificationRuleDefinition {
+  id: string;
+  key: string;
+  name: string;
+  eventType: string;
+  channelKeys: string[];
+  templateKey: string;
+  severity: NotificationSeverity;
+  active: boolean;
+  summary?: string;
+}
+
+export interface NotificationCenterDefinition {
+  channels: NotificationChannelDefinition[];
+  templates: NotificationTemplateDefinition[];
+  rules: NotificationRuleDefinition[];
+}
+
+export interface EventEnvelope {
+  id: string;
+  type: string;
+  tenantSlug: string;
+  environmentSlug: string;
+  emittedAt: string;
+  source: "workflow" | "agent" | "form" | "runtime" | "system";
+  resourceType: string;
+  resourceId: string;
+  payload: Record<string, unknown>;
+}
+
+export interface NotificationDeliveryRecord {
+  id: string;
+  eventId: string;
+  ruleKey: string;
+  channelKey: string;
+  templateKey: string;
+  status: NotificationDeliveryStatus;
+  severity: NotificationSeverity;
+  subject?: string;
+  body: string;
+  destination?: string;
+  createdAt: string;
+  deliveredAt?: string | null;
+  errorMessage?: string | null;
+}
+
+export interface DeadLetterRecord {
+  id: string;
+  eventId: string;
+  type: string;
+  reason: string;
+  payload: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface PlatformAlertRecord {
+  id: string;
+  category: "budget" | "policy" | "delivery" | "runtime";
+  severity: NotificationSeverity;
+  title: string;
+  summary: string;
+  sourceId: string;
+  createdAt: string;
+  acknowledgedAt?: string | null;
+}
+
+export interface PlatformApprovalTaskRecord {
+  id: string;
+  workflowRunId: string;
+  workflowKey: string;
+  nodeId: string;
+  nodeLabel: string;
+  approverRole: PlatformRole;
+  status: "pending" | "approved" | "rejected";
+  instructions?: string | null;
+  createdAt: string;
+  resolvedAt?: string | null;
+}
+
 export interface PlatformViewAsState {
   active: boolean;
   role: PlatformRole;
@@ -530,6 +717,7 @@ export interface PlatformManifest {
   roles: PlatformRole[];
   branding: TenantBrandingDefinition;
   appShell: AppShellDefinition;
+  notifications: NotificationCenterDefinition;
   profiles: ProfileConfigurationDefinition;
   objects: ObjectDefinition[];
   layouts: LayoutDefinition[];
@@ -626,6 +814,43 @@ export interface PlatformAgentEvalRecord {
   result: Record<string, unknown>;
 }
 
+export interface AgentRunRecord {
+  id: string;
+  agentId: string;
+  agentKey: string;
+  status: AgentRunStatus;
+  input: Record<string, unknown>;
+  output?: Record<string, unknown> | null;
+  logs: Array<Record<string, unknown>>;
+  modelProviderKey: string;
+  costUsd: number;
+  tokensIn: number;
+  tokensOut: number;
+  createdAt: string;
+  completedAt?: string | null;
+}
+
+export interface AgentPlaygroundSession {
+  id: string;
+  agentId: string;
+  prompt: string;
+  objectKey?: string;
+  sampleSize: number;
+  createdAt: string;
+}
+
+export interface CostLedgerRecord {
+  id: string;
+  category: "agent_run" | "workflow_run" | "notification";
+  referenceId: string;
+  providerKey?: string;
+  amountUsd: number;
+  tokensIn?: number;
+  tokensOut?: number;
+  createdAt: string;
+  summary: string;
+}
+
 export interface PublishPreviewBucket {
   added: string[];
   updated: string[];
@@ -661,6 +886,7 @@ export interface PlatformPublishPreview {
     workflows: PublishPreviewBucket;
     agents: PublishPreviewBucket;
     modelProviders: PublishPreviewBucket;
+    notifications: PublishPreviewBucket;
   };
   pageImpacts: PlatformPublishPageImpact[];
   routeImpacts: PlatformPublishRouteImpact[];

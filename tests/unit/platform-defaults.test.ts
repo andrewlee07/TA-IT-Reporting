@@ -6,10 +6,13 @@ describe("createStarterManifest", () => {
   it("creates a coherent starter manifest with runtime navigation", () => {
     const manifest = createStarterManifest("teacheractive");
 
-    expect(manifest.schemaVersion).toBe(2);
+    expect(manifest.schemaVersion).toBe(3);
     expect(manifest.objects.length).toBeGreaterThan(0);
     expect(manifest.pages.length).toBeGreaterThan(0);
     expect(manifest.menus.length).toBeGreaterThan(0);
+    expect(manifest.appShell.menuGroups.length).toBeGreaterThan(0);
+    expect(manifest.notifications.channels.length).toBeGreaterThan(0);
+    expect(manifest.notifications.rules.length).toBeGreaterThan(0);
 
     for (const menu of manifest.menus) {
       expect(manifest.pages.some((page) => page.key === menu.pageKey)).toBe(true);

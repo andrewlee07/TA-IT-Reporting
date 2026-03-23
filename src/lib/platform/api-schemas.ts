@@ -92,10 +92,120 @@ export const menuSchema = z.object({
   id: z.string().optional(),
   key: optionalNonEmptyStringSchema,
   label: nonEmptyStringSchema,
+  description: optionalNonEmptyStringSchema,
   icon: optionalNonEmptyStringSchema,
   pageKey: nonEmptyStringSchema,
   order: z.number().optional(),
   group: optionalNonEmptyStringSchema,
+  groupKey: optionalNonEmptyStringSchema,
+  visibleToRoles: z.array(z.enum(["SUPER_ADMIN", "BUILDER_ADMIN", "USER"])).optional(),
+  highlight: z.boolean().optional(),
+  badgeBindingKey: optionalNonEmptyStringSchema,
+});
+
+export const appShellSchema = z.object({
+  productName: nonEmptyStringSchema,
+  tagLine: optionalNonEmptyStringSchema,
+  supportEmail: optionalNonEmptyStringSchema,
+  menuStyle: z.enum(["sidebar", "topbar"]).optional(),
+  navigationMode: z.enum(["sidebar", "topbar"]).optional(),
+  menuGroups: z
+    .array(
+      z.object({
+        key: nonEmptyStringSchema,
+        label: nonEmptyStringSchema,
+        order: z.number().int().min(0),
+        icon: optionalNonEmptyStringSchema,
+        description: optionalNonEmptyStringSchema,
+      }),
+    )
+    .optional(),
+  quickActions: z
+    .array(
+      z.object({
+        key: nonEmptyStringSchema,
+        label: nonEmptyStringSchema,
+        pageKey: optionalNonEmptyStringSchema,
+        workflowKey: optionalNonEmptyStringSchema,
+        icon: optionalNonEmptyStringSchema,
+        tone: z.enum(["default", "accent"]).optional(),
+      }),
+    )
+    .optional(),
+  defaultLandingPageKey: optionalNonEmptyStringSchema,
+  announcementSlots: z
+    .array(
+      z.object({
+        key: nonEmptyStringSchema,
+        label: nonEmptyStringSchema,
+        message: nonEmptyStringSchema,
+        tone: z.enum(["info", "success", "warning", "critical"]),
+        active: z.boolean(),
+      }),
+    )
+    .optional(),
+  badgeBindings: z
+    .array(
+      z.object({
+        key: nonEmptyStringSchema,
+        label: nonEmptyStringSchema,
+        objectKey: optionalNonEmptyStringSchema,
+        workflowKey: optionalNonEmptyStringSchema,
+        metric: z.enum(["records", "queued_runs", "failed_runs", "draft_changes"]),
+      }),
+    )
+    .optional(),
+  visibilityRules: z
+    .array(
+      z.object({
+        key: nonEmptyStringSchema,
+        summary: nonEmptyStringSchema,
+        roles: z.array(z.enum(["SUPER_ADMIN", "BUILDER_ADMIN", "USER"])),
+        pageKeys: z.array(nonEmptyStringSchema).optional(),
+        menuKeys: z.array(nonEmptyStringSchema).optional(),
+      }),
+    )
+    .optional(),
+  profilePageKey: optionalNonEmptyStringSchema,
+  settingsPageKey: optionalNonEmptyStringSchema,
+});
+
+const notificationChannelSchema = z.object({
+  id: z.string().optional(),
+  key: nonEmptyStringSchema,
+  name: nonEmptyStringSchema,
+  kind: z.enum(["in_app", "email", "webhook", "slack_style"]),
+  enabled: z.boolean(),
+  destination: optionalNonEmptyStringSchema,
+  description: optionalNonEmptyStringSchema,
+});
+
+const notificationTemplateSchema = z.object({
+  id: z.string().optional(),
+  key: nonEmptyStringSchema,
+  name: nonEmptyStringSchema,
+  channelKey: nonEmptyStringSchema,
+  subject: optionalNonEmptyStringSchema,
+  body: nonEmptyStringSchema,
+  severity: z.enum(["info", "success", "warning", "critical"]),
+});
+
+const notificationRuleSchema = z.object({
+  id: z.string().optional(),
+  key: nonEmptyStringSchema,
+  name: nonEmptyStringSchema,
+  eventType: nonEmptyStringSchema,
+  channelKeys: z.array(nonEmptyStringSchema).min(1),
+  templateKey: nonEmptyStringSchema,
+  severity: z.enum(["info", "success", "warning", "critical"]),
+  active: z.boolean(),
+  summary: optionalNonEmptyStringSchema,
+});
+
+export const notificationCenterSchema = z.object({
+  channels: z.array(notificationChannelSchema),
+  templates: z.array(notificationTemplateSchema),
+  rules: z.array(notificationRuleSchema),
 });
 
 const visibilityRuleSchema = z.object({
@@ -327,9 +437,42 @@ export const agentSchema = z.object({
   scope: z.enum(["node", "workspace"]),
   modelProviderId: nonEmptyStringSchema,
   prompt: nonEmptyStringSchema,
+  promptBlocks: z
+    .array(
+      z.object({
+        id: nonEmptyStringSchema,
+        label: nonEmptyStringSchema,
+        content: nonEmptyStringSchema,
+        kind: z.enum(["system", "policy", "instruction", "example"]),
+      }),
+    )
+    .optional(),
   allowedToolIds: z.array(nonEmptyStringSchema).optional(),
   objectKeys: z.array(nonEmptyStringSchema).optional(),
+  handoffWorkflowKeys: z.array(nonEmptyStringSchema).optional(),
+  outputSchema: optionalNonEmptyStringSchema,
+  evalPolicy: z
+    .object({
+      rubric: nonEmptyStringSchema,
+      samplePrompt: nonEmptyStringSchema,
+      passingScore: z.number().min(0).max(1),
+    })
+    .optional(),
+  costBudgetUsd: z.number().min(0).optional(),
+  approvalPolicy: z
+    .object({
+      required: z.boolean(),
+      approverRole: z.enum(["SUPER_ADMIN", "BUILDER_ADMIN", "USER"]).optional(),
+      notes: optionalNonEmptyStringSchema,
+    })
+    .optional(),
   zeroRetentionRequired: z.boolean().optional(),
+});
+
+export const agentSimulationSchema = z.object({
+  prompt: optionalNonEmptyStringSchema,
+  objectKey: optionalNonEmptyStringSchema,
+  sampleSize: z.number().int().min(1).max(10).optional(),
 });
 
 export const providerSchema = z.object({

@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useEffectEvent, useState, useTransition } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useState, useTransition } from "react";
 
+import { createThemeAccessibilityReport, createThemeSuggestions } from "@/lib/platform/branding-review";
 import {
   createComponentFromPreset,
   createDefaultPlacement,
@@ -12,21 +13,31 @@ import {
   normalizeLayoutSectionDefinition,
 } from "@/lib/platform/designer";
 import { formatPlatformDateTime } from "@/lib/platform/format";
+import { getThemeCssVariables } from "@/lib/platform/theme";
 import type {
   AgentDefinition,
+  AgentRunRecord,
+  AppShellDefinition,
+  CostLedgerRecord,
   FormDefinition,
   LayoutComponentDefinition,
   LayoutDefinition,
   LayoutSectionDefinition,
   MenuItemDefinition,
   ModelProviderDefinition,
+  NotificationCenterDefinition,
+  NotificationDeliveryRecord,
   ObjectDefinition,
   PageDefinition,
+  PlatformAlertRecord,
+  PlatformApprovalTaskRecord,
   PlatformFormSubmissionRecord,
   PlatformAgentPreview,
   PlatformBootstrap,
   PlatformPublishPreview,
   PlatformRole,
+  ThemeAccessibilityReport,
+  ThemeTokenSuggestion,
   PlatformWorkflowRunRecord,
   SecurityPolicyDefinition,
   TenantBrandingDefinition,
@@ -47,6 +58,7 @@ type WorkspaceKey =
   | "navigation"
   | "workflows"
   | "agents"
+  | "control-tower"
   | "models"
   | "security"
   | "audit";
@@ -57,9 +69,10 @@ const WORKSPACES: Array<{ key: WorkspaceKey; label: string; note: string; code: 
   { key: "forms", label: "Forms", note: "Public forms, embedded intake flows, submissions", code: "FM" },
   { key: "branding", label: "Branding", note: "Tenant theme, logos, brand assets, shell identity", code: "BR" },
   { key: "profiles", label: "Profiles", note: "Profile pages, settings, admin view-as-user lens", code: "PF" },
-  { key: "navigation", label: "Navigation", note: "Menus, ordering, route exposure", code: "NV" },
+  { key: "navigation", label: "Shell", note: "Menus, shell chrome, quick actions, notification routing", code: "SH" },
   { key: "workflows", label: "Workflows", note: "Visual graph metadata and execution scaffolding", code: "WF" },
-  { key: "agents", label: "Agents", note: "Prompt assets, scope, model assignment", code: "AG" },
+  { key: "agents", label: "Agent Studio", note: "Prompt blocks, scope, tools, policy, handoffs", code: "AG" },
+  { key: "control-tower", label: "Control Tower", note: "Agent runs, costs, alerts, deliveries, operator visibility", code: "CT" },
   { key: "models", label: "Models", note: "Provider registry and zero-retention controls", code: "ML" },
   { key: "security", label: "Security", note: "Masking defaults and protected-model policy", code: "SC" },
   { key: "audit", label: "Audit", note: "Publish history and admin activity", code: "AU" },
@@ -71,9 +84,10 @@ const WORKSPACE_TABS: Record<WorkspaceKey, string[]> = {
   forms: ["Builder", "Submissions"],
   branding: ["Theme", "Assets"],
   profiles: ["Experience", "View As"],
-  navigation: ["Menu Items", "Routes"],
+  navigation: ["Menu Items", "Shell", "Notifications", "Routes"],
   workflows: ["Definitions", "Runs"],
-  agents: ["Definitions", "Prompts", "Scope"],
+  agents: ["Definitions", "Prompts", "Scope", "Simulate"],
+  "control-tower": ["Runs", "Costs", "Alerts", "Deliveries", "Approvals", "Dead Letters"],
   models: ["Providers", "Configuration"],
   security: ["Policies", "Access", "Masking Rules"],
   audit: ["History", "Activity"],
@@ -93,6 +107,20 @@ function fetchJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
 
     return payload;
   });
+}
+
+function parseJsonPayloadSafely(value: string): Record<string, unknown> {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return {};
+  }
+
+  const parsed = JSON.parse(trimmed) as unknown;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Workflow payload must be a JSON object.");
+  }
+
+  return parsed as Record<string, unknown>;
 }
 
 function createBlankLayout(pageKey: string, title: string): LayoutDefinition {
@@ -280,8 +308,29 @@ function createBlankAgent(): AgentDefinition {
     scope: "workspace",
     modelProviderId: "",
     prompt: "",
+    promptBlocks: [
+      {
+        id: createClientId("prompt-block"),
+        label: "System role",
+        kind: "system",
+        content: "",
+      },
+    ],
     allowedToolIds: [],
     objectKeys: [],
+    handoffWorkflowKeys: [],
+    outputSchema: "",
+    evalPolicy: {
+      rubric: "Evaluate safety, masking, and operational usefulness.",
+      samplePrompt: "Summarise the current workload.",
+      passingScore: 0.8,
+    },
+    costBudgetUsd: 10,
+    approvalPolicy: {
+      required: false,
+      approverRole: "BUILDER_ADMIN",
+      notes: "",
+    },
     zeroRetentionRequired: true,
   };
 }
@@ -509,6 +558,8 @@ export function PlatformStudio({
     profilePageKey: initialBootstrap.draftManifest.profiles.profilePageKey ?? "",
     settingsPageKey: initialBootstrap.draftManifest.profiles.settingsPageKey ?? "",
   });
+  const [appShellDraft, setAppShellDraft] = useState<AppShellDefinition>(initialBootstrap.draftManifest.appShell);
+  const [notificationDraft, setNotificationDraft] = useState<NotificationCenterDefinition>(initialBootstrap.draftManifest.notifications);
   const [viewAsDraft, setViewAsDraft] = useState({
     role: initialBootstrap.viewAs?.role ?? ("USER" as PlatformRole),
     personaLabel: initialBootstrap.viewAs?.personaLabel ?? "Sample teacher",
@@ -525,17 +576,30 @@ export function PlatformStudio({
     id: "",
     key: "",
     label: "",
+    description: "",
     icon: "dot",
     pageKey: "",
     group: "Workspace",
+    groupKey: "",
     order: 0,
+    highlight: false,
+    visibleToRoles: ["SUPER_ADMIN", "BUILDER_ADMIN", "USER"] as PlatformRole[],
+    badgeBindingKey: "",
   });
   const [workflowDraft, setWorkflowDraft] = useState<WorkflowDefinition>(createWorkflowDraftFromDefinition(initialWorkflow));
   const [workflowRuns, setWorkflowRuns] = useState<PlatformWorkflowRunRecord[]>([]);
+  const [allWorkflowRuns, setAllWorkflowRuns] = useState<PlatformWorkflowRunRecord[]>([]);
   const [workflowEdgeDraft, setWorkflowEdgeDraft] = useState({ sourceId: "", targetId: "", label: "" });
+  const [workflowTestPayload, setWorkflowTestPayload] = useState('{\n  "previewMode": true\n}');
   const [agentDraft, setAgentDraft] = useState<AgentDefinition>(createAgentDraftFromDefinition(initialAgent));
   const [agentPreview, setAgentPreview] = useState<PlatformAgentPreview | null>(null);
   const [agentEvalSummary, setAgentEvalSummary] = useState<string | null>(null);
+  const [agentRuns, setAgentRuns] = useState<AgentRunRecord[]>([]);
+  const [costLedger, setCostLedger] = useState<CostLedgerRecord[]>([]);
+  const [platformAlerts, setPlatformAlerts] = useState<PlatformAlertRecord[]>([]);
+  const [notificationDeliveries, setNotificationDeliveries] = useState<NotificationDeliveryRecord[]>([]);
+  const [approvalTasks, setApprovalTasks] = useState<PlatformApprovalTaskRecord[]>([]);
+  const [deadLetters, setDeadLetters] = useState<Array<{ id: string; type: string; reason: string; createdAt: string }>>([]);
   const [publishPreview, setPublishPreview] = useState<PlatformPublishPreview | null>(null);
   const [providerDraft, setProviderDraft] = useState<ModelProviderDefinition>(createBlankProvider());
   const [inviteDraft, setInviteDraft] = useState({
@@ -574,6 +638,62 @@ export function PlatformStudio({
   const agentActivity = bootstrap.auditEvents.filter(
     (event) => event.resourceType === "agent" && event.resourceId === (selectedAgent?.id ?? agentDraft.id),
   );
+  const brandingSuggestions = useMemo<ThemeTokenSuggestion[]>(() => createThemeSuggestions(brandingDraft), [brandingDraft]);
+  const brandingAccessibility = useMemo<ThemeAccessibilityReport>(() => createThemeAccessibilityReport(brandingDraft), [brandingDraft]);
+  const formSubmissionSummary = useMemo(() => {
+    const total = formSubmissions.length;
+    const submitted = formSubmissions.filter((submission) => submission.status === "submitted").length;
+    const drafts = total - submitted;
+    return {
+      total,
+      submitted,
+      drafts,
+    };
+  }, [formSubmissions]);
+  const formDiagnostics = useMemo(() => {
+    const diagnostics: string[] = [];
+    if (!formDraft.title.trim()) {
+      diagnostics.push("Form title is missing.");
+    }
+    if (!formDraft.route.trim()) {
+      diagnostics.push("Form route is missing.");
+    }
+    if (formDraft.fields.length === 0) {
+      diagnostics.push("Add at least one field.");
+    }
+    if (formDraft.steps.length === 0) {
+      diagnostics.push("Add at least one step.");
+    }
+    const fieldKeys = new Set(formDraft.fields.map((field) => field.key).filter(Boolean));
+    const danglingStep = formDraft.steps.find((step) => step.fieldKeys.some((fieldKey) => !fieldKeys.has(fieldKey)));
+    if (danglingStep) {
+      diagnostics.push(`Step "${danglingStep.title}" references a field key that is not defined.`);
+    }
+    if (formDraft.requireAuthentication && formDraft.deliveryMode === "public") {
+      diagnostics.push("Authenticated forms should not remain in public delivery mode.");
+    }
+    return diagnostics;
+  }, [formDraft]);
+  const pageDiagnostics = useMemo(() => {
+    const diagnostics: string[] = [];
+    if (!pageDraft.title.trim()) {
+      diagnostics.push("Page title is missing.");
+    }
+    if (!pageDraft.route.trim()) {
+      diagnostics.push("Route is missing.");
+    }
+    if (!layoutDraft?.sections.length) {
+      diagnostics.push("Add at least one section.");
+    }
+    if (layoutDraft?.sections.some((section) => section.components.length === 0)) {
+      diagnostics.push("Every section should contain at least one component.");
+    }
+    const hasMenu = sortedMenus.some((menu) => menu.pageKey === (pageDraft.key || selectedPage?.key));
+    if (!hasMenu) {
+      diagnostics.push("This page is not exposed in the runtime menu.");
+    }
+    return diagnostics;
+  }, [layoutDraft, pageDraft.key, pageDraft.route, pageDraft.title, selectedPage?.key, sortedMenus]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -638,6 +758,43 @@ export function PlatformStudio({
     }
   }, [bootstrap.tenant.slug]);
 
+  const refreshControlTower = useCallback(async (): Promise<void> => {
+    try {
+      const [workflowRunsPayload, runsPayload, costsPayload, alertsPayload, deliveriesPayload, approvalsPayload, deadLettersPayload] = await Promise.all([
+        fetchJson<{ runs: PlatformWorkflowRunRecord[] }>(`/api/platform/tenants/${bootstrap.tenant.slug}/workflow-runs`),
+        fetchJson<{ runs: AgentRunRecord[] }>(`/api/platform/tenants/${bootstrap.tenant.slug}/agent-runs`),
+        fetchJson<{ entries: CostLedgerRecord[] }>(`/api/platform/tenants/${bootstrap.tenant.slug}/cost-ledger`),
+        fetchJson<{ alerts: PlatformAlertRecord[] }>(`/api/platform/tenants/${bootstrap.tenant.slug}/alerts`),
+        fetchJson<{ deliveries: NotificationDeliveryRecord[] }>(`/api/platform/tenants/${bootstrap.tenant.slug}/deliveries`),
+        fetchJson<{ tasks: PlatformApprovalTaskRecord[] }>(`/api/platform/tenants/${bootstrap.tenant.slug}/approval-tasks`),
+        fetchJson<{ deadLetters: Array<{ id: string; type: string; reason: string; createdAt: string }> }>(
+          `/api/platform/tenants/${bootstrap.tenant.slug}/dead-letters`,
+        ),
+      ]);
+      setAllWorkflowRuns(workflowRunsPayload.runs);
+      setAgentRuns(runsPayload.runs);
+      setCostLedger(costsPayload.entries);
+      setPlatformAlerts(alertsPayload.alerts);
+      setNotificationDeliveries(deliveriesPayload.deliveries);
+      setApprovalTasks(approvalsPayload.tasks);
+      setDeadLetters(deadLettersPayload.deadLetters);
+    } catch {
+      setAllWorkflowRuns([]);
+      setAgentRuns([]);
+      setCostLedger([]);
+      setPlatformAlerts([]);
+      setNotificationDeliveries([]);
+      setApprovalTasks([]);
+      setDeadLetters([]);
+    }
+  }, [bootstrap.tenant.slug]);
+
+  useEffect(() => {
+    if (workspace === "control-tower" || workspace === "agents") {
+      void refreshControlTower();
+    }
+  }, [refreshControlTower, workspace]);
+
   async function refreshBootstrap(): Promise<void> {
     const payload = await fetchJson<PlatformBootstrap>(`/api/platform/tenants/${bootstrap.tenant.slug}/bootstrap`);
     setBootstrap(payload);
@@ -669,6 +826,8 @@ export function PlatformStudio({
     });
     setAgentDraft(createAgentDraftFromDefinition(nextAgent));
     setBrandingDraft(payload.draftManifest.branding);
+    setAppShellDraft(payload.draftManifest.appShell);
+    setNotificationDraft(payload.draftManifest.notifications);
     setProfileDraft({
       pageTitle: payload.draftManifest.profiles.pageTitle,
       visibleFieldKeys: payload.draftManifest.profiles.visibleFieldKeys.join(", "),
@@ -983,13 +1142,49 @@ export function PlatformStudio({
           id: "",
           key: "",
           label: "",
+          description: "",
           icon: "dot",
           pageKey: "",
           group: "Workspace",
+          groupKey: "",
           order: manifest.menus.length,
+          highlight: false,
+          visibleToRoles: ["SUPER_ADMIN", "BUILDER_ADMIN", "USER"],
+          badgeBindingKey: "",
         });
       },
       `Saved menu item ${menuDraft.label}.`,
+    );
+  }
+
+  async function handleAppShellSave(): Promise<void> {
+    await executeAction(
+      async () => {
+        await fetchJson(`/api/platform/tenants/${bootstrap.tenant.slug}/app-shell`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(appShellDraft),
+        });
+      },
+      `Saved shell config for ${appShellDraft.productName}.`,
+    );
+  }
+
+  async function handleNotificationsSave(): Promise<void> {
+    await executeAction(
+      async () => {
+        await fetchJson(`/api/platform/tenants/${bootstrap.tenant.slug}/notifications`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(notificationDraft),
+        });
+        await refreshControlTower();
+      },
+      "Saved notification center configuration.",
     );
   }
 
@@ -1014,6 +1209,7 @@ export function PlatformStudio({
     try {
       setError(null);
       setMessage(null);
+      const payloadDraft = parseJsonPayloadSafely(workflowTestPayload);
       const payload = await fetchJson<{ run: PlatformWorkflowRunRecord }>(
         `/api/platform/tenants/${bootstrap.tenant.slug}/workflows/${workflowId}/test`,
         {
@@ -1022,9 +1218,7 @@ export function PlatformStudio({
             "content-type": "application/json",
           },
           body: JSON.stringify({
-            payload: {
-              previewMode: true,
-            },
+            payload: payloadDraft,
           }),
         },
       );
@@ -1056,6 +1250,34 @@ export function PlatformStudio({
     );
   }
 
+  async function handleReplayWorkflowRun(runId: string): Promise<void> {
+    await executeAction(
+      async () => {
+        await fetchJson(`/api/platform/tenants/${bootstrap.tenant.slug}/workflow-runs/${runId}/replay`, {
+          method: "POST",
+        });
+        await refreshControlTower();
+      },
+      "Workflow run replayed.",
+    );
+  }
+
+  async function handleResolveApprovalTask(taskId: string, resolution: "approved" | "rejected"): Promise<void> {
+    await executeAction(
+      async () => {
+        await fetchJson(`/api/platform/tenants/${bootstrap.tenant.slug}/approval-tasks/${taskId}/resolve`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ resolution }),
+        });
+        await refreshControlTower();
+      },
+      `Approval task ${resolution}.`,
+    );
+  }
+
   async function handleBrandingSave(): Promise<void> {
     await executeAction(
       async () => {
@@ -1069,6 +1291,14 @@ export function PlatformStudio({
       },
       `Saved branding theme ${brandingDraft.themeName}.`,
     );
+  }
+
+  function applyBrandingSuggestion(suggestion: ThemeTokenSuggestion): void {
+    setBrandingDraft((current) => ({
+      ...current,
+      ...suggestion.tokens,
+      mode: "review",
+    }));
   }
 
   async function handleBrandAssetUpload(): Promise<void> {
@@ -1230,6 +1460,35 @@ export function PlatformStudio({
       setMessage(`Evaluated ${agentDraft.name}.`);
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Failed to evaluate agent.");
+    }
+  }
+
+  async function handleSimulateAgent(agentId: string): Promise<void> {
+    try {
+      setError(null);
+      setMessage(null);
+      const payload = await fetchJson<{
+        preview: PlatformAgentPreview;
+        run: AgentRunRecord;
+        cost: CostLedgerRecord;
+      }>(`/api/platform/tenants/${bootstrap.tenant.slug}/agents/${agentId}/simulate`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          prompt: agentDraft.evalPolicy?.samplePrompt ?? agentDraft.prompt,
+          objectKey: agentDraft.objectKeys[0] ?? manifest.objects[0]?.key,
+          sampleSize: 3,
+        }),
+      });
+      setAgentPreview(payload.preview);
+      setAgentRuns((current) => [payload.run, ...current]);
+      setCostLedger((current) => [payload.cost, ...current]);
+      await refreshControlTower();
+      setMessage(`Simulated ${agentDraft.name} in Control Tower.`);
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Failed to simulate agent.");
     }
   }
 
@@ -1633,6 +1892,73 @@ export function PlatformStudio({
     }));
   }
 
+  function updateFormField(
+    fieldId: string,
+    updater: (field: FormDefinition["fields"][number]) => FormDefinition["fields"][number],
+  ): void {
+    setFormDraft((current) => ({
+      ...current,
+      fields: current.fields.map((field) => (field.id === fieldId ? updater(field) : field)),
+    }));
+  }
+
+  function removeFormField(fieldId: string): void {
+    setFormDraft((current) => ({
+      ...current,
+      fields: current.fields.filter((field) => field.id !== fieldId),
+      steps: current.steps.map((step) => ({
+        ...step,
+        fieldKeys: step.fieldKeys.filter((fieldKey) => current.fields.find((field) => field.id === fieldId)?.key !== fieldKey),
+      })),
+    }));
+  }
+
+  function addFormValidationRule(fieldId: string): void {
+    updateFormField(fieldId, (field) => ({
+      ...field,
+      validations: [
+        ...field.validations,
+        {
+          id: createClientId("form-validation"),
+          type: "required",
+          message: `${field.label} is required.`,
+        },
+      ],
+    }));
+  }
+
+  function updateAgentPromptBlock(
+    blockId: string,
+    updater: (block: AgentDefinition["promptBlocks"][number]) => AgentDefinition["promptBlocks"][number],
+  ): void {
+    setAgentDraft((current) => ({
+      ...current,
+      promptBlocks: current.promptBlocks.map((block) => (block.id === blockId ? updater(block) : block)),
+    }));
+  }
+
+  function addAgentPromptBlock(): void {
+    setAgentDraft((current) => ({
+      ...current,
+      promptBlocks: [
+        ...current.promptBlocks,
+        {
+          id: createClientId("prompt-block"),
+          label: `Block ${current.promptBlocks.length + 1}`,
+          kind: "instruction",
+          content: "",
+        },
+      ],
+    }));
+  }
+
+  function removeAgentPromptBlock(blockId: string): void {
+    setAgentDraft((current) => ({
+      ...current,
+      promptBlocks: current.promptBlocks.filter((block) => block.id !== blockId),
+    }));
+  }
+
   function renderTabBar() {
     const tabs = WORKSPACE_TABS[workspace];
     return (
@@ -1996,6 +2322,10 @@ export function PlatformStudio({
               <span>Home</span>
               <strong>{pageDraft.isHome ? "Yes" : "No"}</strong>
             </div>
+            <div className={styles.sidebarMeta}>
+              <span>Diagnostics</span>
+              <strong>{pageDiagnostics.length === 0 ? "Clean" : `${pageDiagnostics.length} issues`}</strong>
+            </div>
           </div>
 
           <div className={styles.sidebarSection}>
@@ -2322,6 +2652,26 @@ export function PlatformStudio({
               ))}
             </div>
           </div>
+
+          <div className={styles.designerInspectorGroup}>
+            <div className={styles.sectionHeader}>
+              <div>
+                <p className={styles.cardEyebrow}>Diagnostics</p>
+                <h3>Page readiness</h3>
+              </div>
+            </div>
+            {pageDiagnostics.length === 0 ? (
+              <div className={styles.sidebarPanel}>This page is structurally ready for preview and publish.</div>
+            ) : (
+              <div className={styles.listStack}>
+                {pageDiagnostics.map((diagnostic) => (
+                  <div className={styles.errorBanner} key={diagnostic}>
+                    {diagnostic}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </section>
       </div>
     );
@@ -2404,6 +2754,25 @@ export function PlatformStudio({
                     <option value="authenticated">Authenticated</option>
                   </select>
                 </label>
+                <label className={styles.formField}>
+                  <span>Object</span>
+                  <select className={styles.select} onChange={(event) => setFormDraft((current) => ({ ...current, objectKey: event.target.value || undefined }))} value={formDraft.objectKey ?? ""}>
+                    <option value="">No object</option>
+                    {manifest.objects.map((objectDefinition) => (
+                      <option key={objectDefinition.id} value={objectDefinition.key}>
+                        {objectDefinition.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className={styles.formField}>
+                  <span>Submit label</span>
+                  <input className={styles.input} onChange={(event) => setFormDraft((current) => ({ ...current, submitLabel: event.target.value }))} value={formDraft.submitLabel} />
+                </label>
+                <label className={styles.formFieldSpan}>
+                  <span>Success message</span>
+                  <textarea className={styles.textarea} onChange={(event) => setFormDraft((current) => ({ ...current, successMessage: event.target.value }))} value={formDraft.successMessage} />
+                </label>
                 <label className={styles.formFieldSpan}>
                   <span>Description</span>
                   <textarea className={styles.textarea} onChange={(event) => setFormDraft((current) => ({ ...current, description: event.target.value }))} value={formDraft.description ?? ""} />
@@ -2422,6 +2791,11 @@ export function PlatformStudio({
                   <input checked={formDraft.analyticsEnabled} onChange={(event) => setFormDraft((current) => ({ ...current, analyticsEnabled: event.target.checked }))} type="checkbox" />
                   <span>Analytics enabled</span>
                 </label>
+              </div>
+              <div className={formDiagnostics.length === 0 ? styles.sidebarPanel : styles.errorBanner}>
+                {formDiagnostics.length === 0
+                  ? "Form structure is ready for preview. Add branching, calculations, and validations to deepen the experience."
+                  : formDiagnostics.join(" ")}
               </div>
               <div className={styles.subSection}>
                 <div className={styles.sectionHeader}>
@@ -2455,18 +2829,27 @@ export function PlatformStudio({
                 <div className={styles.listStack}>
                   {formDraft.fields.map((field) => (
                     <div className={styles.fieldCard} key={field.id}>
+                      <div className={styles.sectionHeader}>
+                        <div>
+                          <p className={styles.cardEyebrow}>Field</p>
+                          <h3>{field.label}</h3>
+                        </div>
+                        <button className={styles.ghostButtonDanger} onClick={() => removeFormField(field.id)} type="button">
+                          Remove
+                        </button>
+                      </div>
                       <div className={styles.formGridTight}>
                         <label className={styles.formField}>
                           <span>Label</span>
-                          <input className={styles.input} onChange={(event) => setFormDraft((current) => ({ ...current, fields: current.fields.map((candidate) => candidate.id === field.id ? { ...candidate, label: event.target.value } : candidate) }))} value={field.label} />
+                          <input className={styles.input} onChange={(event) => updateFormField(field.id, (current) => ({ ...current, label: event.target.value }))} value={field.label} />
                         </label>
                         <label className={styles.formField}>
                           <span>Key</span>
-                          <input className={styles.input} onChange={(event) => setFormDraft((current) => ({ ...current, fields: current.fields.map((candidate) => candidate.id === field.id ? { ...candidate, key: event.target.value } : candidate) }))} value={field.key} />
+                          <input className={styles.input} onChange={(event) => updateFormField(field.id, (current) => ({ ...current, key: event.target.value }))} value={field.key} />
                         </label>
                         <label className={styles.formField}>
                           <span>Type</span>
-                          <select className={styles.select} onChange={(event) => setFormDraft((current) => ({ ...current, fields: current.fields.map((candidate) => candidate.id === field.id ? { ...candidate, type: event.target.value as FormDefinition["fields"][number]["type"] } : candidate) }))} value={field.type}>
+                          <select className={styles.select} onChange={(event) => updateFormField(field.id, (current) => ({ ...current, type: event.target.value as FormDefinition["fields"][number]["type"] }))} value={field.type}>
                             <option value="text">Text</option>
                             <option value="long_text">Long text</option>
                             <option value="number">Number</option>
@@ -2479,10 +2862,147 @@ export function PlatformStudio({
                         </label>
                         <label className={styles.formField}>
                           <span>Tooltip</span>
-                          <input className={styles.input} onChange={(event) => setFormDraft((current) => ({ ...current, fields: current.fields.map((candidate) => candidate.id === field.id ? { ...candidate, tooltip: event.target.value } : candidate) }))} value={field.tooltip ?? ""} />
+                          <input className={styles.input} onChange={(event) => updateFormField(field.id, (current) => ({ ...current, tooltip: event.target.value }))} value={field.tooltip ?? ""} />
+                        </label>
+                        <label className={styles.formField}>
+                          <span>Placeholder</span>
+                          <input className={styles.input} onChange={(event) => updateFormField(field.id, (current) => ({ ...current, placeholder: event.target.value }))} value={field.placeholder ?? ""} />
+                        </label>
+                        <label className={styles.formField}>
+                          <span>Help text</span>
+                          <input className={styles.input} onChange={(event) => updateFormField(field.id, (current) => ({ ...current, helpText: event.target.value }))} value={field.helpText ?? ""} />
+                        </label>
+                        <label className={styles.formField}>
+                          <span>Options</span>
+                          <input className={styles.input} onChange={(event) => updateFormField(field.id, (current) => ({ ...current, options: event.target.value.split(",").map((entry) => entry.trim()).filter(Boolean) }))} value={field.options?.join(", ") ?? ""} />
+                        </label>
+                        <label className={styles.formField}>
+                          <span>Default value</span>
+                          <input className={styles.input} onChange={(event) => updateFormField(field.id, (current) => ({ ...current, defaultValue: event.target.value }))} value={String(field.defaultValue ?? "")} />
+                        </label>
+                        <label className={styles.formFieldSpan}>
+                          <span>Mandatory rule</span>
+                          <input className={styles.input} onChange={(event) => updateFormField(field.id, (current) => ({ ...current, mandatoryRule: event.target.value ? { mode: "text", expression: event.target.value } : undefined }))} value={field.mandatoryRule?.expression ?? ""} />
+                        </label>
+                        <label className={styles.formFieldSpan}>
+                          <span>Calculation expression</span>
+                          <input className={styles.input} onChange={(event) => updateFormField(field.id, (current) => ({ ...current, calculation: event.target.value ? { id: current.calculation?.id ?? createClientId("form-calculation"), expression: event.target.value, outputType: current.type === "currency" ? "currency" : current.type === "number" ? "number" : "text" } : null }))} value={field.calculation?.expression ?? ""} />
                         </label>
                       </div>
+                      <div className={styles.inlineList}>
+                        <label className={styles.checkboxField}>
+                          <input checked={field.required} onChange={(event) => updateFormField(field.id, (current) => ({ ...current, required: event.target.checked }))} type="checkbox" />
+                          <span>Required</span>
+                        </label>
+                      </div>
+                      <div className={styles.subSection}>
+                        <div className={styles.sectionHeader}>
+                          <div>
+                            <p className={styles.cardEyebrow}>Validation</p>
+                            <h3>{field.validations.length} rules</h3>
+                          </div>
+                          <button className={styles.secondaryButton} onClick={() => addFormValidationRule(field.id)} type="button">
+                            Add rule
+                          </button>
+                        </div>
+                        <div className={styles.listStack}>
+                          {field.validations.length === 0 ? (
+                            <div className={styles.sidebarPanel}>No explicit validation rules yet. Required, regex, and numeric bounds can all be configured here.</div>
+                          ) : (
+                            field.validations.map((validation) => (
+                              <article className={styles.workflowCard} key={validation.id}>
+                                <div className={styles.formGridTight}>
+                                  <label className={styles.formField}>
+                                    <span>Type</span>
+                                    <select className={styles.select} onChange={(event) => updateFormField(field.id, (current) => ({ ...current, validations: current.validations.map((candidate) => candidate.id === validation.id ? { ...candidate, type: event.target.value as typeof candidate.type } : candidate) }))} value={validation.type}>
+                                      <option value="required">Required</option>
+                                      <option value="min">Min</option>
+                                      <option value="max">Max</option>
+                                      <option value="regex">Regex</option>
+                                      <option value="unique">Unique</option>
+                                    </select>
+                                  </label>
+                                  <label className={styles.formField}>
+                                    <span>Value</span>
+                                    <input className={styles.input} onChange={(event) => updateFormField(field.id, (current) => ({ ...current, validations: current.validations.map((candidate) => candidate.id === validation.id ? { ...candidate, value: event.target.value } : candidate) }))} value={String(validation.value ?? "")} />
+                                  </label>
+                                  <label className={styles.formFieldSpan}>
+                                    <span>Message</span>
+                                    <input className={styles.input} onChange={(event) => updateFormField(field.id, (current) => ({ ...current, validations: current.validations.map((candidate) => candidate.id === validation.id ? { ...candidate, message: event.target.value } : candidate) }))} value={validation.message} />
+                                  </label>
+                                </div>
+                                <div className={styles.actionsRow}>
+                                  <button className={styles.ghostButtonDanger} onClick={() => updateFormField(field.id, (current) => ({ ...current, validations: current.validations.filter((candidate) => candidate.id !== validation.id) }))} type="button">
+                                    Remove rule
+                                  </button>
+                                </div>
+                              </article>
+                            ))
+                          )}
+                        </div>
+                      </div>
                     </div>
+                  ))}
+                </div>
+              </div>
+              <div className={styles.subSection}>
+                <div className={styles.sectionHeader}>
+                  <div>
+                    <p className={styles.cardEyebrow}>Steps</p>
+                    <h3>Journey and branching</h3>
+                  </div>
+                  <button
+                    className={styles.secondaryButton}
+                    onClick={() =>
+                      setFormDraft((current) => ({
+                        ...current,
+                        steps: [
+                          ...current.steps,
+                          {
+                            id: createClientId("form-step"),
+                            key: `step_${current.steps.length + 1}`,
+                            title: `Step ${current.steps.length + 1}`,
+                            fieldKeys: [],
+                          },
+                        ],
+                      }))
+                    }
+                    type="button"
+                  >
+                    Add step
+                  </button>
+                </div>
+                <div className={styles.listStack}>
+                  {formDraft.steps.map((step) => (
+                    <article className={styles.workflowCard} key={step.id}>
+                      <div className={styles.sectionHeader}>
+                        <div>
+                          <p className={styles.cardEyebrow}>Step</p>
+                          <h3>{step.title}</h3>
+                        </div>
+                        <button className={styles.ghostButtonDanger} onClick={() => setFormDraft((current) => ({ ...current, steps: current.steps.filter((candidate) => candidate.id !== step.id) }))} type="button">
+                          Remove
+                        </button>
+                      </div>
+                      <div className={styles.formGrid}>
+                        <label className={styles.formField}>
+                          <span>Title</span>
+                          <input className={styles.input} onChange={(event) => setFormDraft((current) => ({ ...current, steps: current.steps.map((candidate) => candidate.id === step.id ? { ...candidate, title: event.target.value } : candidate) }))} value={step.title} />
+                        </label>
+                        <label className={styles.formField}>
+                          <span>Key</span>
+                          <input className={styles.input} onChange={(event) => setFormDraft((current) => ({ ...current, steps: current.steps.map((candidate) => candidate.id === step.id ? { ...candidate, key: event.target.value } : candidate) }))} value={step.key} />
+                        </label>
+                        <label className={styles.formFieldSpan}>
+                          <span>Field keys</span>
+                          <input className={styles.input} onChange={(event) => setFormDraft((current) => ({ ...current, steps: current.steps.map((candidate) => candidate.id === step.id ? { ...candidate, fieldKeys: event.target.value.split(",").map((entry) => entry.trim()).filter(Boolean) } : candidate) }))} value={step.fieldKeys.join(", ")} />
+                        </label>
+                        <label className={styles.formFieldSpan}>
+                          <span>Visibility rule</span>
+                          <input className={styles.input} onChange={(event) => setFormDraft((current) => ({ ...current, steps: current.steps.map((candidate) => candidate.id === step.id ? { ...candidate, visibilityRule: event.target.value ? { expression: event.target.value } : undefined } : candidate) }))} value={step.visibilityRule?.expression ?? ""} />
+                        </label>
+                      </div>
+                    </article>
                   ))}
                 </div>
               </div>
@@ -2506,6 +3026,20 @@ export function PlatformStudio({
                     </Link>
                   </div>
                 ) : null}
+              </div>
+              <div className={styles.metricGrid}>
+                <article className={styles.metricCard}>
+                  <span>Total</span>
+                  <strong>{formSubmissionSummary.total}</strong>
+                </article>
+                <article className={styles.metricCard}>
+                  <span>Submitted</span>
+                  <strong>{formSubmissionSummary.submitted}</strong>
+                </article>
+                <article className={styles.metricCard}>
+                  <span>Drafts</span>
+                  <strong>{formSubmissionSummary.drafts}</strong>
+                </article>
               </div>
               {formSubmissions.length === 0 ? (
                 <div className={styles.emptyState}>No submissions yet. Publish the tenant runtime and submit the form to inspect captured entries.</div>
@@ -2588,6 +3122,90 @@ export function PlatformStudio({
                   <textarea className={styles.textarea} onChange={(event) => setBrandingDraft((current) => ({ ...current, notes: event.target.value }))} value={brandingDraft.notes ?? ""} />
                 </label>
               </div>
+              <div className={styles.scopeGrid}>
+                <article className={styles.scopeCard}>
+                  <div className={styles.sectionHeader}>
+                    <div>
+                      <p className={styles.cardEyebrow}>Review queue</p>
+                      <h3>Suggested theme directions</h3>
+                    </div>
+                  </div>
+                  <div className={styles.listStack}>
+                    {brandingSuggestions.map((suggestion) => (
+                      <article className={styles.workflowCard} key={suggestion.key}>
+                        <strong>{suggestion.label}</strong>
+                        <p>{suggestion.description}</p>
+                        <div className={styles.inlineList}>
+                          <span className={styles.colorChip} style={{ background: suggestion.tokens.primaryColor }} />
+                          <span className={styles.colorChip} style={{ background: suggestion.tokens.secondaryColor }} />
+                          <span className={styles.colorChip} style={{ background: suggestion.tokens.accentColor }} />
+                        </div>
+                        <button className={styles.secondaryButton} onClick={() => applyBrandingSuggestion(suggestion)} type="button">
+                          Apply suggestion
+                        </button>
+                      </article>
+                    ))}
+                  </div>
+                </article>
+                <article className={styles.scopeCard}>
+                  <div className={styles.sectionHeader}>
+                    <div>
+                      <p className={styles.cardEyebrow}>Accessibility</p>
+                      <h3>{brandingAccessibility.score}% pass rate</h3>
+                    </div>
+                  </div>
+                  <div className={styles.listStack}>
+                    {brandingAccessibility.checks.map((check) => (
+                      <article className={styles.auditRow} key={check.key}>
+                        <div>
+                          <strong>{check.label}</strong>
+                          <p>
+                            {check.ratio}:1 against {check.requiredRatio}:1
+                          </p>
+                        </div>
+                        <span className={check.passed ? styles.successPill : styles.warningPill}>{check.passed ? "Pass" : "Fix"}</span>
+                      </article>
+                    ))}
+                  </div>
+                  {brandingAccessibility.recommendations.length ? (
+                    <div className={styles.sidebarPanel}>
+                      {brandingAccessibility.recommendations.join(" ")}
+                    </div>
+                  ) : (
+                    <div className={styles.sidebarPanel}>Theme tokens are currently passing the core contrast checks used by shell, forms, and runtime pages.</div>
+                  )}
+                </article>
+                <article className={styles.scopeCard}>
+                  <div className={styles.sectionHeader}>
+                    <div>
+                      <p className={styles.cardEyebrow}>Live preview</p>
+                      <h3>Shell and form posture</h3>
+                    </div>
+                  </div>
+                  <div className={styles.previewShell} style={getThemeCssVariables({ ...manifest, branding: brandingDraft })}>
+                    <div className={styles.previewBanner}>
+                      <div>
+                        <p className={styles.cardEyebrow}>{brandingDraft.themeName}</p>
+                        <h2>{bootstrap.tenant.name}</h2>
+                        <p className={styles.helperCopy}>Brand tokens now preview shell chrome, runtime pages, and public forms before publish.</p>
+                      </div>
+                      <div className={styles.inlineList}>
+                        <span className={styles.inlineTag}>{brandingDraft.fontFamily}</span>
+                        <span className={styles.inlineTag}>{manifest.menus.length} nav items</span>
+                      </div>
+                    </div>
+                    <div className={styles.tileGrid}>
+                      {sortedMenus.slice(0, 4).map((menu) => (
+                        <article className={styles.metricCard} key={menu.id}>
+                          <span>{menu.group}</span>
+                          <strong>{menu.label}</strong>
+                          <p className={styles.metricMeta}>/{manifest.pages.find((page) => page.key === menu.pageKey)?.route ?? menu.pageKey}</p>
+                        </article>
+                      ))}
+                    </div>
+                  </div>
+                </article>
+              </div>
             </>
           ) : null}
 
@@ -2627,10 +3245,26 @@ export function PlatformStudio({
                     <div>
                       <strong>{asset.label}</strong>
                       <p>{asset.kind} · {asset.fileName}</p>
+                      <small>
+                        {brandingDraft.logoAssetId === asset.id ? "Logo" : null}
+                        {brandingDraft.iconAssetId === asset.id ? `${brandingDraft.logoAssetId === asset.id ? " · " : ""}Icon` : null}
+                        {brandingDraft.brandBookAssetId === asset.id ? `${brandingDraft.logoAssetId === asset.id || brandingDraft.iconAssetId === asset.id ? " · " : ""}Brand book` : null}
+                      </small>
                     </div>
-                    <Link className={styles.secondaryLink} href={asset.url} target="_blank">
-                      Open
-                    </Link>
+                    <div className={styles.inlineList}>
+                      <button className={styles.ghostButton} onClick={() => setBrandingDraft((current) => ({ ...current, logoAssetId: asset.id }))} type="button">
+                        Logo
+                      </button>
+                      <button className={styles.ghostButton} onClick={() => setBrandingDraft((current) => ({ ...current, iconAssetId: asset.id }))} type="button">
+                        Icon
+                      </button>
+                      <button className={styles.ghostButton} onClick={() => setBrandingDraft((current) => ({ ...current, brandBookAssetId: asset.id }))} type="button">
+                        Brand book
+                      </button>
+                      <Link className={styles.secondaryLink} href={asset.url} target="_blank">
+                        Open
+                      </Link>
+                    </div>
                   </article>
                 ))}
               </div>
@@ -2772,6 +3406,7 @@ export function PlatformStudio({
                       <p>
                         {menu.group} · {menu.pageKey}
                       </p>
+                      {menu.visibleToRoles?.length ? <small>{menu.visibleToRoles.join(" · ")}</small> : null}
                     </div>
                     <div className={styles.inlineList}>
                       <button className={styles.ghostButton} onClick={() => moveMenu(menu, -1)} type="button">
@@ -2801,6 +3436,10 @@ export function PlatformStudio({
                   <span>Key</span>
                   <input className={styles.input} onChange={(event) => setMenuDraft((current) => ({ ...current, key: event.target.value }))} value={menuDraft.key} />
                 </label>
+                <label className={styles.formFieldSpan}>
+                  <span>Description</span>
+                  <input className={styles.input} onChange={(event) => setMenuDraft((current) => ({ ...current, description: event.target.value }))} value={menuDraft.description} />
+                </label>
                 <label className={styles.formField}>
                   <span>Page</span>
                   <select className={styles.select} onChange={(event) => setMenuDraft((current) => ({ ...current, pageKey: event.target.value }))} value={menuDraft.pageKey}>
@@ -2816,6 +3455,27 @@ export function PlatformStudio({
                   <span>Group</span>
                   <input className={styles.input} onChange={(event) => setMenuDraft((current) => ({ ...current, group: event.target.value }))} value={menuDraft.group} />
                 </label>
+                <label className={styles.formField}>
+                  <span>Group key</span>
+                  <input className={styles.input} onChange={(event) => setMenuDraft((current) => ({ ...current, groupKey: event.target.value }))} value={menuDraft.groupKey} />
+                </label>
+                <label className={styles.formField}>
+                  <span>Badge binding</span>
+                  <select className={styles.select} onChange={(event) => setMenuDraft((current) => ({ ...current, badgeBindingKey: event.target.value }))} value={menuDraft.badgeBindingKey}>
+                    <option value="">No badge</option>
+                    {appShellDraft.badgeBindings.map((binding) => (
+                      <option key={binding.key} value={binding.key}>
+                        {binding.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className={styles.inlineList}>
+                <label className={styles.checkboxField}>
+                  <input checked={menuDraft.highlight} onChange={(event) => setMenuDraft((current) => ({ ...current, highlight: event.target.checked }))} type="checkbox" />
+                  <span>Highlight in runtime nav</span>
+                </label>
               </div>
               <div className={styles.actionsRow}>
                 <button className={styles.primaryButton} onClick={() => void handleMenuSave()} type="button">
@@ -2827,8 +3487,179 @@ export function PlatformStudio({
         ) : null}
 
         {activeTab === 1 ? (
+          <>
+            <section className={styles.panel}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <p className={styles.cardEyebrow}>App shell</p>
+                  <h2>Runtime chrome</h2>
+                </div>
+              </div>
+              <div className={styles.formGrid}>
+                <label className={styles.formField}>
+                  <span>Product name</span>
+                  <input className={styles.input} onChange={(event) => setAppShellDraft((current) => ({ ...current, productName: event.target.value }))} value={appShellDraft.productName} />
+                </label>
+                <label className={styles.formField}>
+                  <span>Navigation mode</span>
+                  <select className={styles.select} onChange={(event) => setAppShellDraft((current) => ({ ...current, menuStyle: event.target.value as AppShellDefinition["menuStyle"], navigationMode: event.target.value as AppShellDefinition["navigationMode"] }))} value={appShellDraft.navigationMode}>
+                    <option value="sidebar">Sidebar</option>
+                    <option value="topbar">Topbar</option>
+                  </select>
+                </label>
+                <label className={styles.formFieldSpan}>
+                  <span>Tag line</span>
+                  <input className={styles.input} onChange={(event) => setAppShellDraft((current) => ({ ...current, tagLine: event.target.value }))} value={appShellDraft.tagLine ?? ""} />
+                </label>
+                <label className={styles.formField}>
+                  <span>Support email</span>
+                  <input className={styles.input} onChange={(event) => setAppShellDraft((current) => ({ ...current, supportEmail: event.target.value }))} value={appShellDraft.supportEmail ?? ""} />
+                </label>
+                <label className={styles.formField}>
+                  <span>Default landing page</span>
+                  <select className={styles.select} onChange={(event) => setAppShellDraft((current) => ({ ...current, defaultLandingPageKey: event.target.value }))} value={appShellDraft.defaultLandingPageKey ?? ""}>
+                    <option value="">Choose page</option>
+                    {manifest.pages.map((page) => (
+                      <option key={page.id} value={page.key}>
+                        {page.title}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className={styles.actionsRow}>
+                <button className={styles.primaryButton} onClick={() => void handleAppShellSave()} type="button">
+                  Save shell
+                </button>
+              </div>
+            </section>
+            <section className={styles.panelWide}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <p className={styles.cardEyebrow}>Quick actions and groups</p>
+                  <h2>Shell controls</h2>
+                </div>
+              </div>
+              <div className={styles.scopeGrid}>
+                <article className={styles.scopeCard}>
+                  <p className={styles.cardEyebrow}>Menu groups</p>
+                  <div className={styles.listStack}>
+                    {appShellDraft.menuGroups.map((group, index) => (
+                      <div className={styles.fieldCard} key={group.key}>
+                        <div className={styles.formGrid}>
+                          <label className={styles.formField}>
+                            <span>Label</span>
+                            <input className={styles.input} onChange={(event) => setAppShellDraft((current) => ({ ...current, menuGroups: current.menuGroups.map((candidate, candidateIndex) => candidateIndex === index ? { ...candidate, label: event.target.value } : candidate) }))} value={group.label} />
+                          </label>
+                          <label className={styles.formField}>
+                            <span>Order</span>
+                            <input className={styles.input} onChange={(event) => setAppShellDraft((current) => ({ ...current, menuGroups: current.menuGroups.map((candidate, candidateIndex) => candidateIndex === index ? { ...candidate, order: Number(event.target.value) || 0 } : candidate) }))} type="number" value={group.order} />
+                          </label>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </article>
+                <article className={styles.scopeCard}>
+                  <p className={styles.cardEyebrow}>Quick actions</p>
+                  <div className={styles.listStack}>
+                    {appShellDraft.quickActions.map((action, index) => (
+                      <div className={styles.fieldCard} key={action.key}>
+                        <div className={styles.formGrid}>
+                          <label className={styles.formField}>
+                            <span>Label</span>
+                            <input className={styles.input} onChange={(event) => setAppShellDraft((current) => ({ ...current, quickActions: current.quickActions.map((candidate, candidateIndex) => candidateIndex === index ? { ...candidate, label: event.target.value } : candidate) }))} value={action.label} />
+                          </label>
+                          <label className={styles.formField}>
+                            <span>Page</span>
+                            <select className={styles.select} onChange={(event) => setAppShellDraft((current) => ({ ...current, quickActions: current.quickActions.map((candidate, candidateIndex) => candidateIndex === index ? { ...candidate, pageKey: event.target.value || undefined } : candidate) }))} value={action.pageKey ?? ""}>
+                              <option value="">No page</option>
+                              {manifest.pages.map((page) => (
+                                <option key={page.id} value={page.key}>
+                                  {page.title}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </article>
+              </div>
+            </section>
+          </>
+        ) : null}
+
+        {activeTab === 2 ? (
+          <>
+            <section className={styles.panel}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <p className={styles.cardEyebrow}>Notification channels</p>
+                  <h2>Delivery routing</h2>
+                </div>
+              </div>
+              <div className={styles.listStack}>
+                {notificationDraft.channels.map((channel, index) => (
+                  <div className={styles.fieldCard} key={channel.key}>
+                    <div className={styles.formGrid}>
+                      <label className={styles.formField}>
+                        <span>Name</span>
+                        <input className={styles.input} onChange={(event) => setNotificationDraft((current) => ({ ...current, channels: current.channels.map((candidate, candidateIndex) => candidateIndex === index ? { ...candidate, name: event.target.value } : candidate) }))} value={channel.name} />
+                      </label>
+                      <label className={styles.formField}>
+                        <span>Destination</span>
+                        <input className={styles.input} onChange={(event) => setNotificationDraft((current) => ({ ...current, channels: current.channels.map((candidate, candidateIndex) => candidateIndex === index ? { ...candidate, destination: event.target.value } : candidate) }))} value={channel.destination ?? ""} />
+                      </label>
+                    </div>
+                    <label className={styles.checkboxField}>
+                      <input checked={channel.enabled} onChange={(event) => setNotificationDraft((current) => ({ ...current, channels: current.channels.map((candidate, candidateIndex) => candidateIndex === index ? { ...candidate, enabled: event.target.checked } : candidate) }))} type="checkbox" />
+                      <span>{channel.kind}</span>
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </section>
+            <section className={styles.panelWide}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <p className={styles.cardEyebrow}>Notification rules</p>
+                  <h2>Routing policies</h2>
+                </div>
+              </div>
+              <div className={styles.listStack}>
+                {notificationDraft.rules.map((rule, index) => (
+                  <div className={styles.workflowCard} key={rule.key}>
+                    <div className={styles.formGrid}>
+                      <label className={styles.formField}>
+                        <span>Name</span>
+                        <input className={styles.input} onChange={(event) => setNotificationDraft((current) => ({ ...current, rules: current.rules.map((candidate, candidateIndex) => candidateIndex === index ? { ...candidate, name: event.target.value } : candidate) }))} value={rule.name} />
+                      </label>
+                      <label className={styles.formField}>
+                        <span>Event type</span>
+                        <input className={styles.input} onChange={(event) => setNotificationDraft((current) => ({ ...current, rules: current.rules.map((candidate, candidateIndex) => candidateIndex === index ? { ...candidate, eventType: event.target.value } : candidate) }))} value={rule.eventType} />
+                      </label>
+                    </div>
+                    <div className={styles.inlineList}>
+                      <span className={styles.inlineTag}>{rule.severity}</span>
+                      <span className={styles.inlineTag}>{rule.channelKeys.join(", ")}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className={styles.actionsRow}>
+                <button className={styles.primaryButton} onClick={() => void handleNotificationsSave()} type="button">
+                  Save notifications
+                </button>
+              </div>
+            </section>
+          </>
+        ) : null}
+
+        {activeTab === 3 ? (
           <section className={styles.panelWide}>
-            <div className={styles.emptyState}>Route configuration and URL management will be available in a future release.</div>
+            <div className={styles.emptyState}>Route ownership stays metadata-driven through pages. This tab is reserved for route diagnostics and impact review.</div>
           </section>
         ) : null}
       </div>
@@ -2836,6 +3667,20 @@ export function PlatformStudio({
   }
 
   function renderWorkflowsWorkspace() {
+    const workflowDiagnostics: string[] = [];
+    if (!workflowDraft.name.trim()) {
+      workflowDiagnostics.push("Workflow name is required.");
+    }
+    if (!workflowDraft.triggers.length) {
+      workflowDiagnostics.push("Add at least one trigger.");
+    }
+    if (!workflowDraft.nodes.length) {
+      workflowDiagnostics.push("Add at least one node.");
+    }
+    if (workflowDraft.nodes.length > 1 && workflowDraft.edges.length === 0) {
+      workflowDiagnostics.push("Connect nodes with at least one edge.");
+    }
+
     return (
       <div className={styles.workspaceGrid}>
         <section className={styles.panel}>
@@ -2907,6 +3752,87 @@ export function PlatformStudio({
                   <span>Description</span>
                   <textarea className={styles.textarea} onChange={(event) => setWorkflowDraft((current) => ({ ...current, description: event.target.value }))} value={workflowDraft.description ?? ""} />
                 </label>
+              </div>
+              <div className={styles.scopeGrid}>
+                <article className={styles.scopeCard}>
+                  <div className={styles.sectionHeader}>
+                    <div>
+                      <p className={styles.cardEyebrow}>Triggers</p>
+                      <h3>Launch conditions</h3>
+                    </div>
+                    <button
+                      className={styles.secondaryButton}
+                      onClick={() =>
+                        setWorkflowDraft((current) => ({
+                          ...current,
+                          triggers: [
+                            ...current.triggers,
+                            {
+                              id: createClientId("trigger"),
+                              type: "record_created",
+                              label: `Trigger ${current.triggers.length + 1}`,
+                              config: {
+                                objectKey: current.objectKey || manifest.objects[0]?.key || "booking_request",
+                              },
+                            },
+                          ],
+                        }))
+                      }
+                      type="button"
+                    >
+                      Add trigger
+                    </button>
+                  </div>
+                  <div className={styles.listStack}>
+                    {workflowDraft.triggers.map((trigger) => (
+                      <article className={styles.workflowCard} key={trigger.id}>
+                        <div className={styles.formGrid}>
+                          <label className={styles.formField}>
+                            <span>Label</span>
+                            <input className={styles.input} onChange={(event) => setWorkflowDraft((current) => ({ ...current, triggers: current.triggers.map((candidate) => candidate.id === trigger.id ? { ...candidate, label: event.target.value } : candidate) }))} value={trigger.label} />
+                          </label>
+                          <label className={styles.formField}>
+                            <span>Type</span>
+                            <select className={styles.select} onChange={(event) => setWorkflowDraft((current) => ({ ...current, triggers: current.triggers.map((candidate) => candidate.id === trigger.id ? { ...candidate, type: event.target.value as WorkflowDefinition["triggers"][number]["type"] } : candidate) }))} value={trigger.type}>
+                              <option value="manual">Manual</option>
+                              <option value="record_created">Record created</option>
+                              <option value="record_updated">Record updated</option>
+                            </select>
+                          </label>
+                          {"objectKey" in trigger.config ? (
+                            <label className={styles.formField}>
+                              <span>Object</span>
+                              <select className={styles.select} onChange={(event) => setWorkflowDraft((current) => ({ ...current, triggers: current.triggers.map((candidate) => candidate.id === trigger.id ? { ...candidate, config: { objectKey: event.target.value } } : candidate) }))} value={trigger.config.objectKey}>
+                                {manifest.objects.map((objectDefinition) => (
+                                  <option key={objectDefinition.id} value={objectDefinition.key}>
+                                    {objectDefinition.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          ) : (
+                            <label className={styles.formFieldSpan}>
+                              <span>Notes</span>
+                              <input className={styles.input} onChange={(event) => setWorkflowDraft((current) => ({ ...current, triggers: current.triggers.map((candidate) => candidate.id === trigger.id ? { ...candidate, config: { notes: event.target.value } } : candidate) }))} value={"notes" in trigger.config ? trigger.config.notes ?? "" : ""} />
+                            </label>
+                          )}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </article>
+                <article className={styles.scopeCard}>
+                  <div className={styles.sectionHeader}>
+                    <div>
+                      <p className={styles.cardEyebrow}>Draft test</p>
+                      <h3>Sample payload</h3>
+                    </div>
+                  </div>
+                  <textarea className={styles.textareaTall} onChange={(event) => setWorkflowTestPayload(event.target.value)} value={workflowTestPayload} />
+                  <div className={styles.sidebarPanel}>
+                    {workflowDiagnostics.length === 0 ? "Graph passes the current structural checks." : workflowDiagnostics.join(" ")}
+                  </div>
+                </article>
               </div>
               <div className={styles.workflowEditorGrid}>
                 <article className={styles.workflowCanvasCard}>
@@ -3404,11 +4330,23 @@ export function PlatformStudio({
                   <span>Prompt</span>
                   <textarea className={styles.textarea} onChange={(event) => setAgentDraft((current) => ({ ...current, prompt: event.target.value }))} value={agentDraft.prompt} />
                 </label>
+                <label className={styles.formField}>
+                  <span>Output schema</span>
+                  <textarea className={styles.textarea} onChange={(event) => setAgentDraft((current) => ({ ...current, outputSchema: event.target.value }))} value={agentDraft.outputSchema ?? ""} />
+                </label>
+                <label className={styles.formField}>
+                  <span>Budget (USD)</span>
+                  <input className={styles.input} min="0" onChange={(event) => setAgentDraft((current) => ({ ...current, costBudgetUsd: Number(event.target.value) || 0 }))} step="0.01" type="number" value={agentDraft.costBudgetUsd ?? 0} />
+                </label>
               </div>
               <div className={styles.inlineList}>
                 <label className={styles.checkboxField}>
                   <input checked={agentDraft.zeroRetentionRequired} onChange={(event) => setAgentDraft((current) => ({ ...current, zeroRetentionRequired: event.target.checked }))} type="checkbox" />
                   <span>Zero retention required</span>
+                </label>
+                <label className={styles.checkboxField}>
+                  <input checked={agentDraft.approvalPolicy?.required ?? false} onChange={(event) => setAgentDraft((current) => ({ ...current, approvalPolicy: { ...(current.approvalPolicy ?? { approverRole: "BUILDER_ADMIN", notes: "" }), required: event.target.checked } }))} type="checkbox" />
+                  <span>Approval required</span>
                 </label>
               </div>
               {selectedProvider ? (
@@ -3440,6 +4378,9 @@ export function PlatformStudio({
                   <h3>Guarded builder</h3>
                 </div>
                 <div className={styles.inlineList}>
+                  <button className={styles.secondaryButton} onClick={addAgentPromptBlock} type="button">
+                    Add prompt block
+                  </button>
                   <button className={styles.secondaryButton} disabled={!agentDraft.id} onClick={() => void handlePreviewAgent(agentDraft.id)} type="button">
                     Preview masked invocation
                   </button>
@@ -3453,6 +4394,48 @@ export function PlatformStudio({
                   <span>System prompt</span>
                   <textarea className={styles.textareaTall} onChange={(event) => setAgentDraft((current) => ({ ...current, prompt: event.target.value }))} value={agentDraft.prompt} />
                 </label>
+                <label className={styles.formField}>
+                  <span>Eval sample prompt</span>
+                  <input className={styles.input} onChange={(event) => setAgentDraft((current) => ({ ...current, evalPolicy: { ...(current.evalPolicy ?? { rubric: "", samplePrompt: "", passingScore: 0.8 }), samplePrompt: event.target.value } }))} value={agentDraft.evalPolicy?.samplePrompt ?? ""} />
+                </label>
+                <label className={styles.formField}>
+                  <span>Passing score</span>
+                  <input className={styles.input} max="1" min="0" onChange={(event) => setAgentDraft((current) => ({ ...current, evalPolicy: { ...(current.evalPolicy ?? { rubric: "", samplePrompt: "", passingScore: 0.8 }), passingScore: Number(event.target.value) || 0 } }))} step="0.05" type="number" value={agentDraft.evalPolicy?.passingScore ?? 0.8} />
+                </label>
+              </div>
+              <div className={styles.listStack}>
+                {agentDraft.promptBlocks.map((block) => (
+                  <article className={styles.workflowCard} key={block.id}>
+                    <div className={styles.sectionHeader}>
+                      <div>
+                        <p className={styles.cardEyebrow}>Prompt block</p>
+                        <h3>{block.label}</h3>
+                      </div>
+                      <button className={styles.ghostButtonDanger} disabled={agentDraft.promptBlocks.length === 1} onClick={() => removeAgentPromptBlock(block.id)} type="button">
+                        Remove
+                      </button>
+                    </div>
+                    <div className={styles.formGridTight}>
+                      <label className={styles.formField}>
+                        <span>Label</span>
+                        <input className={styles.input} onChange={(event) => updateAgentPromptBlock(block.id, (current) => ({ ...current, label: event.target.value }))} value={block.label} />
+                      </label>
+                      <label className={styles.formField}>
+                        <span>Kind</span>
+                        <select className={styles.select} onChange={(event) => updateAgentPromptBlock(block.id, (current) => ({ ...current, kind: event.target.value as typeof current.kind }))} value={block.kind}>
+                          <option value="system">System</option>
+                          <option value="policy">Policy</option>
+                          <option value="instruction">Instruction</option>
+                          <option value="example">Example</option>
+                        </select>
+                      </label>
+                      <label className={styles.formFieldSpan}>
+                        <span>Content</span>
+                        <textarea className={styles.textarea} onChange={(event) => updateAgentPromptBlock(block.id, (current) => ({ ...current, content: event.target.value }))} value={block.content} />
+                      </label>
+                    </div>
+                  </article>
+                ))}
               </div>
               {agentEvalSummary ? <div className={styles.sidebarPanel}>{agentEvalSummary}</div> : null}
               <div className={styles.scopeGrid}>
@@ -3539,7 +4522,307 @@ export function PlatformStudio({
               </article>
             </div>
           ) : null}
+
+          {activeTab === 3 ? (
+            <div className={styles.scopeGrid}>
+              <article className={styles.scopeCard}>
+                <div className={styles.sectionHeader}>
+                  <div>
+                    <p className={styles.cardEyebrow}>Control Tower</p>
+                    <h3>Agent simulation</h3>
+                  </div>
+                  <button className={styles.primaryButton} disabled={!agentDraft.id} onClick={() => void handleSimulateAgent(agentDraft.id)} type="button">
+                    Run simulation
+                  </button>
+                </div>
+                <div className={styles.formGrid}>
+                  <label className={styles.formFieldSpan}>
+                    <span>Simulation prompt</span>
+                    <textarea className={styles.textarea} onChange={(event) => setAgentDraft((current) => ({ ...current, evalPolicy: { ...(current.evalPolicy ?? { rubric: "", samplePrompt: "", passingScore: 0.8 }), samplePrompt: event.target.value } }))} value={agentDraft.evalPolicy?.samplePrompt ?? ""} />
+                  </label>
+                  <label className={styles.formField}>
+                    <span>Handoff workflows</span>
+                    <select className={styles.select} onChange={(event) => setAgentDraft((current) => ({ ...current, handoffWorkflowKeys: event.target.value ? [event.target.value] : [] }))} value={agentDraft.handoffWorkflowKeys[0] ?? ""}>
+                      <option value="">No handoff</option>
+                      {manifest.workflows.map((workflow) => (
+                        <option key={workflow.id} value={workflow.key}>
+                          {workflow.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className={styles.sidebarPanel}>
+                  Latest budget: ${(agentDraft.costBudgetUsd ?? 0).toFixed(2)} · Handoffs: {agentDraft.handoffWorkflowKeys.length || 0}
+                </div>
+              </article>
+              <article className={styles.scopeCard}>
+                <div className={styles.sectionHeader}>
+                  <div>
+                    <p className={styles.cardEyebrow}>Recent runs</p>
+                    <h3>Operator visibility</h3>
+                  </div>
+                </div>
+                {agentRuns.filter((run) => run.agentId === agentDraft.id).length === 0 ? (
+                  <div className={styles.emptyState}>No agent simulations yet.</div>
+                ) : (
+                  <div className={styles.listStack}>
+                    {agentRuns.filter((run) => run.agentId === agentDraft.id).slice(0, 5).map((run) => (
+                      <article className={styles.auditRow} key={run.id}>
+                        <div>
+                          <strong>{run.status}</strong>
+                          <p>
+                            ${run.costUsd.toFixed(4)} · {run.tokensIn}/{run.tokensOut} tokens
+                          </p>
+                        </div>
+                        <span>{formatPlatformDateTime(run.createdAt)}</span>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </article>
+            </div>
+          ) : null}
         </section>
+      </div>
+    );
+  }
+
+  function renderControlTowerWorkspace() {
+    return (
+      <div className={styles.workspaceGrid}>
+        {activeTab === 0 ? (
+          <>
+            <section className={styles.panel}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <p className={styles.cardEyebrow}>Workflow runs</p>
+                  <h2>Queue, retries, and replay</h2>
+                </div>
+                <button className={styles.secondaryButton} onClick={() => void refreshControlTower()} type="button">
+                  Refresh
+                </button>
+              </div>
+              <div className={styles.listStack}>
+                {allWorkflowRuns.length === 0 ? (
+                  <div className={styles.emptyState}>No workflow runs yet.</div>
+                ) : (
+                  allWorkflowRuns.slice(0, 12).map((run) => (
+                    <article className={styles.auditRow} key={run.id}>
+                      <div>
+                        <strong>{run.workflowKey}</strong>
+                        <p>
+                          {run.status} · {run.logs.length} log events
+                        </p>
+                      </div>
+                      <div className={styles.inlineList}>
+                        <span>{formatPlatformDateTime(run.createdAt)}</span>
+                        <button className={styles.ghostButton} onClick={() => void handleReplayWorkflowRun(run.id)} type="button">
+                          Replay
+                        </button>
+                      </div>
+                    </article>
+                  ))
+                )}
+              </div>
+            </section>
+            <section className={styles.panelWide}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <p className={styles.cardEyebrow}>Agent runs</p>
+                  <h2>Provider-backed simulations</h2>
+                </div>
+              </div>
+              <div className={styles.listStack}>
+                {agentRuns.slice(0, 6).map((run) => (
+                  <article className={styles.workflowCard} key={`detail-${run.id}`}>
+                    <strong>{run.agentKey}</strong>
+                    <p>{run.logs[0]?.message ? String(run.logs[0].message) : "Simulation completed."}</p>
+                    <div className={styles.inlineList}>
+                      <span className={styles.inlineTag}>{run.modelProviderKey}</span>
+                      <span className={styles.inlineTag}>{run.tokensIn + run.tokensOut} tokens</span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          </>
+        ) : null}
+
+        {activeTab === 1 ? (
+          <section className={styles.panelWide}>
+            <div className={styles.sectionHeader}>
+              <div>
+                <p className={styles.cardEyebrow}>Cost ledger</p>
+                <h2>Usage and spend</h2>
+              </div>
+            </div>
+            <div className={styles.tableWrap}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>Category</th>
+                    <th>Reference</th>
+                    <th>Provider</th>
+                    <th>Amount</th>
+                    <th>Created</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {costLedger.length > 0 ? (
+                    costLedger.slice(0, 12).map((entry) => (
+                      <tr key={entry.id}>
+                        <td>{entry.category}</td>
+                        <td>{entry.referenceId}</td>
+                        <td>{entry.providerKey ?? "—"}</td>
+                        <td>${entry.amountUsd.toFixed(4)}</td>
+                        <td>{formatPlatformDateTime(entry.createdAt)}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={5}>
+                        <div className={styles.emptyState}>No cost data yet.</div>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ) : null}
+
+        {activeTab === 2 ? (
+          <section className={styles.panelWide}>
+            <div className={styles.sectionHeader}>
+              <div>
+                <p className={styles.cardEyebrow}>Alerts</p>
+                <h2>Budget, delivery, and runtime warnings</h2>
+              </div>
+            </div>
+            <div className={styles.listStack}>
+              {platformAlerts.length === 0 ? (
+                <div className={styles.emptyState}>No alerts triggered.</div>
+              ) : (
+                platformAlerts.slice(0, 12).map((alert) => (
+                  <article className={styles.auditRow} key={alert.id}>
+                    <div>
+                      <strong>{alert.title}</strong>
+                      <p>{alert.summary}</p>
+                    </div>
+                    <div className={styles.inlineList}>
+                      <span className={styles.inlineTag}>{alert.category}</span>
+                      <span className={styles.inlineTag}>{alert.severity}</span>
+                    </div>
+                  </article>
+                ))
+              )}
+            </div>
+          </section>
+        ) : null}
+
+        {activeTab === 3 ? (
+          <section className={styles.panelWide}>
+            <div className={styles.sectionHeader}>
+              <div>
+                <p className={styles.cardEyebrow}>Deliveries</p>
+                <h2>Notification history</h2>
+              </div>
+            </div>
+            <div className={styles.tableWrap}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>Rule</th>
+                    <th>Channel</th>
+                    <th>Status</th>
+                    <th>Severity</th>
+                    <th>Delivered</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {notificationDeliveries.length > 0 ? (
+                    notificationDeliveries.slice(0, 12).map((delivery) => (
+                      <tr key={delivery.id}>
+                        <td>{delivery.ruleKey}</td>
+                        <td>{delivery.channelKey}</td>
+                        <td>{delivery.status}</td>
+                        <td>{delivery.severity}</td>
+                        <td>{formatPlatformDateTime(delivery.deliveredAt ?? delivery.createdAt)}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={5}>
+                        <div className={styles.emptyState}>No deliveries yet.</div>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ) : null}
+
+        {activeTab === 4 ? (
+          <section className={styles.panelWide}>
+            <div className={styles.sectionHeader}>
+              <div>
+                <p className={styles.cardEyebrow}>Approvals</p>
+                <h2>Pending human checkpoints</h2>
+              </div>
+            </div>
+            <div className={styles.listStack}>
+              {approvalTasks.length === 0 ? (
+                <div className={styles.emptyState}>No approval tasks are pending.</div>
+              ) : (
+                approvalTasks.map((task) => (
+                  <article className={styles.workflowCard} key={task.id}>
+                    <strong>{task.nodeLabel}</strong>
+                    <p>
+                      {task.workflowKey} · {task.status} · {task.approverRole}
+                    </p>
+                    {task.instructions ? <div className={styles.sidebarPanel}>{task.instructions}</div> : null}
+                    <div className={styles.inlineList}>
+                      <button className={styles.secondaryButton} disabled={task.status !== "pending"} onClick={() => void handleResolveApprovalTask(task.id, "approved")} type="button">
+                        Approve
+                      </button>
+                      <button className={styles.ghostButtonDanger} disabled={task.status !== "pending"} onClick={() => void handleResolveApprovalTask(task.id, "rejected")} type="button">
+                        Reject
+                      </button>
+                    </div>
+                  </article>
+                ))
+              )}
+            </div>
+          </section>
+        ) : null}
+
+        {activeTab === 5 ? (
+          <section className={styles.panelWide}>
+            <div className={styles.sectionHeader}>
+              <div>
+                <p className={styles.cardEyebrow}>Dead letters</p>
+                <h2>Escalated runtime failures</h2>
+              </div>
+            </div>
+            <div className={styles.listStack}>
+              {deadLetters.length === 0 ? (
+                <div className={styles.emptyState}>No dead letters recorded.</div>
+              ) : (
+                deadLetters.map((entry) => (
+                  <article className={styles.auditRow} key={entry.id}>
+                    <div>
+                      <strong>{entry.type}</strong>
+                      <p>{entry.reason}</p>
+                    </div>
+                    <span>{formatPlatformDateTime(entry.createdAt)}</span>
+                  </article>
+                ))
+              )}
+            </div>
+          </section>
+        ) : null}
       </div>
     );
   }
@@ -4032,6 +5315,7 @@ export function PlatformStudio({
         {workspace === "navigation" ? renderNavigationWorkspace() : null}
         {workspace === "workflows" ? renderWorkflowsWorkspace() : null}
         {workspace === "agents" ? renderAgentsWorkspace() : null}
+        {workspace === "control-tower" ? renderControlTowerWorkspace() : null}
         {workspace === "models" ? renderModelsWorkspace() : null}
         {workspace === "security" ? renderSecurityWorkspace() : null}
         {workspace === "audit" ? renderAuditWorkspace() : null}

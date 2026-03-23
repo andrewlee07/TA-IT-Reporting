@@ -12,9 +12,11 @@ import type {
   AgentDefinition,
   FieldDefinition,
   LayoutComponentDefinition,
+  MenuItemDefinition,
   ObjectDefinition,
   PlatformManifest,
   PlatformRecord,
+  PlatformRole,
   PlatformViewAsState,
   PlatformWorkflowRunRecord,
 } from "@/lib/platform/types";
@@ -113,9 +115,15 @@ function glyphLabel(value: string): string {
 }
 
 export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = "published", viewAs = null }: PublishedRuntimeProps) {
-  const orderedMenus = [...manifest.menus].sort((left, right) => left.order - right.order);
+  const runtimeRole: PlatformRole = viewAs?.role ?? (mode === "published" ? "USER" : "SUPER_ADMIN");
+  const orderedMenus = [...manifest.menus]
+    .filter((menu) => !menu.visibleToRoles?.length || menu.visibleToRoles.includes(runtimeRole))
+    .sort((left, right) => left.order - right.order);
   const brandLogo = manifest.branding.assets.find((asset) => asset.id === manifest.branding.logoAssetId);
-  const firstRoute = manifest.pages.find((page) => page.isHome)?.key ?? orderedMenus[0]?.pageKey;
+  const firstRoute =
+    manifest.appShell.defaultLandingPageKey ??
+    manifest.pages.find((page) => page.isHome)?.key ??
+    orderedMenus[0]?.pageKey;
   const requestedPage =
     manifest.pages.find((page) => page.route === requestedRoute) ??
     (requestedRoute ? findPageDefinition(manifest, requestedRoute) : undefined) ??
@@ -392,6 +400,10 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
   }
 
   const resolvedRecordsByObject = mode === "published" ? recordsByObject : previewRecordsByObject;
+  const groupedMenus = manifest.appShell.menuGroups.map((group) => ({
+    ...group,
+    items: orderedMenus.filter((menu) => (menu.groupKey ?? menu.group.toLowerCase()) === group.key || menu.group === group.label),
+  })).filter((group) => group.items.length > 0);
 
   function componentSpan(component: LayoutComponentDefinition): number {
     return component.placement?.responsive?.desktopSpan ?? component.placement?.span ?? component.width ?? 12;
@@ -416,6 +428,33 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
     }
 
     return manifest.agents.find((candidate) => candidate.id === agentId || candidate.key === agentId);
+  }
+
+  function resolveBadgeValue(menu: MenuItemDefinition): string | null {
+    const binding = manifest.appShell.badgeBindings.find((candidate) => candidate.key === menu.badgeBindingKey);
+    if (!binding) {
+      return null;
+    }
+
+    if (binding.metric === "draft_changes") {
+      return mode === "published" ? null : "draft";
+    }
+
+    if (binding.metric === "records" && binding.objectKey) {
+      return String((resolvedRecordsByObject[binding.objectKey] ?? []).length);
+    }
+
+    if (binding.workflowKey) {
+      const runs = workflowRunsByWorkflow[binding.workflowKey] ?? [];
+      if (binding.metric === "queued_runs") {
+        return String(runs.filter((run) => run.status === "QUEUED").length);
+      }
+      if (binding.metric === "failed_runs") {
+        return String(runs.filter((run) => run.status === "FAILED").length);
+      }
+    }
+
+    return null;
   }
 
   function renderBindingError(component: LayoutComponentDefinition, title: string, detail: string) {
@@ -782,17 +821,43 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
                 : "Runtime shell · draft preview"}
           </div>
         </div>
+        {manifest.appShell.announcementSlots.some((slot) => slot.active) ? (
+          <div className={styles.sidebarSection}>
+            <p className={styles.sidebarLabel}>Announcements</p>
+            <div className={styles.listStack}>
+              {manifest.appShell.announcementSlots
+                .filter((slot) => slot.active)
+                .map((slot) => (
+                  <div className={styles.sidebarPanel} key={slot.key}>
+                    <strong>{slot.label}</strong>
+                    <p>{slot.message}</p>
+                  </div>
+                ))}
+            </div>
+          </div>
+        ) : null}
         <div className={styles.sidebarSection}>
           <p className={styles.sidebarLabel}>Navigation</p>
           <nav className={styles.navStack}>
-            {manifest.menus
-              .slice()
-              .sort((left, right) => left.order - right.order)
-              .map((menu) => {
+            {(groupedMenus.length > 0
+              ? groupedMenus.flatMap((group) => [
+                  <div className={styles.sidebarMeta} key={`${group.key}-label`}>
+                    <span>{group.label}</span>
+                    <strong>{group.items.length}</strong>
+                  </div>,
+                  ...group.items,
+                ])
+              : orderedMenus
+            ).map((menuOrNode) => {
+                if (!("id" in menuOrNode)) {
+                  return menuOrNode;
+                }
+                const menu = menuOrNode;
                 const page = findPageDefinition(manifest, menu.pageKey);
                 if (!page) {
                   return null;
                 }
+                const badgeValue = resolveBadgeValue(menu);
 
                 return (
                   <button
@@ -804,8 +869,9 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
                     <span className={styles.navIcon}>{glyphLabel(menu.label)}</span>
                     <span className={styles.navCopy}>
                       <span>{menu.label}</span>
-                      <small>{menu.group}</small>
+                      <small>{menu.description ?? menu.group}</small>
                     </span>
+                    {badgeValue ? <span className={styles.inlineTag}>{badgeValue}</span> : null}
                   </button>
                 );
               })}
@@ -833,6 +899,33 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
           </div>
         </div>
         <div className={styles.sidebarSection}>
+          <p className={styles.sidebarLabel}>Quick actions</p>
+          <div className={styles.sidebarActions}>
+            {manifest.appShell.quickActions.map((action) => {
+              const targetPageKey = action.pageKey;
+              const workflow = action.workflowKey
+                ? manifest.workflows.find((candidate) => candidate.key === action.workflowKey || candidate.id === action.workflowKey)
+                : null;
+              return (
+                <button
+                  className={action.tone === "accent" ? styles.primaryButton : styles.secondaryButton}
+                  key={action.key}
+                  onClick={() => {
+                    if (targetPageKey) {
+                      setActivePageKey(targetPageKey);
+                    } else if (workflow) {
+                      void handleQueueWorkflow(workflow.id);
+                    }
+                  }}
+                  type="button"
+                >
+                  {action.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div className={styles.sidebarSection}>
           <Link className={styles.secondaryLink} href={`/platform/${tenantSlug}`}>
             Open builder
           </Link>
@@ -845,6 +938,18 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
       </aside>
 
       <main className={styles.runtimeMain}>
+        {manifest.appShell.navigationMode === "topbar" ? (
+          <div className={styles.runtimeLensBar}>
+            <strong>{manifest.appShell.productName}</strong>
+            <div className={styles.inlineList}>
+              {orderedMenus.map((menu) => (
+                <button className={menu.pageKey === activePageKey ? styles.secondaryButton : styles.ghostButton} key={`topbar-${menu.id}`} onClick={() => setActivePageKey(menu.pageKey)} type="button">
+                  {menu.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
         {mode === "admin-preview" ? (
           <div className={styles.runtimeLensBar}>
             <strong>Admin preview</strong>

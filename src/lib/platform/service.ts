@@ -42,6 +42,7 @@ import {
   listLocalWorkflowRuns,
   listLocalVersions,
   setLocalActiveVersion,
+  updateLocalWorkflowRun,
   upsertLocalDraft,
   upsertLocalPlatformRecord,
 } from "@/lib/platform/local-store";
@@ -55,10 +56,16 @@ import {
 } from "@/lib/platform/errors";
 import { assertRole } from "@/lib/platform/rbac";
 import { validateRecordInput } from "@/lib/platform/records";
+import { deliverNotification, executeAgentWithProvider, summarizeAgentRunCost } from "@/lib/platform/runtime-adapters";
 import { createDefaultBranding } from "@/lib/platform/theme";
 import { getObjectStorage } from "@/lib/storage";
 import type {
   AgentDefinition,
+  AgentRunRecord,
+  AppShellDefinition,
+  CostLedgerRecord,
+  DeadLetterRecord,
+  EventEnvelope,
   FieldDefinition,
   FormDefinition,
   FormFieldDefinition,
@@ -66,8 +73,12 @@ import type {
   LayoutDefinition,
   MenuItemDefinition,
   ModelProviderDefinition,
+  NotificationCenterDefinition,
+  NotificationDeliveryRecord,
   ObjectDefinition,
   PageDefinition,
+  PlatformAlertRecord,
+  PlatformApprovalTaskRecord,
   PlatformAgentEvalRecord,
   PlatformActor,
   PlatformAgentPreview,
@@ -301,6 +312,20 @@ function getFormSubmissionObjectKey(formKey: string): string {
   return `form_submission:${formKey}`;
 }
 
+const SYSTEM_OBJECT_KEYS = {
+  outbox: "__system_outbox_event",
+  delivery: "__system_notification_delivery",
+  alert: "__system_alert",
+  agentRun: "__system_agent_run",
+  costLedger: "__system_cost_ledger",
+  deadLetter: "__system_dead_letter",
+  approvalTask: "__system_approval_task",
+} as const;
+
+function getSystemObjectKey(value: keyof typeof SYSTEM_OBJECT_KEYS): string {
+  return SYSTEM_OBJECT_KEYS[value];
+}
+
 function toFormSubmissionRecord(record: PlatformRecord): PlatformFormSubmissionRecord {
   return {
     id: record.id,
@@ -311,6 +336,109 @@ function toFormSubmissionRecord(record: PlatformRecord): PlatformFormSubmissionR
     createdAt: record.createdAt,
     submittedAt: typeof record.data.submittedAt === "string" ? record.data.submittedAt : null,
     createdByEmail: typeof record.data.createdByEmail === "string" ? record.data.createdByEmail : null,
+  };
+}
+
+function toEventEnvelope(record: PlatformRecord): EventEnvelope {
+  return {
+    id: record.id,
+    type: String(record.data.type ?? "system.event"),
+    tenantSlug: String(record.data.tenantSlug ?? ""),
+    environmentSlug: String(record.data.environmentSlug ?? ""),
+    emittedAt: typeof record.data.emittedAt === "string" ? record.data.emittedAt : record.createdAt,
+    source: (record.data.source as EventEnvelope["source"]) ?? "system",
+    resourceType: String(record.data.resourceType ?? "system"),
+    resourceId: String(record.data.resourceId ?? record.id),
+    payload: (record.data.payload as Record<string, unknown>) ?? {},
+  };
+}
+
+function toNotificationDeliveryRecord(record: PlatformRecord): NotificationDeliveryRecord {
+  return {
+    id: record.id,
+    eventId: String(record.data.eventId ?? ""),
+    ruleKey: String(record.data.ruleKey ?? ""),
+    channelKey: String(record.data.channelKey ?? ""),
+    templateKey: String(record.data.templateKey ?? ""),
+    status: (record.data.status as NotificationDeliveryRecord["status"]) ?? "pending",
+    severity: (record.data.severity as NotificationDeliveryRecord["severity"]) ?? "info",
+    subject: typeof record.data.subject === "string" ? record.data.subject : undefined,
+    body: String(record.data.body ?? ""),
+    destination: typeof record.data.destination === "string" ? record.data.destination : undefined,
+    createdAt: record.createdAt,
+    deliveredAt: typeof record.data.deliveredAt === "string" ? record.data.deliveredAt : null,
+    errorMessage: typeof record.data.errorMessage === "string" ? record.data.errorMessage : null,
+  };
+}
+
+function toPlatformAlertRecord(record: PlatformRecord): PlatformAlertRecord {
+  return {
+    id: record.id,
+    category: (record.data.category as PlatformAlertRecord["category"]) ?? "runtime",
+    severity: (record.data.severity as PlatformAlertRecord["severity"]) ?? "info",
+    title: String(record.data.title ?? "Platform alert"),
+    summary: String(record.data.summary ?? ""),
+    sourceId: String(record.data.sourceId ?? record.id),
+    createdAt: record.createdAt,
+    acknowledgedAt: typeof record.data.acknowledgedAt === "string" ? record.data.acknowledgedAt : null,
+  };
+}
+
+function toApprovalTaskRecord(record: PlatformRecord): PlatformApprovalTaskRecord {
+  return {
+    id: record.id,
+    workflowRunId: String(record.data.workflowRunId ?? ""),
+    workflowKey: String(record.data.workflowKey ?? ""),
+    nodeId: String(record.data.nodeId ?? ""),
+    nodeLabel: String(record.data.nodeLabel ?? ""),
+    approverRole: (record.data.approverRole as PlatformApprovalTaskRecord["approverRole"]) ?? "BUILDER_ADMIN",
+    status: (record.data.status as PlatformApprovalTaskRecord["status"]) ?? "pending",
+    instructions: typeof record.data.instructions === "string" ? record.data.instructions : null,
+    createdAt: record.createdAt,
+    resolvedAt: typeof record.data.resolvedAt === "string" ? record.data.resolvedAt : null,
+  };
+}
+
+function toAgentRunRecord(record: PlatformRecord): AgentRunRecord {
+  return {
+    id: record.id,
+    agentId: String(record.data.agentId ?? ""),
+    agentKey: String(record.data.agentKey ?? ""),
+    status: (record.data.status as AgentRunRecord["status"]) ?? "queued",
+    input: (record.data.input as Record<string, unknown>) ?? {},
+    output: (record.data.output as Record<string, unknown>) ?? null,
+    logs: (record.data.logs as Array<Record<string, unknown>>) ?? [],
+    modelProviderKey: String(record.data.modelProviderKey ?? ""),
+    costUsd: typeof record.data.costUsd === "number" ? record.data.costUsd : 0,
+    tokensIn: typeof record.data.tokensIn === "number" ? record.data.tokensIn : 0,
+    tokensOut: typeof record.data.tokensOut === "number" ? record.data.tokensOut : 0,
+    createdAt: record.createdAt,
+    completedAt: typeof record.data.completedAt === "string" ? record.data.completedAt : null,
+  };
+}
+
+function toCostLedgerRecord(record: PlatformRecord): CostLedgerRecord {
+  return {
+    id: record.id,
+    category: (record.data.category as CostLedgerRecord["category"]) ?? "agent_run",
+    referenceId: String(record.data.referenceId ?? ""),
+    providerKey: typeof record.data.providerKey === "string" ? record.data.providerKey : undefined,
+    amountUsd: typeof record.data.amountUsd === "number" ? record.data.amountUsd : 0,
+    tokensIn: typeof record.data.tokensIn === "number" ? record.data.tokensIn : undefined,
+    tokensOut: typeof record.data.tokensOut === "number" ? record.data.tokensOut : undefined,
+    createdAt: record.createdAt,
+    summary: String(record.data.summary ?? ""),
+  };
+}
+
+function toDeadLetterRecord(record: PlatformRecord): DeadLetterRecord {
+  return {
+    id: record.id,
+    eventId: String(record.data.eventId ?? ""),
+    type: String(record.data.type ?? ""),
+    reason: String(record.data.reason ?? ""),
+    payload: (record.data.payload as Record<string, unknown>) ?? {},
+    createdAt: record.createdAt,
   };
 }
 
@@ -751,6 +879,92 @@ async function listTenantInvitesForContext(context: PlatformContext): Promise<Pl
     async () => {
       const invites = await listLocalInvites(context.tenantId);
       return invites.map((invite) => toInviteRecord(invite, context.tenant.slug));
+    },
+  );
+}
+
+async function listTenantScopedRecords(input: {
+  tenantId: string;
+  environmentId: string;
+  objectKey: string;
+}): Promise<PlatformRecord[]> {
+  return withLocalFallback(
+    async () => {
+      const prisma = getPrisma();
+      const records = await prisma.platformRecord.findMany({
+        where: {
+          tenantId: input.tenantId,
+          environmentId: input.environmentId,
+          objectKey: input.objectKey,
+        },
+        orderBy: [{ updatedAt: "desc" }],
+      });
+      return records.map(toPlatformRecord);
+    },
+    async () => {
+      const records = await listLocalPlatformRecords(input);
+      return records.map(toPlatformRecord);
+    },
+  );
+}
+
+async function upsertTenantScopedRecord(input: {
+  tenantId: string;
+  environmentId: string;
+  objectKey: string;
+  data: Record<string, unknown>;
+  actor: PlatformActor;
+  recordId?: string;
+}): Promise<PlatformRecord> {
+  return withLocalFallback(
+    async () => {
+      const prisma = getPrisma();
+      const record = input.recordId
+        ? await prisma.platformRecord.findFirst({
+            where: {
+              id: input.recordId,
+              tenantId: input.tenantId,
+              environmentId: input.environmentId,
+              objectKey: input.objectKey,
+            },
+          })
+        : null;
+
+      if (input.recordId && !record) {
+        throw new PlatformNotFoundError("Record not found in the active tenant scope.");
+      }
+
+      const savedRecord = record
+        ? await prisma.platformRecord.update({
+            where: { id: record.id },
+            data: {
+              data: toJsonValue(input.data),
+              updatedByEmail: input.actor.email,
+            },
+          })
+        : await prisma.platformRecord.create({
+            data: {
+              tenantId: input.tenantId,
+              environmentId: input.environmentId,
+              objectKey: input.objectKey,
+              data: toJsonValue(input.data),
+              createdByEmail: input.actor.email,
+              updatedByEmail: input.actor.email,
+            },
+          });
+
+      return toPlatformRecord(savedRecord);
+    },
+    async () => {
+      const record = await upsertLocalPlatformRecord({
+        tenantId: input.tenantId,
+        environmentId: input.environmentId,
+        objectKey: input.objectKey,
+        recordId: input.recordId,
+        data: input.data,
+        actor: input.actor,
+      });
+      return toPlatformRecord(record);
     },
   );
 }
@@ -1838,16 +2052,112 @@ export async function saveMenuDefinition(input: {
         id: menuId,
         key,
         label,
+        description: normalizeOptionalText(input.menu.description),
         icon: input.menu.icon ?? "dot",
         pageKey: page.key,
         order: input.menu.order ?? manifest.menus.length,
         group: normalizeOptionalText(input.menu.group) ?? "Workspace",
+        groupKey: normalizeOptionalText(input.menu.groupKey),
+        visibleToRoles: input.menu.visibleToRoles?.length ? input.menu.visibleToRoles : ["SUPER_ADMIN", "BUILDER_ADMIN", "USER"],
+        highlight: input.menu.highlight ?? false,
+        badgeBindingKey: normalizeOptionalText(input.menu.badgeBindingKey),
       };
 
       manifest.menus = upsertById(manifest.menus, menu);
       return {
         manifest,
         result: menu,
+      };
+    },
+  });
+}
+
+export async function getAppShellDefinition(input: {
+  tenantSlug: string;
+  environmentSlug?: string;
+  request?: Request | Headers;
+}): Promise<AppShellDefinition> {
+  const bootstrap = await getPlatformBootstrap(input);
+  return bootstrap.draftManifest.appShell;
+}
+
+export async function saveAppShellDefinition(input: {
+  tenantSlug: string;
+  appShell: Partial<AppShellDefinition> & Pick<AppShellDefinition, "productName">;
+  environmentSlug?: string;
+  request?: Request | Headers;
+}): Promise<AppShellDefinition> {
+  return updateDraftWithMutation({
+    tenantSlug: input.tenantSlug,
+    request: input.request,
+    environmentSlug: input.environmentSlug,
+    action: "app_shell.saved",
+    resourceType: "app_shell",
+    resourceId: input.appShell.productName,
+    summary: `Saved app shell ${input.appShell.productName}.`,
+    mutate: (manifest) => {
+      const nextAppShell: AppShellDefinition = {
+        ...manifest.appShell,
+        ...input.appShell,
+        productName: requireNonEmptyText(input.appShell.productName, "Product name"),
+        menuGroups: [...(input.appShell.menuGroups ?? [])].sort((left, right) => left.order - right.order),
+        quickActions: input.appShell.quickActions ?? [],
+        announcementSlots: input.appShell.announcementSlots ?? [],
+        badgeBindings: input.appShell.badgeBindings ?? [],
+        visibilityRules: input.appShell.visibilityRules ?? [],
+        navigationMode: input.appShell.navigationMode ?? input.appShell.menuStyle ?? "sidebar",
+      };
+
+      manifest.appShell = nextAppShell;
+      return {
+        manifest,
+        result: nextAppShell,
+      };
+    },
+  });
+}
+
+export async function getNotificationCenterDefinition(input: {
+  tenantSlug: string;
+  environmentSlug?: string;
+  request?: Request | Headers;
+}): Promise<NotificationCenterDefinition> {
+  const bootstrap = await getPlatformBootstrap(input);
+  return bootstrap.draftManifest.notifications;
+}
+
+export async function saveNotificationCenterDefinition(input: {
+  tenantSlug: string;
+  notifications: NotificationCenterDefinition;
+  environmentSlug?: string;
+  request?: Request | Headers;
+}): Promise<NotificationCenterDefinition> {
+  return updateDraftWithMutation({
+    tenantSlug: input.tenantSlug,
+    request: input.request,
+    environmentSlug: input.environmentSlug,
+    action: "notifications.saved",
+    resourceType: "notification_center",
+    resourceId: "notifications",
+    summary: "Saved notification center configuration.",
+    mutate: (manifest) => {
+      for (const channel of input.notifications.channels) {
+        requireNonEmptyText(channel.key, "Notification channel key");
+        requireNonEmptyText(channel.name, "Notification channel name");
+      }
+      for (const template of input.notifications.templates) {
+        requireNonEmptyText(template.key, "Notification template key");
+        requireNonEmptyText(template.name, "Notification template name");
+      }
+      for (const rule of input.notifications.rules) {
+        requireNonEmptyText(rule.key, "Notification rule key");
+        requireNonEmptyText(rule.name, "Notification rule name");
+      }
+
+      manifest.notifications = input.notifications;
+      return {
+        manifest,
+        result: manifest.notifications,
       };
     },
   });
@@ -1979,6 +2289,12 @@ export async function saveAgentDefinition(input: {
         assertExists(objectDefinition, `Agent object scope "${objectKey}" is invalid.`);
       }
 
+      const handoffWorkflowKeys = input.agent.handoffWorkflowKeys ?? [];
+      for (const workflowKey of handoffWorkflowKeys) {
+        const workflow = manifest.workflows.find((candidate) => candidate.id === workflowKey || candidate.key === workflowKey);
+        assertExists(workflow, `Agent handoff workflow "${workflowKey}" is invalid.`);
+      }
+
       const agent: AgentDefinition = {
         id: agentId,
         key,
@@ -1987,8 +2303,31 @@ export async function saveAgentDefinition(input: {
         scope: input.agent.scope,
         modelProviderId: provider.id,
         prompt,
+        promptBlocks: (input.agent.promptBlocks ?? []).map((block) => ({
+          ...block,
+          id: block.id || nextId("prompt-block"),
+          label: requireNonEmptyText(block.label, "Prompt block label"),
+          content: requireNonEmptyText(block.content, "Prompt block content"),
+        })),
         allowedToolIds,
         objectKeys,
+        handoffWorkflowKeys,
+        outputSchema: normalizeOptionalText(input.agent.outputSchema),
+        evalPolicy: input.agent.evalPolicy
+          ? {
+              rubric: requireNonEmptyText(input.agent.evalPolicy.rubric, "Agent eval rubric"),
+              samplePrompt: requireNonEmptyText(input.agent.evalPolicy.samplePrompt, "Agent sample prompt"),
+              passingScore: input.agent.evalPolicy.passingScore,
+            }
+          : undefined,
+        costBudgetUsd: input.agent.costBudgetUsd,
+        approvalPolicy: input.agent.approvalPolicy
+          ? {
+              required: input.agent.approvalPolicy.required,
+              approverRole: input.agent.approvalPolicy.approverRole,
+              notes: normalizeOptionalText(input.agent.approvalPolicy.notes),
+            }
+          : undefined,
         zeroRetentionRequired: input.agent.zeroRetentionRequired ?? true,
       };
 
@@ -2837,6 +3176,19 @@ export async function submitFormSubmission(input: {
     },
   );
 
+  await emitPlatformEvent({
+    tenantSlug: input.tenantSlug,
+    environmentSlug,
+    type: "form.submission.received",
+    source: "form",
+    resourceType: "form_submission",
+    resourceId: saved.id,
+    payload: {
+      formKey: form.key,
+      status: input.status ?? "submitted",
+    },
+  });
+
   return toFormSubmissionRecord(saved);
 }
 
@@ -3254,6 +3606,41 @@ export async function listWorkflowRuns(input: {
   );
 }
 
+export async function listAllWorkflowRuns(input: {
+  tenantSlug: string;
+  environmentSlug?: string;
+  request?: Request | Headers;
+}): Promise<PlatformWorkflowRunRecord[]> {
+  const context = await getPlatformContextFromRequest({
+    tenantSlug: input.tenantSlug,
+    environmentSlug: input.environmentSlug,
+    request: input.request,
+  });
+
+  return withLocalFallback(
+    async () => {
+      const prisma = getPrisma();
+      const runs = await prisma.platformWorkflowRun.findMany({
+        where: {
+          tenantId: context.tenantId,
+          environmentId: context.environmentId,
+        },
+        orderBy: [{ updatedAt: "desc" }],
+        take: 50,
+      });
+
+      return runs.map(toWorkflowRunRecord);
+    },
+    async () => {
+      const runs = await listLocalWorkflowRuns({
+        tenantId: context.tenantId,
+        environmentId: context.environmentId,
+      });
+      return runs.map(toWorkflowRunRecord);
+    },
+  );
+}
+
 export async function queueWorkflowRun(input: {
   tenantSlug: string;
   workflowId: string;
@@ -3323,11 +3710,74 @@ export async function queueWorkflowRun(input: {
     },
   });
 
+  await emitPlatformEvent({
+    tenantSlug: input.tenantSlug,
+    environmentSlug: input.environmentSlug,
+    request: input.request,
+    type: "workflow.run.queued",
+    source: "workflow",
+    resourceType: "workflow_run",
+    resourceId: run.id,
+    payload: {
+      workflowKey: workflow.key,
+      status: run.status,
+    },
+  });
+
   await enqueueWorkflowRun(run.id).catch(() => {
     // Polling worker remains the fallback path when Redis/BullMQ is unavailable.
   });
 
   return run;
+}
+
+export async function replayWorkflowRun(input: {
+  tenantSlug: string;
+  runId: string;
+  environmentSlug?: string;
+  request?: Request | Headers;
+}): Promise<PlatformWorkflowRunRecord> {
+  const context = await getPlatformContextFromRequest({
+    tenantSlug: input.tenantSlug,
+    environmentSlug: input.environmentSlug,
+    request: input.request,
+  });
+  assertRole(context.actor, "BUILDER_ADMIN");
+
+  const original = (await listAllWorkflowRuns({
+    tenantSlug: input.tenantSlug,
+    environmentSlug: input.environmentSlug,
+    request: input.request,
+  })).find((candidate) => candidate.id === input.runId);
+  assertExists(original, "Workflow run not found.");
+
+  const replay = await queueWorkflowRun({
+    tenantSlug: input.tenantSlug,
+    workflowId: original.workflowId,
+    payload: {
+      ...(original.input ?? {}),
+      replayOfRunId: original.id,
+      replayedAt: new Date().toISOString(),
+    },
+    environmentSlug: input.environmentSlug,
+    request: input.request,
+  });
+
+  await appendAuditEvent({
+    tenantId: context.tenantId,
+    environmentId: context.environmentId,
+    actor: context.actor,
+    action: "workflow.run.replayed",
+    resourceType: "workflow_run",
+    resourceId: replay.id,
+    summary: `Replayed workflow run ${original.id}.`,
+    payload: {
+      originalRunId: original.id,
+      replayRunId: replay.id,
+    },
+  });
+
+  return replay;
 }
 
 export async function getPublishPreview(input: {
@@ -3392,6 +3842,12 @@ export async function getPublishPreview(input: {
         getKey: (item) => item.key,
         getLabel: (item) => item.name,
       }),
+      notifications: diffPreviewBucket({
+        draftItems: context.draftManifest.notifications.rules,
+        activeItems: activeManifest?.notifications.rules ?? [],
+        getKey: (item) => item.key,
+        getLabel: (item) => item.name,
+      }),
     },
     pageImpacts: buildPublishPageImpacts({
       draftManifest: context.draftManifest,
@@ -3419,14 +3875,12 @@ export async function previewAgentInvocation(input: {
   });
   assertRole(context.actor, "BUILDER_ADMIN");
 
-  const manifest = await getRuntimeManifest({
+  const runtimeManifest = await getRuntimeManifest({
     tenantSlug: input.tenantSlug,
     environmentSlug: input.environmentSlug,
     request: input.request,
   });
-  if (!manifest) {
-    throw new PlatformError("No published runtime is active for this tenant.", 409);
-  }
+  const manifest = runtimeManifest ?? context.draftManifest;
 
   const agent = manifest.agents.find((candidate) => candidate.id === input.agentId || candidate.key === input.agentId);
   assertExists(agent, "Agent definition not found in the active runtime.");
@@ -3439,11 +3893,12 @@ export async function previewAgentInvocation(input: {
     throw new PlatformError("Agent preview object is outside the agent scope.");
   }
 
-  const records = await listPlatformRecords({
-    tenantSlug: input.tenantSlug,
-    objectKey,
-    environmentSlug: input.environmentSlug,
-    request: input.request,
+  const objectDefinition = findObjectDefinition(manifest, objectKey);
+  assertExists(objectDefinition, "Agent preview object is invalid.");
+  const records = await listTenantScopedRecords({
+    tenantId: context.tenantId,
+    environmentId: context.environmentId,
+    objectKey: objectDefinition.key,
   });
   const sampleSize = Math.min(Math.max(input.sampleSize ?? 3, 1), 10);
   const invocation = prepareAgentInvocation({
@@ -3505,5 +3960,645 @@ export async function previewAgentInvocation(input: {
       allowedByPolicy: manifest.securityPolicy.allowedModelProviderKeys.includes(invocation.provider.key),
     },
     recentActivity,
+  };
+}
+
+function interpolateTemplate(template: string, payload: Record<string, unknown>): string {
+  return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, token: string) => {
+    const value = payload[token];
+    if (value === undefined || value === null) {
+      return "";
+    }
+    return String(value);
+  });
+}
+
+export async function emitPlatformEvent(input: {
+  tenantSlug: string;
+  type: string;
+  source: EventEnvelope["source"];
+  resourceType: string;
+  resourceId: string;
+  payload?: Record<string, unknown>;
+  environmentSlug?: string;
+  request?: Request | Headers;
+}): Promise<EventEnvelope> {
+  const context = await getPlatformContextFromRequest({
+    tenantSlug: input.tenantSlug,
+    environmentSlug: input.environmentSlug,
+    request: input.request,
+  });
+
+  const record = await upsertTenantScopedRecord({
+    tenantId: context.tenantId,
+    environmentId: context.environmentId,
+    objectKey: getSystemObjectKey("outbox"),
+    actor: context.actor,
+    data: {
+      type: input.type,
+      source: input.source,
+      resourceType: input.resourceType,
+      resourceId: input.resourceId,
+      tenantSlug: context.tenant.slug,
+      environmentSlug: context.environment.slug,
+      emittedAt: new Date().toISOString(),
+      payload: input.payload ?? {},
+    },
+  });
+
+  await processPendingOutboxEvents({
+    tenantSlug: context.tenant.slug,
+    environmentSlug: context.environment.slug,
+    request: input.request,
+  });
+
+  return toEventEnvelope(record);
+}
+
+export async function processPendingOutboxEvents(input: {
+  tenantSlug: string;
+  environmentSlug?: string;
+  request?: Request | Headers;
+}): Promise<{
+  processed: number;
+  deliveries: number;
+  alerts: number;
+}> {
+  const context = await getPlatformContextFromRequest({
+    tenantSlug: input.tenantSlug,
+    environmentSlug: input.environmentSlug,
+    request: input.request,
+  });
+
+  const manifest =
+    (await getRuntimeManifest({
+      tenantSlug: input.tenantSlug,
+      environmentSlug: input.environmentSlug,
+      request: input.request,
+    })) ?? context.draftManifest;
+
+  const outbox = (await listTenantScopedRecords({
+    tenantId: context.tenantId,
+    environmentId: context.environmentId,
+    objectKey: getSystemObjectKey("outbox"),
+  }))
+    .filter((record) => !record.data.processedAt)
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+
+  let processed = 0;
+  let deliveries = 0;
+  let alerts = 0;
+
+  for (const record of outbox) {
+    const event = toEventEnvelope(record);
+    const matchingRules = manifest.notifications.rules.filter((rule) => rule.active && rule.eventType === event.type);
+
+    for (const rule of matchingRules) {
+      const template = manifest.notifications.templates.find((candidate) => candidate.key === rule.templateKey);
+      if (!template) {
+        continue;
+      }
+
+      const notificationPayload = {
+        ...event.payload,
+        eventType: event.type,
+        resourceId: event.resourceId,
+        resourceType: event.resourceType,
+      };
+
+      for (const channelKey of rule.channelKeys) {
+        const channel = manifest.notifications.channels.find((candidate) => candidate.key === channelKey);
+        if (!channel || !channel.enabled) {
+          continue;
+        }
+        const subject = template.subject ? interpolateTemplate(template.subject, notificationPayload) : undefined;
+        const body = interpolateTemplate(template.body, notificationPayload);
+
+        try {
+          const deliveryResult = await deliverNotification({
+            channel,
+            severity: rule.severity,
+            subject,
+            body,
+            event,
+            supportEmail: manifest.appShell.supportEmail,
+          });
+
+          await upsertTenantScopedRecord({
+            tenantId: context.tenantId,
+            environmentId: context.environmentId,
+            objectKey: getSystemObjectKey("delivery"),
+            actor: context.actor,
+            data: {
+              eventId: event.id,
+              ruleKey: rule.key,
+              channelKey: channel.key,
+              templateKey: template.key,
+              status: "sent",
+              severity: rule.severity,
+              subject,
+              body,
+              destination: deliveryResult.destination ?? channel.destination,
+              deliveredAt: deliveryResult.deliveredAt,
+              provider: deliveryResult.provider,
+            },
+          });
+          deliveries += 1;
+
+          if (rule.severity === "warning" || rule.severity === "critical") {
+            await upsertTenantScopedRecord({
+              tenantId: context.tenantId,
+              environmentId: context.environmentId,
+              objectKey: getSystemObjectKey("alert"),
+              actor: context.actor,
+              data: {
+                category: event.type.startsWith("agent") ? "budget" : "runtime",
+                severity: rule.severity,
+                title: subject ?? rule.name,
+                summary: body,
+                sourceId: event.id,
+              },
+            });
+            alerts += 1;
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : "Notification delivery failed.";
+          await upsertTenantScopedRecord({
+            tenantId: context.tenantId,
+            environmentId: context.environmentId,
+            objectKey: getSystemObjectKey("delivery"),
+            actor: context.actor,
+            data: {
+              eventId: event.id,
+              ruleKey: rule.key,
+              channelKey: channel.key,
+              templateKey: template.key,
+              status: "failed",
+              severity: rule.severity,
+              subject,
+              body,
+              destination: channel.destination,
+              errorMessage,
+            },
+          });
+          await upsertTenantScopedRecord({
+            tenantId: context.tenantId,
+            environmentId: context.environmentId,
+            objectKey: getSystemObjectKey("alert"),
+            actor: context.actor,
+            data: {
+              category: "delivery",
+              severity: "warning",
+              title: `Delivery failed for ${rule.name}`,
+              summary: errorMessage,
+              sourceId: event.id,
+            },
+          });
+          await upsertTenantScopedRecord({
+            tenantId: context.tenantId,
+            environmentId: context.environmentId,
+            objectKey: getSystemObjectKey("deadLetter"),
+            actor: context.actor,
+            data: {
+              eventId: event.id,
+              type: event.type,
+              reason: errorMessage,
+              payload: {
+                channelKey: channel.key,
+                ruleKey: rule.key,
+                templateKey: template.key,
+              },
+            },
+          });
+          alerts += 1;
+        }
+      }
+    }
+
+    await upsertTenantScopedRecord({
+      tenantId: context.tenantId,
+      environmentId: context.environmentId,
+      objectKey: getSystemObjectKey("outbox"),
+      recordId: record.id,
+      actor: context.actor,
+      data: {
+        ...record.data,
+        processedAt: new Date().toISOString(),
+      },
+    });
+    processed += 1;
+  }
+
+  return {
+    processed,
+    deliveries,
+    alerts,
+  };
+}
+
+export async function listNotificationDeliveries(input: {
+  tenantSlug: string;
+  environmentSlug?: string;
+  request?: Request | Headers;
+}): Promise<NotificationDeliveryRecord[]> {
+  const context = await getPlatformContextFromRequest({
+    tenantSlug: input.tenantSlug,
+    environmentSlug: input.environmentSlug,
+    request: input.request,
+  });
+  const records = await listTenantScopedRecords({
+    tenantId: context.tenantId,
+    environmentId: context.environmentId,
+    objectKey: getSystemObjectKey("delivery"),
+  });
+  return records.map(toNotificationDeliveryRecord);
+}
+
+export async function listPlatformAlerts(input: {
+  tenantSlug: string;
+  environmentSlug?: string;
+  request?: Request | Headers;
+}): Promise<PlatformAlertRecord[]> {
+  const context = await getPlatformContextFromRequest({
+    tenantSlug: input.tenantSlug,
+    environmentSlug: input.environmentSlug,
+    request: input.request,
+  });
+  const records = await listTenantScopedRecords({
+    tenantId: context.tenantId,
+    environmentId: context.environmentId,
+    objectKey: getSystemObjectKey("alert"),
+  });
+  return records.map(toPlatformAlertRecord);
+}
+
+export async function listAgentRuns(input: {
+  tenantSlug: string;
+  environmentSlug?: string;
+  request?: Request | Headers;
+}): Promise<AgentRunRecord[]> {
+  const context = await getPlatformContextFromRequest({
+    tenantSlug: input.tenantSlug,
+    environmentSlug: input.environmentSlug,
+    request: input.request,
+  });
+  const records = await listTenantScopedRecords({
+    tenantId: context.tenantId,
+    environmentId: context.environmentId,
+    objectKey: getSystemObjectKey("agentRun"),
+  });
+  return records.map(toAgentRunRecord);
+}
+
+export async function listCostLedgerRecords(input: {
+  tenantSlug: string;
+  environmentSlug?: string;
+  request?: Request | Headers;
+}): Promise<CostLedgerRecord[]> {
+  const context = await getPlatformContextFromRequest({
+    tenantSlug: input.tenantSlug,
+    environmentSlug: input.environmentSlug,
+    request: input.request,
+  });
+  const records = await listTenantScopedRecords({
+    tenantId: context.tenantId,
+    environmentId: context.environmentId,
+    objectKey: getSystemObjectKey("costLedger"),
+  });
+  return records.map(toCostLedgerRecord);
+}
+
+export async function listDeadLetterRecords(input: {
+  tenantSlug: string;
+  environmentSlug?: string;
+  request?: Request | Headers;
+}): Promise<DeadLetterRecord[]> {
+  const context = await getPlatformContextFromRequest({
+    tenantSlug: input.tenantSlug,
+    environmentSlug: input.environmentSlug,
+    request: input.request,
+  });
+  const records = await listTenantScopedRecords({
+    tenantId: context.tenantId,
+    environmentId: context.environmentId,
+    objectKey: getSystemObjectKey("deadLetter"),
+  });
+  return records.map(toDeadLetterRecord);
+}
+
+export async function listApprovalTasks(input: {
+  tenantSlug: string;
+  environmentSlug?: string;
+  request?: Request | Headers;
+}): Promise<PlatformApprovalTaskRecord[]> {
+  const context = await getPlatformContextFromRequest({
+    tenantSlug: input.tenantSlug,
+    environmentSlug: input.environmentSlug,
+    request: input.request,
+  });
+  const records = await listTenantScopedRecords({
+    tenantId: context.tenantId,
+    environmentId: context.environmentId,
+    objectKey: getSystemObjectKey("approvalTask"),
+  });
+  return records.map(toApprovalTaskRecord);
+}
+
+export async function resolveApprovalTask(input: {
+  tenantSlug: string;
+  taskId: string;
+  resolution: "approved" | "rejected";
+  environmentSlug?: string;
+  request?: Request | Headers;
+}): Promise<PlatformApprovalTaskRecord> {
+  const context = await getPlatformContextFromRequest({
+    tenantSlug: input.tenantSlug,
+    environmentSlug: input.environmentSlug,
+    request: input.request,
+  });
+  assertRole(context.actor, "BUILDER_ADMIN");
+
+  const tasks = await listApprovalTasks({
+    tenantSlug: input.tenantSlug,
+    environmentSlug: input.environmentSlug,
+    request: input.request,
+  });
+  const task = tasks.find((candidate) => candidate.id === input.taskId);
+  assertExists(task, "Approval task not found.");
+
+  const updated = await upsertTenantScopedRecord({
+    tenantId: context.tenantId,
+    environmentId: context.environmentId,
+    objectKey: getSystemObjectKey("approvalTask"),
+    recordId: task.id,
+    actor: context.actor,
+    data: {
+      ...task,
+      status: input.resolution,
+      resolvedAt: new Date().toISOString(),
+    },
+  });
+
+  await appendAuditEvent({
+    tenantId: context.tenantId,
+    environmentId: context.environmentId,
+    actor: context.actor,
+    action: `workflow.approval.${input.resolution}`,
+    resourceType: "approval_task",
+    resourceId: task.id,
+    summary: `${input.resolution === "approved" ? "Approved" : "Rejected"} workflow task ${task.nodeLabel}.`,
+    payload: {
+      workflowRunId: task.workflowRunId,
+      workflowKey: task.workflowKey,
+    },
+  });
+
+  const allRuns = await listAllWorkflowRuns({
+    tenantSlug: input.tenantSlug,
+    environmentSlug: input.environmentSlug,
+    request: input.request,
+  });
+  const workflowRun = allRuns.find((candidate) => candidate.id === task.workflowRunId);
+  if (workflowRun && input.resolution === "approved") {
+    await withLocalFallback(
+      async () => {
+        const prisma = getPrisma();
+        await prisma.platformWorkflowRun.update({
+          where: { id: workflowRun.id },
+          data: {
+            status: "QUEUED",
+            logs: toJsonValue([
+              ...workflowRun.logs,
+              {
+                level: "info",
+                message: `Approval task ${task.nodeLabel} resolved by ${context.actor.email}.`,
+                at: new Date().toISOString(),
+              },
+            ]),
+            output: toJsonValue({
+              ...(workflowRun.output ?? {}),
+              runtimeState: {
+                ...((((workflowRun.output as Record<string, unknown> | null) ?? {}).runtimeState as Record<string, unknown> | undefined) ?? {}),
+                approvalTaskId: task.id,
+              },
+            }),
+          },
+        });
+      },
+      async () => {
+        await updateLocalWorkflowRun({
+          runId: workflowRun.id,
+          status: "QUEUED",
+          output: {
+            ...(workflowRun.output ?? {}),
+            runtimeState: {
+              ...((((workflowRun.output as Record<string, unknown> | null) ?? {}).runtimeState as Record<string, unknown> | undefined) ?? {}),
+              approvalTaskId: task.id,
+            },
+          },
+          appendLog: {
+            level: "info",
+            message: `Approval task ${task.nodeLabel} resolved by ${context.actor.email}.`,
+            at: new Date().toISOString(),
+          },
+        });
+      },
+    ).catch(() => undefined);
+
+    await enqueueWorkflowRun(workflowRun.id).catch(() => undefined);
+  }
+
+  return toApprovalTaskRecord(updated);
+}
+
+export async function simulateAgentRun(input: {
+  tenantSlug: string;
+  agentId: string;
+  prompt?: string;
+  objectKey?: string;
+  sampleSize?: number;
+  environmentSlug?: string;
+  request?: Request | Headers;
+}): Promise<{
+  preview: PlatformAgentPreview;
+  run: AgentRunRecord;
+  cost: CostLedgerRecord;
+}> {
+  const context = await getPlatformContextFromRequest({
+    tenantSlug: input.tenantSlug,
+    environmentSlug: input.environmentSlug,
+    request: input.request,
+  });
+  assertRole(context.actor, "BUILDER_ADMIN");
+
+  const preview = await previewAgentInvocation({
+    tenantSlug: input.tenantSlug,
+    agentId: input.agentId,
+    objectKey: input.objectKey,
+    sampleSize: input.sampleSize,
+    environmentSlug: input.environmentSlug,
+    request: input.request,
+  });
+
+  const providerKey = preview.provider.key;
+  const prompt = input.prompt?.trim() || preview.agent.name;
+  const agent =
+    context.draftManifest.agents.find((candidate) => candidate.id === preview.agent.id || candidate.key === preview.agent.key) ??
+    context.draftManifest.agents[0];
+  const provider =
+    context.draftManifest.modelProviders.find((candidate) => candidate.id === providerKey || candidate.key === providerKey) ??
+    context.draftManifest.modelProviders[0];
+  assertExists(agent, "Agent definition not found.");
+  assertExists(provider, "Model provider not found.");
+
+  const logs: Array<Record<string, unknown>> = [
+    {
+      level: "info",
+      message: `Prepared ${preview.sampleSize} masked records for ${preview.agent.name}.`,
+      at: new Date().toISOString(),
+    },
+  ];
+
+  let outputSummary = `Simulated ${preview.agent.name} against ${preview.sampleSize} masked records.`;
+  let estimatedTokensIn = Math.max(120, prompt.length * 4);
+  let estimatedTokensOut = 220 + preview.sampleSize * 48;
+  let estimatedCostUsd = Number(((estimatedTokensIn + estimatedTokensOut) / 100000).toFixed(4));
+  let runStatus: AgentRunRecord["status"] = "succeeded";
+
+  try {
+    const execution = await executeAgentWithProvider({
+      agent,
+      provider,
+      prompt,
+      maskedRecords: preview.maskedRecords,
+    });
+    outputSummary = execution.outputText;
+    estimatedTokensIn = execution.tokensIn;
+    estimatedTokensOut = execution.tokensOut;
+    estimatedCostUsd = summarizeAgentRunCost(provider.model, execution.tokensIn, execution.tokensOut);
+    logs.push({
+      level: "info",
+      message: `Completed provider-backed run using ${provider.model}.`,
+      at: new Date().toISOString(),
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Agent execution failed.";
+    if (!getEnv().PLATFORM_LOCAL_DEV_MODE) {
+      runStatus = "failed";
+      logs.push({
+        level: "error",
+        message: errorMessage,
+        at: new Date().toISOString(),
+      });
+    } else {
+      logs.push({
+        level: "warning",
+        message: `${errorMessage} Falling back to local simulation.`,
+        at: new Date().toISOString(),
+      });
+    }
+  }
+
+  const runRecord = await upsertTenantScopedRecord({
+    tenantId: context.tenantId,
+    environmentId: context.environmentId,
+    objectKey: getSystemObjectKey("agentRun"),
+    actor: context.actor,
+    data: {
+      agentId: preview.agent.id,
+      agentKey: preview.agent.key,
+      status: runStatus,
+      input: {
+        prompt,
+        objectKey: preview.objectKey,
+        sampleSize: preview.sampleSize,
+      },
+      output: {
+        summary: outputSummary,
+        provider: preview.provider.model,
+      },
+      logs: [
+        ...logs,
+        {
+          level: runStatus === "succeeded" ? "info" : "error",
+          message: runStatus === "succeeded" ? "Simulation completed in Control Tower." : "Simulation finished with a provider failure.",
+          at: new Date().toISOString(),
+        },
+      ],
+      modelProviderKey: providerKey,
+      costUsd: estimatedCostUsd,
+      tokensIn: estimatedTokensIn,
+      tokensOut: estimatedTokensOut,
+      completedAt: new Date().toISOString(),
+    },
+  });
+
+  const costRecord = await upsertTenantScopedRecord({
+    tenantId: context.tenantId,
+    environmentId: context.environmentId,
+    objectKey: getSystemObjectKey("costLedger"),
+    actor: context.actor,
+    data: {
+      category: "agent_run",
+      referenceId: runRecord.id,
+      providerKey,
+      amountUsd: estimatedCostUsd,
+      tokensIn: estimatedTokensIn,
+      tokensOut: estimatedTokensOut,
+      summary: `Simulation cost for ${preview.agent.name}.`,
+    },
+  });
+
+  if (agent.costBudgetUsd && estimatedCostUsd >= agent.costBudgetUsd) {
+    await emitPlatformEvent({
+      tenantSlug: input.tenantSlug,
+      environmentSlug: input.environmentSlug,
+      request: input.request,
+      type: "agent.budget.threshold",
+      source: "agent",
+      resourceType: "agent_run",
+      resourceId: agent.id,
+      payload: {
+        agentKey: agent.key,
+        costUsd: estimatedCostUsd,
+        budgetUsd: agent.costBudgetUsd,
+      },
+    });
+  } else {
+    await emitPlatformEvent({
+      tenantSlug: input.tenantSlug,
+      environmentSlug: input.environmentSlug,
+      request: input.request,
+      type: runStatus === "succeeded" ? "agent.run.simulated" : "agent.run.failed",
+      source: "agent",
+      resourceType: "agent_run",
+      resourceId: preview.agent.id,
+      payload: {
+        agentKey: preview.agent.key,
+        costUsd: estimatedCostUsd,
+      },
+    });
+  }
+
+  await appendAuditEvent({
+    tenantId: context.tenantId,
+    environmentId: context.environmentId,
+    actor: context.actor,
+    action: "agent.simulated",
+    resourceType: "agent",
+    resourceId: preview.agent.id,
+    summary: `Ran Control Tower simulation for ${preview.agent.name}.`,
+    payload: {
+      providerKey,
+      costUsd: estimatedCostUsd,
+      objectKey: preview.objectKey,
+      status: runStatus,
+    },
+  });
+
+  return {
+    preview,
+    run: toAgentRunRecord(runRecord),
+    cost: toCostLedgerRecord(costRecord),
   };
 }

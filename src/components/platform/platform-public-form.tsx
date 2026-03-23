@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore, useTransition } from "react";
 
 import { getThemeCssVariables } from "@/lib/platform/theme";
+import { evaluateRuleAsBoolean } from "@/lib/platform/rule-engine";
 import type { FormDefinition, PlatformManifest } from "@/lib/platform/types";
 
 import styles from "./platform-shell.module.css";
@@ -34,21 +35,108 @@ export function PlatformPublicForm({
   tenantSlug: string;
   mode?: "public" | "draft-preview";
 }) {
-  const [currentStepIndex, setCurrentStepIndex] = useState(0);
-  const [draft, setDraft] = useState<Record<string, unknown>>({});
+  const [currentStepIndex, setCurrentStepIndex] = useState<number | null>(null);
+  const [draft, setDraft] = useState<Record<string, unknown> | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [isPending, startTransition] = useTransition();
-  const steps = form.steps.length > 0 ? form.steps : [{ id: "single", key: "single", title: form.title, fieldKeys: form.fields.map((field) => field.key) }];
-  const currentStep = steps[currentStepIndex]!;
+  const storageKey = `ta-platform-form:${tenantSlug}:${form.key}`;
+  const steps = useMemo(
+    () =>
+      form.steps.length > 0
+        ? form.steps
+        : [
+            {
+              id: "single",
+              key: "single",
+              title: form.title,
+              fieldKeys: form.fields.map((field) => field.key),
+            },
+          ],
+    [form.fields, form.steps, form.title],
+  );
+  const resumeSnapshot = useSyncExternalStore(
+    () => () => undefined,
+    () => {
+      if (!form.saveAndResume) {
+        return null;
+      }
+
+      try {
+        const saved = window.localStorage.getItem(storageKey);
+        if (!saved) {
+          return null;
+        }
+
+        const payload = JSON.parse(saved) as { draft?: Record<string, unknown>; currentStepIndex?: number };
+        return {
+          draft: payload.draft && typeof payload.draft === "object" ? payload.draft : {},
+          currentStepIndex: typeof payload.currentStepIndex === "number" ? payload.currentStepIndex : 0,
+        };
+      } catch {
+        return null;
+      }
+    },
+    () => null,
+  );
+  const effectiveDraft = useMemo(() => draft ?? resumeSnapshot?.draft ?? {}, [draft, resumeSnapshot]);
+  const effectiveStepIndex = currentStepIndex ?? resumeSnapshot?.currentStepIndex ?? 0;
+  const visibleSteps = useMemo(
+    () =>
+      steps.filter((step) => {
+        if (!step.visibilityRule) {
+          return true;
+        }
+        return evaluateRuleAsBoolean(step.visibilityRule.rule ?? { mode: "text", expression: step.visibilityRule.expression }, effectiveDraft);
+      }),
+    [effectiveDraft, steps],
+  );
+  const resolvedSteps = visibleSteps.length > 0 ? visibleSteps : steps;
+  const activeStepIndex = Math.min(effectiveStepIndex, Math.max(0, resolvedSteps.length - 1));
+  const currentStep = resolvedSteps[activeStepIndex]!;
   const visibleFields = useMemo(
     () => form.fields.filter((field) => currentStep.fieldKeys.includes(field.key)),
     [currentStep.fieldKeys, form.fields],
   );
 
+  useEffect(() => {
+    if (!form.saveAndResume) {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(
+        storageKey,
+        JSON.stringify({
+          draft: effectiveDraft,
+          currentStepIndex: activeStepIndex,
+        }),
+      );
+    } catch {
+      // Resume storage is optional.
+    }
+  }, [activeStepIndex, effectiveDraft, form.saveAndResume, storageKey]);
+
+  function validateCurrentStep(): boolean {
+    const nextErrors: Record<string, string> = {};
+    for (const field of visibleFields) {
+      if (!field.required) {
+        continue;
+      }
+      const value = effectiveDraft[field.key];
+      if (value === undefined || value === null || value === "" || value === false) {
+        nextErrors[field.key] = `${field.label} is required.`;
+      }
+    }
+    setFieldErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  }
+
   async function submit(status: "draft" | "submitted"): Promise<void> {
     setError(null);
     setMessage(null);
+    setFieldErrors({});
 
     const response = await fetch(`/api/platform/tenants/${tenantSlug}/forms/${form.key}/submissions`, {
       method: "POST",
@@ -56,7 +144,7 @@ export function PlatformPublicForm({
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        data: draft,
+        data: effectiveDraft,
         status,
       }),
     });
@@ -69,6 +157,11 @@ export function PlatformPublicForm({
     if (status === "submitted") {
       setDraft({});
       setCurrentStepIndex(0);
+      try {
+        window.localStorage.removeItem(storageKey);
+      } catch {
+        // Resume storage is optional.
+      }
     }
   }
 
@@ -98,13 +191,21 @@ export function PlatformPublicForm({
 
         <div className={styles.sectionHeader}>
           <div>
-            <p className={styles.cardEyebrow}>Step {currentStepIndex + 1}</p>
+            <p className={styles.cardEyebrow}>Step {activeStepIndex + 1}</p>
             <h3>{currentStep.title}</h3>
             {currentStep.description ? <p className={styles.helperCopy}>{currentStep.description}</p> : null}
           </div>
           <span className={styles.badge}>
-            {currentStepIndex + 1} / {steps.length}
+            {activeStepIndex + 1} / {resolvedSteps.length}
           </span>
+        </div>
+
+        <div className={styles.inlineList}>
+          {resolvedSteps.map((step, index) => (
+            <span className={styles.inlineTag} key={step.id}>
+              {index + 1}. {step.title}
+            </span>
+          ))}
         </div>
 
         <div className={styles.formGrid}>
@@ -114,15 +215,15 @@ export function PlatformPublicForm({
               {field.type === "long_text" ? (
                 <textarea
                   className={styles.textarea}
-                  onChange={(event) => setDraft((current) => ({ ...current, [field.key]: event.target.value }))}
+                  onChange={(event) => setDraft((current) => ({ ...(current ?? effectiveDraft), [field.key]: event.target.value }))}
                   placeholder={field.placeholder}
-                  value={String(draft[field.key] ?? field.defaultValue ?? "")}
+                  value={String(effectiveDraft[field.key] ?? field.defaultValue ?? "")}
                 />
               ) : field.type === "boolean" ? (
                 <label className={styles.checkboxField}>
                   <input
-                    checked={Boolean(draft[field.key] ?? field.defaultValue ?? false)}
-                    onChange={(event) => setDraft((current) => ({ ...current, [field.key]: event.target.checked }))}
+                    checked={Boolean(effectiveDraft[field.key] ?? field.defaultValue ?? false)}
+                    onChange={(event) => setDraft((current) => ({ ...(current ?? effectiveDraft), [field.key]: event.target.checked }))}
                     type="checkbox"
                   />
                   <span>{field.helpText ?? field.tooltip ?? "Toggle this setting."}</span>
@@ -130,8 +231,8 @@ export function PlatformPublicForm({
               ) : field.type === "select" ? (
                 <select
                   className={styles.select}
-                  onChange={(event) => setDraft((current) => ({ ...current, [field.key]: event.target.value }))}
-                  value={String(draft[field.key] ?? field.defaultValue ?? "")}
+                  onChange={(event) => setDraft((current) => ({ ...(current ?? effectiveDraft), [field.key]: event.target.value }))}
+                  value={String(effectiveDraft[field.key] ?? field.defaultValue ?? "")}
                 >
                   <option value="">Choose an option</option>
                   {field.options?.map((option) => (
@@ -143,13 +244,14 @@ export function PlatformPublicForm({
               ) : (
                 <input
                   className={styles.input}
-                  onChange={(event) => setDraft((current) => ({ ...current, [field.key]: event.target.value }))}
+                  onChange={(event) => setDraft((current) => ({ ...(current ?? effectiveDraft), [field.key]: event.target.value }))}
                   placeholder={field.placeholder}
                   type={fieldInputType(field.type)}
-                  value={String(draft[field.key] ?? field.defaultValue ?? "")}
+                  value={String(effectiveDraft[field.key] ?? field.defaultValue ?? "")}
                 />
               )}
               {field.helpText || field.tooltip ? <small className={styles.metricMeta}>{field.helpText ?? field.tooltip}</small> : null}
+              {fieldErrors[field.key] ? <small className={styles.errorText}>{fieldErrors[field.key]}</small> : null}
             </label>
           ))}
         </div>
@@ -158,16 +260,21 @@ export function PlatformPublicForm({
           <div className={styles.inlineList}>
             <button
               className={styles.secondaryButton}
-              disabled={currentStepIndex === 0 || isPending}
-              onClick={() => setCurrentStepIndex((current) => Math.max(0, current - 1))}
+              disabled={activeStepIndex === 0 || isPending}
+              onClick={() => setCurrentStepIndex(Math.max(0, activeStepIndex - 1))}
               type="button"
             >
               Previous
             </button>
             <button
               className={styles.secondaryButton}
-              disabled={currentStepIndex >= steps.length - 1 || isPending}
-              onClick={() => setCurrentStepIndex((current) => Math.min(steps.length - 1, current + 1))}
+              disabled={activeStepIndex >= resolvedSteps.length - 1 || isPending}
+              onClick={() => {
+                if (!validateCurrentStep()) {
+                  return;
+                }
+                setCurrentStepIndex(Math.min(resolvedSteps.length - 1, activeStepIndex + 1));
+              }}
               type="button"
             >
               Next
@@ -191,15 +298,18 @@ export function PlatformPublicForm({
               </button>
             ) : null}
             <button
-              className={styles.primaryButton}
-              disabled={isPending || mode === "draft-preview"}
-              onClick={() =>
-                startTransition(() => {
-                  void submit("submitted").catch((caughtError) => {
-                    setError(caughtError instanceof Error ? caughtError.message : "Failed to submit form.");
-                  });
-                })
-              }
+                className={styles.primaryButton}
+                disabled={isPending || mode === "draft-preview"}
+                onClick={() =>
+                  startTransition(() => {
+                    if (!validateCurrentStep()) {
+                      return;
+                    }
+                    void submit("submitted").catch((caughtError) => {
+                      setError(caughtError instanceof Error ? caughtError.message : "Failed to submit form.");
+                    });
+                  })
+                }
               type="button"
             >
               {isPending ? "Working..." : form.submitLabel}
