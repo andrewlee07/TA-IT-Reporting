@@ -4,6 +4,7 @@ import { ReportAppShell, type AppReportRecord } from "@/components/report-app-sh
 import { REPORT_PAGES, hasPageTabs, isValidPageId, resolveTabId } from "@/lib/report/blocks";
 import { loadTemplateBodyMarkup, loadTemplateStyles } from "@/lib/report/template-source";
 import { getBundledDemoSnapshot, getExecSummaryState, getStoredReport, listReports, type ReportListItem } from "@/lib/reports/service";
+import { getEnv } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
@@ -108,6 +109,10 @@ interface HomePageProps {
 }
 
 export default async function HomePage({ searchParams }: HomePageProps) {
+  if (getEnv().PLATFORM_HOME_REDIRECT) {
+    redirect(`/platform/${getEnv().PLATFORM_DEFAULT_TENANT_SLUG}`);
+  }
+
   const query = await searchParams;
   const reports = await listReports();
   const normalizedReports = reports.map(normalizeListEntry);

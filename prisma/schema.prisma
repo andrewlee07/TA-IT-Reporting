@@ -12,6 +12,26 @@ enum ReportValidationStatus {
   INVALID
 }
 
+enum PlatformRole {
+  SUPER_ADMIN
+  BUILDER_ADMIN
+  USER
+}
+
+enum PlatformVersionStatus {
+  DRAFT
+  ACTIVE
+  ROLLED_BACK
+}
+
+enum WorkflowRunStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  PAUSED
+}
+
 model Report {
   id                String                 @id @default(cuid())
   title             String
@@ -77,4 +97,173 @@ model ReportExport {
 
   @@index([reportId, exportType])
   @@index([createdAt(sort: Desc)])
+}
+
+model PlatformTenant {
+  id           String                   @id @default(cuid())
+  slug         String                   @unique
+  name         String
+  description  String?                  @db.Text
+  isActive     Boolean                  @default(true)
+  createdAt    DateTime                 @default(now())
+  updatedAt    DateTime                 @updatedAt
+  environments PlatformEnvironment[]
+  memberships  PlatformMembership[]
+  invites      PlatformTenantInvite[]
+  drafts       PlatformDraft[]
+  versions     PlatformPublishedVersion[]
+  auditEvents  PlatformAuditEvent[]
+  records      PlatformRecord[]
+  workflowRuns PlatformWorkflowRun[]
+}
+
+model PlatformUser {
+  id          String               @id @default(cuid())
+  email       String               @unique
+  displayName String
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  memberships PlatformMembership[]
+  acceptedInvites PlatformTenantInvite[] @relation("InviteAcceptedBy")
+}
+
+model PlatformMembership {
+  id        String       @id @default(cuid())
+  userId    String
+  tenantId  String
+  role      PlatformRole
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  user      PlatformUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant    PlatformTenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, tenantId])
+  @@index([tenantId, role])
+}
+
+model PlatformEnvironment {
+  id          String                   @id @default(cuid())
+  tenantId    String
+  name        String
+  slug        String
+  isDefault   Boolean                  @default(false)
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+  tenant      PlatformTenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  drafts      PlatformDraft[]
+  versions    PlatformPublishedVersion[]
+  auditEvents PlatformAuditEvent[]
+  records     PlatformRecord[]
+  workflowRuns PlatformWorkflowRun[]
+
+  @@unique([tenantId, slug])
+}
+
+model PlatformDraft {
+  id            String              @id @default(cuid())
+  tenantId      String
+  environmentId String
+  manifest      Json                @db.JsonB
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  tenant        PlatformTenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  environment   PlatformEnvironment @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, environmentId])
+}
+
+model PlatformPublishedVersion {
+  id            String                @id @default(cuid())
+  tenantId      String
+  environmentId String
+  versionNumber Int
+  status        PlatformVersionStatus @default(DRAFT)
+  manifest      Json                  @db.JsonB
+  manifestPath  String?
+  gitCommitSha  String?
+  notes         String?               @db.Text
+  activatedAt   DateTime?
+  createdAt     DateTime              @default(now())
+  tenant        PlatformTenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  environment   PlatformEnvironment   @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, environmentId, versionNumber])
+  @@index([tenantId, environmentId, status, createdAt(sort: Desc)])
+}
+
+model PlatformAuditEvent {
+  id            String              @id @default(cuid())
+  tenantId      String
+  environmentId String?
+  actorEmail    String?
+  actorRole     PlatformRole?
+  action        String
+  resourceType  String
+  resourceId    String
+  summary       String
+  payload       Json?               @db.JsonB
+  createdAt     DateTime            @default(now())
+  tenant        PlatformTenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  environment   PlatformEnvironment? @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([tenantId, resourceType, resourceId])
+}
+
+model PlatformRecord {
+  id            String              @id @default(cuid())
+  tenantId      String
+  environmentId String
+  objectKey     String
+  data          Json                @db.JsonB
+  createdByEmail String?
+  updatedByEmail String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  tenant        PlatformTenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  environment   PlatformEnvironment @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, environmentId, objectKey, createdAt(sort: Desc)])
+}
+
+model PlatformTenantInvite {
+  id              String         @id @default(cuid())
+  tenantId        String
+  email           String
+  role            PlatformRole
+  token           String         @unique
+  status          String         @default("pending")
+  inviteUrl       String
+  createdByEmail  String?
+  acceptedByUserId String?
+  acceptedAt      DateTime?
+  expiresAt       DateTime
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  tenant          PlatformTenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  acceptedBy      PlatformUser?  @relation("InviteAcceptedBy", fields: [acceptedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status, createdAt(sort: Desc)])
+  @@index([tenantId, email])
+}
+
+model PlatformWorkflowRun {
+  id            String              @id @default(cuid())
+  tenantId      String
+  environmentId String
+  workflowId    String
+  workflowKey   String
+  status        WorkflowRunStatus   @default(QUEUED)
+  input         Json?               @db.JsonB
+  output        Json?               @db.JsonB
+  logs          Json?               @db.JsonB
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  tenant        PlatformTenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  environment   PlatformEnvironment @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, environmentId, workflowKey, createdAt(sort: Desc)])
+  @@index([tenantId, status, createdAt(sort: Desc)])
 }
