@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 
 interface CompatibilityReportRedirectProps {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ month?: string | string[]; page?: string | string[] }>;
+  searchParams: Promise<{ month?: string | string[]; page?: string | string[]; tab?: string | string[] }>;
 }
 
 function getSingleValue(value: string | string[] | undefined): string | undefined {
@@ -18,6 +18,7 @@ export default async function CompatibilityReportRedirect({ params, searchParams
 
   const month = getSingleValue(query.month);
   const page = getSingleValue(query.page);
+  const tab = getSingleValue(query.tab);
 
   if (month) {
     url.set("month", month);
@@ -25,6 +26,10 @@ export default async function CompatibilityReportRedirect({ params, searchParams
 
   if (page) {
     url.set("page", page);
+  }
+
+  if (tab) {
+    url.set("tab", tab);
   }
 
   redirect(`/?${url.toString()}`);

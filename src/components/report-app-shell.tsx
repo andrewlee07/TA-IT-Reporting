@@ -1,13 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import Chart from "chart.js/auto";
 
-import { REPORT_PAGES, isValidPageId } from "@/lib/report/blocks";
+import { ReportPrepDrawer } from "@/components/report-prep-drawer";
+import { REPORT_PAGES, getSlideId, hasPageTabs, isValidPageId, resolveTabId } from "@/lib/report/blocks";
 import { buildTemplateData, formatMonthLabel } from "@/lib/report/template-data";
 import { initReportApp } from "@/lib/report/runtime";
 import type { ExecSummaryState } from "@/lib/reports/exec-summary";
+import type { ReportPrepView } from "@/lib/reports/prep-center";
 import type { NormalizedReportSnapshot } from "@/lib/workbook/types";
 
 interface ReportListEntry {
@@ -33,6 +35,7 @@ interface ReportAppShellProps {
   initialExecSummary: ExecSummaryState;
   initialMonth: string;
   initialPageId: string;
+  initialTabId: string | null;
   templateBody: string;
 }
 
@@ -65,11 +68,24 @@ interface ExecSummaryApiPayload {
   error?: string;
 }
 
-function buildCanonicalUrl(reportId: string, month: string, pageId: string): string {
+interface PrepApiPayload {
+  prep?: ReportPrepView;
+  error?: string;
+}
+
+function buildCanonicalUrl(reportId: string, month: string, pageId: string, tabId?: string | null): string {
   const params = new URLSearchParams();
   params.set("report", reportId);
   params.set("month", month);
   params.set("page", pageId);
+
+  if (hasPageTabs(pageId)) {
+    const resolvedTabId = resolveTabId(pageId, tabId);
+    if (resolvedTabId) {
+      params.set("tab", resolvedTabId);
+    }
+  }
+
   return `/?${params.toString()}`;
 }
 
@@ -84,6 +100,11 @@ function sanitizeFilename(value: string): string {
 
 function buildClientExportFilename(reportTitle: string, month: string, label: string, format: ClientExportFormat): string {
   return `${sanitizeFilename(reportTitle)}-${month}-${sanitizeFilename(label)}.${format === "jpeg" ? "jpg" : "png"}`;
+}
+
+function formatSidebarReportTitle(title: string, currentMonth: string): string {
+  const monthSuffixPattern = new RegExp(`\\s*·\\s*${currentMonth.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`);
+  return title.replace(monthSuffixPattern, "").trim();
 }
 
 function toReportListEntry(report: AppReportRecord): ReportListEntry {
@@ -113,6 +134,10 @@ function ensurePage(pageId: string | null | undefined): string {
   return pageId && isValidPageId(pageId) ? pageId : REPORT_PAGES[0].id;
 }
 
+function ensureTab(pageId: string, tabId: string | null | undefined): string | null {
+  return resolveTabId(pageId, tabId);
+}
+
 async function fetchJson<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
   const response = await fetch(input, init);
   const payload = (await response.json()) as T & { error?: string };
@@ -129,6 +154,220 @@ interface ExecSummaryEditorProps {
   isSaving: boolean;
   onCancel: () => void;
   onSave: (contentHtml: string) => Promise<void>;
+}
+
+interface MonthPickerProps {
+  availableMonths: string[];
+  selectedMonth: string;
+  onChange: (month: string) => void;
+}
+
+const MONTH_PICKER_LABEL_ID = "report-month-picker-label";
+const MONTH_PICKER_TRIGGER_ID = "report-month-trigger";
+const MONTH_PICKER_LISTBOX_ID = "report-month-listbox";
+
+function MonthPicker({ availableMonths, selectedMonth, onChange }: MonthPickerProps) {
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const listboxRef = useRef<HTMLDivElement | null>(null);
+  const selectedIndex = Math.max(availableMonths.indexOf(selectedMonth), 0);
+  const [isOpen, setIsOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(selectedIndex);
+
+  const closePicker = useCallback((restoreFocus = true) => {
+    setIsOpen(false);
+
+    if (restoreFocus) {
+      window.requestAnimationFrame(() => {
+        buttonRef.current?.focus();
+      });
+    }
+  }, []);
+
+  const openPicker = useCallback(
+    (nextIndex = selectedIndex) => {
+      const boundedIndex = Math.min(Math.max(nextIndex, 0), Math.max(availableMonths.length - 1, 0));
+      setActiveIndex(boundedIndex);
+      setIsOpen(true);
+    },
+    [availableMonths.length, selectedIndex],
+  );
+
+  const commitSelection = useCallback(
+    (index: number) => {
+      const nextMonth = availableMonths[index];
+      if (!nextMonth) {
+        return;
+      }
+
+      onChange(nextMonth);
+      setActiveIndex(index);
+      closePicker();
+    },
+    [availableMonths, closePicker, onChange],
+  );
+
+  useEffect(() => {
+    setActiveIndex(selectedIndex);
+  }, [selectedIndex]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      listboxRef.current?.focus();
+    });
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        closePicker(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [closePicker, isOpen]);
+
+  const handleTriggerKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLButtonElement>) => {
+      switch (event.key) {
+        case "ArrowDown":
+          event.preventDefault();
+          openPicker(Math.min(selectedIndex + 1, availableMonths.length - 1));
+          return;
+        case "ArrowUp":
+          event.preventDefault();
+          openPicker(Math.max(selectedIndex - 1, 0));
+          return;
+        case "Enter":
+        case " ":
+          event.preventDefault();
+          if (isOpen) {
+            closePicker();
+          } else {
+            openPicker(selectedIndex);
+          }
+          return;
+        case "Escape":
+          if (isOpen) {
+            event.preventDefault();
+            closePicker();
+          }
+          return;
+        default:
+          return;
+      }
+    },
+    [availableMonths.length, closePicker, isOpen, openPicker, selectedIndex],
+  );
+
+  const handleListboxKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      switch (event.key) {
+        case "ArrowDown":
+          event.preventDefault();
+          setActiveIndex((current) => Math.min(current + 1, availableMonths.length - 1));
+          return;
+        case "ArrowUp":
+          event.preventDefault();
+          setActiveIndex((current) => Math.max(current - 1, 0));
+          return;
+        case "Home":
+          event.preventDefault();
+          setActiveIndex(0);
+          return;
+        case "End":
+          event.preventDefault();
+          setActiveIndex(Math.max(availableMonths.length - 1, 0));
+          return;
+        case "Enter":
+        case " ":
+          event.preventDefault();
+          commitSelection(activeIndex);
+          return;
+        case "Escape":
+          event.preventDefault();
+          closePicker();
+          return;
+        case "Tab":
+          closePicker(false);
+          return;
+        default:
+          return;
+      }
+    },
+    [activeIndex, availableMonths.length, closePicker, commitSelection],
+  );
+
+  return (
+    <div className={`sidebar-month-picker${isOpen ? " is-open" : ""}`} ref={rootRef}>
+      <label className="sidebar-field-label" id={MONTH_PICKER_LABEL_ID}>
+        Reporting Period
+      </label>
+      <button
+        aria-controls={MONTH_PICKER_LISTBOX_ID}
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
+        aria-labelledby={`${MONTH_PICKER_LABEL_ID} ${MONTH_PICKER_TRIGGER_ID}`}
+        className="month-picker-trigger"
+        id={MONTH_PICKER_TRIGGER_ID}
+        onClick={() => {
+          if (isOpen) {
+            closePicker(false);
+            return;
+          }
+          openPicker(selectedIndex);
+        }}
+        onKeyDown={handleTriggerKeyDown}
+        ref={buttonRef}
+        type="button"
+      >
+        <span className="month-picker-trigger-value">{formatMonthLabel(selectedMonth)}</span>
+        <span aria-hidden="true" className="month-picker-trigger-icon">
+          <svg fill="none" viewBox="0 0 12 12" xmlns="http://www.w3.org/2000/svg">
+            <path d="M2 4.25 6 8l4-3.75" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
+          </svg>
+        </span>
+      </button>
+
+      {isOpen ? (
+        <div
+          aria-activedescendant={`report-month-option-${availableMonths[activeIndex]}`}
+          aria-labelledby={MONTH_PICKER_LABEL_ID}
+          className="month-picker-panel"
+          id={MONTH_PICKER_LISTBOX_ID}
+          onKeyDown={handleListboxKeyDown}
+          ref={listboxRef}
+          role="listbox"
+          tabIndex={-1}
+        >
+          {availableMonths.map((month, index) => {
+            const isSelected = month === selectedMonth;
+            const isActive = index === activeIndex;
+
+            return (
+              <button
+                aria-selected={isSelected}
+                className={`month-picker-option${isSelected ? " is-selected" : ""}${isActive ? " is-active" : ""}`}
+                id={`report-month-option-${month}`}
+                key={month}
+                onClick={() => commitSelection(index)}
+                onMouseEnter={() => setActiveIndex(index)}
+                onMouseDown={(event) => event.preventDefault()}
+                role="option"
+                type="button"
+              >
+                <span className="month-picker-option-text">{formatMonthLabel(month)}</span>
+                {isSelected ? <span className="month-picker-option-badge">Current</span> : null}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function ExecSummaryEditor({ initialHtml, isSaving, onCancel, onSave }: ExecSummaryEditorProps) {
@@ -205,6 +444,7 @@ export function ReportAppShell({
   initialExecSummary,
   initialMonth,
   initialPageId,
+  initialTabId,
   templateBody,
 }: ReportAppShellProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
@@ -212,15 +452,22 @@ export function ReportAppShell({
   const controllerRef = useRef<ReturnType<typeof initReportApp> | null>(null);
   const reportCacheRef = useRef(new Map<string, AppReportRecord>([[initialReport.id, initialReport]]));
   const execSummaryCacheRef = useRef(new Map<string, ExecSummaryState>([[`${initialReport.id}:${initialMonth}`, initialExecSummary]]));
+  const prepCacheRef = useRef(new Map<string, ReportPrepView>());
   const activeReportRef = useRef(initialReport);
   const selectedMonthRef = useRef(initialMonth);
   const selectedPageRef = useRef(initialPageId);
+  const selectedTabByPageRef = useRef<Record<string, string | null>>(
+    initialTabId ? { [initialPageId]: initialTabId } : {},
+  );
   const exportTargetsRef = useRef(new Map<string, ClientExportTarget>());
 
   const [reports, setReports] = useState<ReportListEntry[]>(initialReports);
   const [activeReport, setActiveReport] = useState<AppReportRecord>(initialReport);
   const [selectedMonth, setSelectedMonth] = useState(initialMonth);
   const [selectedPageId, setSelectedPageId] = useState(initialPageId);
+  const [selectedTabByPage, setSelectedTabByPage] = useState<Record<string, string | null>>(
+    initialTabId ? { [initialPageId]: initialTabId } : {},
+  );
   const [targets, setTargets] = useState<PortalTargets>({
     toggle: null,
     period: null,
@@ -248,10 +495,19 @@ export function ReportAppShell({
   const [isSummarySaving, setIsSummarySaving] = useState(false);
   const [isSummaryEditing, setIsSummaryEditing] = useState(false);
   const [summaryEditorHtml, setSummaryEditorHtml] = useState(initialExecSummary.contentHtml);
+  const [prepView, setPrepView] = useState<ReportPrepView | null>(null);
+  const [isPrepLoading, setIsPrepLoading] = useState(false);
+  const [isPrepSaving, setIsPrepSaving] = useState(false);
+  const [isPrepOpen, setIsPrepOpen] = useState(false);
+  const [activePrepTab, setActivePrepTab] = useState<"readiness" | "rollover">("readiness");
 
   const templateData = useMemo(
     () => buildTemplateData(activeReport.snapshot, selectedMonth, execSummary),
     [activeReport.snapshot, execSummary, selectedMonth],
+  );
+  const selectedTabId = useMemo(
+    () => ensureTab(selectedPageId, selectedTabByPage[selectedPageId]),
+    [selectedPageId, selectedTabByPage],
   );
   const reportOptions = useMemo(() => {
     const saved = reports.map((report) => ({
@@ -279,6 +535,10 @@ export function ReportAppShell({
   useEffect(() => {
     selectedPageRef.current = selectedPageId;
   }, [selectedPageId]);
+
+  useEffect(() => {
+    selectedTabByPageRef.current = selectedTabByPage;
+  }, [selectedTabByPage]);
 
   const loadExecSummary = useCallback(async (reportId: string, month: string) => {
     const cacheKey = `${reportId}:${month}`;
@@ -328,13 +588,46 @@ export function ReportAppShell({
     }
   }, []);
 
+  const loadPrep = useCallback(async (reportId: string, month: string) => {
+    const cacheKey = `${reportId}:${month}`;
+    const cached = prepCacheRef.current.get(cacheKey);
+
+    if (cached) {
+      setPrepView(cached);
+      setIsPrepLoading(false);
+      return;
+    }
+
+    setIsPrepLoading(true);
+
+    try {
+      const payload = await fetchJson<PrepApiPayload>(`/api/reports/${reportId}/prep?month=${encodeURIComponent(month)}`);
+      const nextPrep = payload.prep ?? null;
+      if (nextPrep) {
+        prepCacheRef.current.set(cacheKey, nextPrep);
+      }
+      setPrepView(nextPrep);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Failed to load readiness data.");
+      setPrepView(null);
+    } finally {
+      setIsPrepLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     setIsSummaryEditing(false);
     void loadExecSummary(activeReport.id, selectedMonth);
   }, [activeReport.id, loadExecSummary, selectedMonth]);
 
   useEffect(() => {
-    setIsSummaryEditing(false);
+    void loadPrep(activeReport.id, selectedMonth);
+  }, [activeReport.id, loadPrep, selectedMonth]);
+
+  useEffect(() => {
+    if (selectedPageId !== "p-summary") {
+      setIsSummaryEditing(false);
+    }
   }, [selectedPageId]);
 
   useEffect(() => {
@@ -381,11 +674,14 @@ export function ReportAppShell({
     return () => window.removeEventListener("ta:request-upload", handleUploadRequest);
   }, []);
 
-  const syncUrl = useCallback((reportId: string, month: string, pageId: string, historyMode: "push" | "replace" = "push") => {
-    const url = buildCanonicalUrl(reportId, month, pageId);
-    const method = historyMode === "replace" ? "replaceState" : "pushState";
-    window.history[method]({}, "", url);
-  }, []);
+  const syncUrl = useCallback(
+    (reportId: string, month: string, pageId: string, tabId: string | null, historyMode: "push" | "replace" = "push") => {
+      const url = buildCanonicalUrl(reportId, month, pageId, tabId);
+      const method = historyMode === "replace" ? "replaceState" : "pushState";
+      window.history[method]({}, "", url);
+    },
+    [],
+  );
 
   const refreshReportList = useCallback(async (newReport?: AppReportRecord) => {
     try {
@@ -430,6 +726,7 @@ export function ReportAppShell({
       options: {
         month?: string | null;
         pageId?: string | null;
+        tabId?: string | null;
         historyMode?: "push" | "replace" | "none";
       } = {},
     ) => {
@@ -448,14 +745,19 @@ export function ReportAppShell({
         const report = await loadReport(reportId);
         const nextMonth = ensureMonth(report, options.month);
         const nextPageId = ensurePage(options.pageId);
+        const nextTabId = ensureTab(nextPageId, options.tabId);
 
         setActiveReport(report);
         setSelectedMonth(nextMonth);
         setSelectedPageId(nextPageId);
+        setSelectedTabByPage((current) => ({
+          ...current,
+          [nextPageId]: nextTabId,
+        }));
         setStatusMessage(`Viewing ${report.title}`);
 
         if (options.historyMode !== "none") {
-          syncUrl(report.id, nextMonth, nextPageId, options.historyMode ?? "push");
+          syncUrl(report.id, nextMonth, nextPageId, nextTabId, options.historyMode ?? "push");
         }
       } catch (error) {
         setUploadError(error instanceof Error ? error.message : "Failed to load report.");
@@ -471,11 +773,13 @@ export function ReportAppShell({
     const currentReport = activeReportRef.current;
     const nextReportId = params.get("report") ?? currentReport.id;
     const nextPageId = ensurePage(params.get("page"));
+    const nextTabId = ensureTab(nextPageId, params.get("tab"));
 
     if (nextReportId !== currentReport.id) {
       await activateReport(nextReportId, {
         month: params.get("month"),
         pageId: nextPageId,
+        tabId: nextTabId,
         historyMode: "none",
       });
       return;
@@ -483,6 +787,10 @@ export function ReportAppShell({
 
     setSelectedMonth(ensureMonth(currentReport, params.get("month")));
     setSelectedPageId(nextPageId);
+    setSelectedTabByPage((current) => ({
+      ...current,
+      [nextPageId]: nextTabId,
+    }));
   }, [activateReport]);
 
   useEffect(() => {
@@ -499,17 +807,24 @@ export function ReportAppShell({
     setSelectedExportIds([]);
     setExportError(null);
     setActiveExportTargets([]);
-  }, [activeReport.id, selectedMonth, selectedPageId]);
+  }, [activeReport.id, selectedMonth, selectedPageId, selectedTabId]);
 
   const handlePageChange = useCallback(
-    (pageId: string) => {
-      if (selectedPageRef.current === pageId) {
+    (pageId: string, tabId: string | null) => {
+      const resolvedTabId = ensureTab(pageId, tabId);
+      const currentTabId = ensureTab(pageId, selectedTabByPageRef.current[pageId]);
+
+      if (selectedPageRef.current === pageId && currentTabId === resolvedTabId) {
         return;
       }
 
       selectedPageRef.current = pageId;
       setSelectedPageId(pageId);
-      syncUrl(activeReportRef.current.id, selectedMonthRef.current, pageId);
+      setSelectedTabByPage((current) => ({
+        ...current,
+        [pageId]: resolvedTabId,
+      }));
+      syncUrl(activeReportRef.current.id, selectedMonthRef.current, pageId, resolvedTabId);
     },
     [syncUrl],
   );
@@ -543,6 +858,7 @@ export function ReportAppShell({
       data: templateData,
       activeMonth: selectedMonth,
       initialPageId: selectedPageRef.current,
+      initialTabId: ensureTab(selectedPageRef.current, selectedTabByPageRef.current[selectedPageRef.current]),
       showAllPages: false,
       attachGlobals: true,
       onPageChange: handlePageChange,
@@ -584,8 +900,8 @@ export function ReportAppShell({
   }, [isSummaryEditing, selectedPageId]);
 
   useEffect(() => {
-    controllerRef.current?.showPage(selectedPageId);
-  }, [selectedPageId]);
+    controllerRef.current?.showPage(selectedPageId, selectedTabId);
+  }, [selectedPageId, selectedTabId]);
 
   useEffect(() => {
     const shellRoot = mountRef.current?.querySelector(".shell");
@@ -731,7 +1047,7 @@ export function ReportAppShell({
         <div style="display:flex;align-items:center;gap:12px;">
           <div style="width:28px;height:28px;border-radius:4px;background:#F57D00;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;">TA</div>
           <div>
-            <div style="font-size:15px;font-weight:700;color:#005292;">TeacherActive · Information Technology</div>
+            <div style="font-size:15px;font-weight:700;color:#005292;">TeacherActive · IT Reporting</div>
             <div style="font-size:11px;color:#9CA3AF;margin-top:2px;">${activeReportRef.current.title} · ${formatMonthLabel(selectedMonthRef.current)}</div>
           </div>
         </div>
@@ -767,7 +1083,7 @@ export function ReportAppShell({
           buildClientExportFilename(
             activeReportRef.current.title,
             selectedMonthRef.current,
-            `${selectedPageRef.current}-selection`,
+            `${getSlideId(selectedPageRef.current, ensureTab(selectedPageRef.current, selectedTabByPageRef.current[selectedPageRef.current]))}-selection`,
             clientExportFormat,
           ),
         );
@@ -788,7 +1104,7 @@ export function ReportAppShell({
       return;
     }
 
-    const activePage = shellRoot.querySelector(`#${selectedPageId}`);
+    const activePage = shellRoot.querySelector(`#${getSlideId(selectedPageId, selectedTabId)}`);
     if (!(activePage instanceof HTMLElement)) {
       return;
     }
@@ -868,13 +1184,18 @@ export function ReportAppShell({
       setActiveExportTargets([]);
       cleanupCallbacks.forEach((cleanup) => cleanup());
     };
-  }, [activeReport.id, exportMode, exportSingleTarget, selectedExportIds, selectedMonth, selectedPageId]);
+  }, [activeReport.id, exportMode, exportSingleTarget, selectedExportIds, selectedMonth, selectedPageId, selectedTabId]);
 
   const handleMonthChange = useCallback(
     (month: string) => {
       const nextMonth = ensureMonth(activeReportRef.current, month);
       setSelectedMonth(nextMonth);
-      syncUrl(activeReportRef.current.id, nextMonth, selectedPageRef.current);
+      syncUrl(
+        activeReportRef.current.id,
+        nextMonth,
+        selectedPageRef.current,
+        ensureTab(selectedPageRef.current, selectedTabByPageRef.current[selectedPageRef.current]),
+      );
     },
     [syncUrl],
   );
@@ -884,6 +1205,7 @@ export function ReportAppShell({
       await activateReport(reportId, {
         month: selectedMonthRef.current,
         pageId: selectedPageRef.current,
+        tabId: selectedTabByPageRef.current[selectedPageRef.current],
         historyMode: "push",
       });
     },
@@ -925,8 +1247,9 @@ export function ReportAppShell({
         setActiveReport(payload.report);
         setSelectedMonth(payload.report.currentMonth);
         setSelectedPageId(nextPageId);
+        setSelectedTabByPage({});
         setStatusMessage(`Uploaded ${payload.report.originalFilename}`);
-        syncUrl(payload.report.id, payload.report.currentMonth, nextPageId);
+        syncUrl(payload.report.id, payload.report.currentMonth, nextPageId, null);
       } catch (error) {
         setUploadError(error instanceof Error ? error.message : "Upload failed.");
       } finally {
@@ -946,18 +1269,22 @@ export function ReportAppShell({
     [handleUpload],
   );
 
-  const downloadExport = useCallback(async (exportType: "page-png" | "full-pdf") => {
+  const downloadExport = useCallback(async (exportType: "page-png" | "full-pdf" | "full-pptx" | "full-pptx-editable") => {
     setBusyExport(exportType);
     setExportError(null);
 
     try {
+      const activeTabId = ensureTab(selectedPageRef.current, selectedTabByPageRef.current[selectedPageRef.current]);
       const payload: Record<string, string> = {
         exportType,
         month: selectedMonthRef.current,
       };
 
-      if (exportType !== "full-pdf") {
+      if (exportType !== "full-pdf" && exportType !== "full-pptx" && exportType !== "full-pptx-editable") {
         payload.pageId = selectedPageRef.current;
+        if (activeTabId) {
+          payload.tabId = activeTabId;
+        }
       }
 
       const response = await fetch(`/api/reports/${activeReportRef.current.id}/exports`, {
@@ -1035,6 +1362,8 @@ export function ReportAppShell({
         setExecSummary(payload.summary);
         setSummaryEditorHtml(payload.summary.contentHtml);
         setIsSummaryEditing(false);
+        prepCacheRef.current.delete(cacheKey);
+        void loadPrep(activeReportRef.current.id, selectedMonthRef.current);
         setStatusMessage("Exec summary saved.");
       } catch (error) {
         setUploadError(error instanceof Error ? error.message : "Failed to save exec summary.");
@@ -1042,29 +1371,99 @@ export function ReportAppShell({
         setIsSummarySaving(false);
       }
     },
+    [loadPrep],
+  );
+
+  const togglePrepDrawer = useCallback(() => {
+    setIsSidebarCollapsed(false);
+    setIsPrepOpen((current) => !current);
+  }, []);
+
+  const jumpToPrepTarget = useCallback(
+    (pageId: string, tabId: string | null) => {
+      handlePageChange(pageId, tabId);
+    },
+    [handlePageChange],
+  );
+
+  const saveAcknowledgedChecks = useCallback(
+    async (acknowledgedCheckIds: string[]) => {
+      if (activeReportRef.current.id === "demo") {
+        return;
+      }
+
+      setIsPrepSaving(true);
+      setUploadError(null);
+
+      try {
+        const payload = await fetchJson<PrepApiPayload>(
+          `/api/reports/${activeReportRef.current.id}/prep?month=${encodeURIComponent(selectedMonthRef.current)}`,
+          {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ acknowledgedCheckIds }),
+          },
+        );
+
+        if (!payload.prep) {
+          throw new Error("Failed to save readiness review state.");
+        }
+
+        const cacheKey = `${activeReportRef.current.id}:${selectedMonthRef.current}`;
+        prepCacheRef.current.set(cacheKey, payload.prep);
+        setPrepView(payload.prep);
+      } catch (error) {
+        setUploadError(error instanceof Error ? error.message : "Failed to save readiness review state.");
+      } finally {
+        setIsPrepSaving(false);
+      }
+    },
     [],
   );
+
+  const toggleAcknowledgedCheck = useCallback(
+    (checkId: string, nextAcknowledged: boolean) => {
+      const currentPrep = prepView;
+      if (!currentPrep) {
+        return;
+      }
+
+      const nextIds = nextAcknowledged
+        ? [...currentPrep.acknowledgedCheckIds, checkId]
+        : currentPrep.acknowledgedCheckIds.filter((id) => id !== checkId);
+
+      void saveAcknowledgedChecks(nextIds);
+    },
+    [prepView, saveAcknowledgedChecks],
+  );
+
+  const copyPreviousMonthSummary = useCallback(() => {
+    const previousSummary = prepView?.rollover.previousExecSummary;
+    if (!previousSummary?.available || activeReportRef.current.id === "demo") {
+      return;
+    }
+
+    setSummaryEditorHtml(previousSummary.contentHtml);
+    setIsSummaryEditing(true);
+    selectedPageRef.current = "p-summary";
+    selectedTabByPageRef.current = {
+      ...selectedTabByPageRef.current,
+      "p-summary": null,
+    };
+    setSelectedPageId("p-summary");
+    setSelectedTabByPage((current) => ({
+      ...current,
+      "p-summary": null,
+    }));
+    syncUrl(activeReportRef.current.id, selectedMonthRef.current, "p-summary", null);
+    setIsPrepOpen(false);
+    setStatusMessage(`Copied ${previousSummary.monthLabel} summary into the editor.`);
+  }, [prepView, syncUrl]);
 
   const periodPortal =
     targets.period &&
     createPortal(
-      <div className="sidebar-stack-tight">
-        <label className="sidebar-field-label" htmlFor="report-month-select">
-          Reporting Period
-        </label>
-        <select
-          className="sidebar-select"
-          id="report-month-select"
-          onChange={(event) => handleMonthChange(event.target.value)}
-          value={selectedMonth}
-        >
-          {activeReport.availableMonths.map((month) => (
-            <option key={month} value={month}>
-              {formatMonthLabel(month)}
-            </option>
-          ))}
-        </select>
-      </div>,
+      <MonthPicker availableMonths={activeReport.availableMonths} onChange={handleMonthChange} selectedMonth={selectedMonth} />,
       targets.period,
     );
 
@@ -1134,6 +1533,25 @@ export function ReportAppShell({
         </div>
 
         <div className="sidebar-stack-tight">
+          <span className="sidebar-field-label">Author Workspace</span>
+          <button
+            className={`sidebar-button ${isPrepOpen ? "primary is-active" : "secondary"}`}
+            disabled={isUploading || isSwitchingReport || isPrepSaving}
+            onClick={togglePrepDrawer}
+            type="button"
+          >
+            {isPrepOpen ? "Close Readiness Center" : "Readiness & Rollover"}
+          </button>
+          <div className="sidebar-meta">
+            {isPrepLoading || !prepView
+              ? "Loading author checks..."
+              : prepView.readiness.summary.status === "ready"
+                ? "Ready to export"
+                : `${prepView.readiness.summary.blockingCount} blocking · ${prepView.readiness.summary.warningCount} warning${prepView.readiness.summary.warningCount === 1 ? "" : "s"}`}
+          </div>
+        </div>
+
+        <div className="sidebar-stack-tight">
           <span className="sidebar-field-label">Workbook Upload</span>
           <input
             accept=".xlsx"
@@ -1150,8 +1568,8 @@ export function ReportAppShell({
           >
             {isUploading ? "Uploading workbook..." : "Upload workbook"}
           </button>
-          <a className="sidebar-link" href="/templates/IT_Exec_Reporting_Ingestion_Template_v3_dummy_data.xlsx">
-            Download template
+          <a className="sidebar-link" href="/templates/IT_Exec_Reporting_Ingestion_Template_master.xlsx">
+            Download master template
           </a>
         </div>
 
@@ -1173,6 +1591,24 @@ export function ReportAppShell({
               type="button"
             >
               {busyExport === "full-pdf" ? "Rendering..." : "Full PDF"}
+            </button>
+          </div>
+          <div className="sidebar-inline">
+            <button
+              className="sidebar-button secondary"
+              disabled={busyExport !== null || busyClientExport !== null}
+              onClick={() => void downloadExport("full-pptx")}
+              type="button"
+            >
+              {busyExport === "full-pptx" ? "Rendering..." : "Visual PPTX"}
+            </button>
+            <button
+              className="sidebar-button secondary"
+              disabled={busyExport !== null || busyClientExport !== null}
+              onClick={() => void downloadExport("full-pptx-editable")}
+              type="button"
+            >
+              {busyExport === "full-pptx-editable" ? "Rendering..." : "Editable PPTX"}
             </button>
           </div>
           <button
@@ -1255,7 +1691,10 @@ export function ReportAppShell({
           type="button"
         >
           <div className="sidebar-report-title">Bundled Demo Report</div>
-          <div className="sidebar-report-sub">Prototype snapshot · 2026-06</div>
+          <div className="sidebar-report-meta">
+            <div className="sidebar-report-sub">Prototype snapshot · 2026-06</div>
+            <div className="sidebar-report-chip">Demo</div>
+          </div>
         </button>
 
         {reports.length === 0 ? (
@@ -1267,11 +1706,13 @@ export function ReportAppShell({
               disabled={isSwitchingReport || isUploading}
               key={report.id}
               onClick={() => void handleReportSelect(report.id)}
+              title={report.title}
               type="button"
             >
-              <div className="sidebar-report-title">{report.title}</div>
-              <div className="sidebar-report-sub">
-                {formatMonthLabel(report.currentMonth)} · v{report.templateVersion}
+              <div className="sidebar-report-title">{formatSidebarReportTitle(report.title, report.currentMonth)}</div>
+              <div className="sidebar-report-meta">
+                <div className="sidebar-report-sub">{formatMonthLabel(report.currentMonth)}</div>
+                <div className="sidebar-report-chip">v{report.templateVersion}</div>
               </div>
             </button>
           ))
@@ -1328,6 +1769,18 @@ export function ReportAppShell({
       {reportsPortal}
       {summaryControlsPortal}
       {summaryEditorPortal}
+      <ReportPrepDrawer
+        activeTab={activePrepTab}
+        isLoading={isPrepLoading}
+        isOpen={isPrepOpen}
+        isSaving={isPrepSaving}
+        onClose={() => setIsPrepOpen(false)}
+        onCopyPreviousSummary={copyPreviousMonthSummary}
+        onJump={jumpToPrepTarget}
+        onTabChange={setActivePrepTab}
+        onToggleAcknowledged={toggleAcknowledgedCheck}
+        prep={prepView}
+      />
     </>
   );
 }

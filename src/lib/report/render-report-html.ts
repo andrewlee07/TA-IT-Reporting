@@ -1,5 +1,6 @@
 import path from "node:path";
 
+import { resolveTabId } from "@/lib/report/blocks";
 import { buildTemplateData, formatMonthLabel } from "@/lib/report/template-data";
 import type { ExecSummaryState } from "@/lib/reports/exec-summary";
 import { loadTemplateSource } from "@/lib/report/template-source";
@@ -8,6 +9,7 @@ import type { NormalizedReportSnapshot } from "@/lib/workbook/types";
 interface RenderReportHtmlOptions {
   month?: string;
   initialPageId?: string;
+  initialTabId?: string | null;
   showAllPages?: boolean;
   hideChrome?: boolean;
   execSummary?: ExecSummaryState;
@@ -46,6 +48,8 @@ async function loadOfficeMapSource(): Promise<string> {
 
 export async function renderReportHtml(snapshot: NormalizedReportSnapshot, options: RenderReportHtmlOptions = {}): Promise<string> {
   const month = options.month && snapshot.availableMonths.includes(options.month) ? options.month : snapshot.currentMonth;
+  const initialPageId = options.initialPageId ?? "p-summary";
+  const initialTabId = resolveTabId(initialPageId, options.initialTabId);
   const templateData = buildTemplateData(snapshot, month, options.execSummary);
   const template = await loadTemplateSource();
   const runtime = await loadRuntimeSource();
@@ -55,12 +59,24 @@ export async function renderReportHtml(snapshot: NormalizedReportSnapshot, optio
   const exportOverrides = options.hideChrome
     ? `<style>
 body { background: #ffffff !important; }
+.shell { display: block !important; min-height: 0 !important; background: #ffffff !important; }
 .sidebar { display: none !important; }
-.main { padding: 0 !important; width: 100% !important; }
-.report-page { display: block !important; box-shadow: none !important; margin: 0 auto 24px !important; }
+.main { padding: 0 !important; width: 100% !important; display: block !important; }
+.report-page {
+  display: flex !important;
+  box-shadow: none !important;
+  margin: 0 auto !important;
+  border: none !important;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+@page { size: 13.333in 7.5in; margin: 0; }
 @media print {
   body { background: #ffffff !important; }
-  .report-page { break-after: page; page-break-after: always; }
+  .report-page {
+    break-after: page;
+    page-break-after: always;
+  }
 }
 </style>`
     : "";
@@ -71,7 +87,8 @@ body { background: #ffffff !important; }
 const runtimeBootstrap = `<script type="module">
 const D = ${safeData};
 const ACTIVE_MONTH = '${month}';
-const INITIAL_PAGE_ID = '${options.initialPageId ?? "p-summary"}';
+const INITIAL_PAGE_ID = '${initialPageId}';
+const INITIAL_TAB_ID = ${JSON.stringify(initialTabId)};
 const SHOW_ALL_PAGES = ${options.showAllPages ? "true" : "false"};
 ${inlineOfficeMap}
 ${inlineRuntime}
@@ -79,6 +96,7 @@ initReportApp(document.querySelector('.shell'), {
   data: D,
   activeMonth: ACTIVE_MONTH,
   initialPageId: INITIAL_PAGE_ID,
+  initialTabId: INITIAL_TAB_ID,
   showAllPages: SHOW_ALL_PAGES,
   attachGlobals: true,
 });

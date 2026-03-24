@@ -1,21 +1,21 @@
 # TeacherActive Exec Reporting App v1
 
-Internal Next.js app for workbook-driven executive IT reporting. The app ingests a locked Excel template, validates it against the `v3` contract, stores the uploaded workbook and normalized snapshot, renders the 13-page exec pack, and exports report assets as PNG or PDF.
+Internal Next.js app for workbook-driven executive IT reporting. The app ingests a locked Excel template, validates it against the `v4` contract, stores the uploaded workbook and normalized snapshot, renders the 13-page exec pack, and exports report assets as PNG, PDF, or PowerPoint.
 
 ## Stack
 
 - `Next.js 16` + `React 19` + `TypeScript`
 - `Prisma 7` + PostgreSQL JSONB snapshots
 - Local or S3 object storage for uploaded workbooks and generated exports
-- `Playwright` for pixel-matched PNG/PDF export generation
+- `Playwright` for pixel-matched PNG/PDF/PPTX export generation
 - `xlsx`, `jszip`, and XML inspection for workbook ingestion and contract validation
 
 ## Workbook Contract
 
 The app only accepts the locked `v3` template.
 
-- `Template Key = IT_EXEC_TEMPLATE_V3`
-- `Template Version = 3`
+- `Template Key = IT_EXEC_TEMPLATE_V4`
+- `Template Version = 4`
 
 ### Required parsed sheets
 
@@ -101,8 +101,8 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## Template Files
 
-- Bundled v3 fixture: [fixtures/IT_Exec_Reporting_Ingestion_Template_v3_dummy_data.xlsx](/Users/andrewlee/GitHub/TA-IT Reporting Claude/fixtures/IT_Exec_Reporting_Ingestion_Template_v3_dummy_data.xlsx)
-- Downloadable template: [public/templates/IT_Exec_Reporting_Ingestion_Template_v3_dummy_data.xlsx](/Users/andrewlee/GitHub/TA-IT Reporting Claude/public/templates/IT_Exec_Reporting_Ingestion_Template_v3_dummy_data.xlsx)
+- Bundled v4 fixture: [fixtures/IT_Exec_Reporting_Ingestion_Template_v4_dummy_data.xlsx](/Users/andrewlee/GitHub/TA-IT Reporting Claude/fixtures/IT_Exec_Reporting_Ingestion_Template_v4_dummy_data.xlsx)
+- Downloadable template: [public/templates/IT_Exec_Reporting_Ingestion_Template_v4_dummy_data.xlsx](/Users/andrewlee/GitHub/TA-IT Reporting Claude/public/templates/IT_Exec_Reporting_Ingestion_Template_v4_dummy_data.xlsx)
 
 To regenerate the workbook after changing the upgrade script:
 
@@ -127,6 +127,7 @@ npm run snapshot:demo
     - `page-png`
     - `block-png`
     - `full-pdf`
+    - `full-pptx`
 
 ## Verification
 

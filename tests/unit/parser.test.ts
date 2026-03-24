@@ -4,14 +4,20 @@ import path from "node:path";
 import * as XLSX from "xlsx";
 import { describe, expect, it } from "vitest";
 
-import { OFFICE_NETWORK_SHEET_NAME, PORTFOLIO_GANTT_MILESTONES_SHEET_NAME, PORTFOLIO_GANTT_WORKSTREAMS_SHEET_NAME } from "@/lib/workbook/contracts";
+import {
+  CHART_SETTINGS_SHEET_NAME,
+  OFFICE_NETWORK_SHEET_NAME,
+  PORTFOLIO_GANTT_MILESTONES_SHEET_NAME,
+  PORTFOLIO_GANTT_WORKSTREAMS_SHEET_NAME,
+} from "@/lib/workbook/contracts";
 import { parseWorkbookBuffer } from "@/lib/workbook/parser";
 import { WorkbookValidationError } from "@/lib/workbook/types";
 
-const FIXTURE_PATH = path.resolve(process.cwd(), "fixtures", "IT_Exec_Reporting_Ingestion_Template_v3_dummy_data.xlsx");
+const V4_FIXTURE_PATH = path.resolve(process.cwd(), "fixtures", "IT_Exec_Reporting_Ingestion_Template_v4_dummy_data.xlsx");
+const V3_FIXTURE_PATH = path.resolve(process.cwd(), "fixtures", "IT_Exec_Reporting_Ingestion_Template_v3_dummy_data.xlsx");
 
-async function loadFixtureBuffer(): Promise<Buffer> {
-  return readFile(FIXTURE_PATH);
+async function loadFixtureBuffer(fixturePath = V4_FIXTURE_PATH): Promise<Buffer> {
+  return readFile(fixturePath);
 }
 
 function getSheetRows(workbook: XLSX.WorkBook, sheetName: string): string[][] {
@@ -29,23 +35,24 @@ function setSheetRows(workbook: XLSX.WorkBook, sheetName: string, rows: string[]
 
 async function createMutatedWorkbook(
   mutate: (workbook: XLSX.WorkBook) => void,
+  fixturePath = V4_FIXTURE_PATH,
 ): Promise<Buffer> {
-  const fixtureBuffer = await loadFixtureBuffer();
+  const fixtureBuffer = await loadFixtureBuffer(fixturePath);
   const workbook = XLSX.read(fixtureBuffer, { type: "buffer", raw: false });
   mutate(workbook);
   return Buffer.from(XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }));
 }
 
 describe("parseWorkbookBuffer", () => {
-  it("parses the bundled v3 workbook and derives office network metrics", async () => {
+  it("parses the bundled v4 workbook and derives office network metrics", async () => {
     const result = await parseWorkbookBuffer(await loadFixtureBuffer(), "fixture.xlsx");
     const juneMetric = result.snapshot.derivedNetworkMetrics.find((row) => row.reportingMonth === "2026-06");
     const networkServiceJune = result.snapshot.serviceAvailability.find(
       (row) => row.reportingMonth === "2026-06" && row.serviceName === "Network",
     );
 
-    expect(result.snapshot.metadata.templateKey).toBe("IT_EXEC_TEMPLATE_V3");
-    expect(result.snapshot.metadata.templateVersion).toBe(3);
+    expect(result.snapshot.metadata.templateKey).toBe("IT_EXEC_TEMPLATE_V4");
+    expect(result.snapshot.metadata.templateVersion).toBe(4);
     expect(result.snapshot.currentMonth).toBe("2026-06");
     expect(result.snapshot.availableMonths).toEqual([
       "2026-01",
@@ -58,6 +65,16 @@ describe("parseWorkbookBuffer", () => {
     expect(result.snapshot.periods.find((row) => row.reportingMonth === "2026-06")?.reportCutOffDate).toBe("2026-06-19");
     expect(result.snapshot.portfolioGanttWorkstreams).toHaveLength(78);
     expect(result.snapshot.portfolioGanttMilestones).toHaveLength(48);
+    expect(result.snapshot.chartSettings).toHaveLength(6);
+    expect(result.snapshot.chartSettings[0]).toMatchObject({
+      page: "Support Operations",
+      chartKey: "support_ticket_volumes",
+      overlayEnabled: true,
+      overlayMetric: "Close Balance %",
+      rollingWindow: 3,
+      healthyMin: 100,
+      amberMin: 97,
+    });
     expect(juneMetric).toMatchObject({
       availabilityPct: 99.97,
       outageMinutes: 303,
@@ -75,6 +92,15 @@ describe("parseWorkbookBuffer", () => {
     });
   });
 
+  it("continues to parse a legacy v3 workbook without chart settings", async () => {
+    const result = await parseWorkbookBuffer(await loadFixtureBuffer(V3_FIXTURE_PATH), "legacy-v3.xlsx");
+
+    expect(result.snapshot.metadata.templateKey).toBe("IT_EXEC_TEMPLATE_V3");
+    expect(result.snapshot.metadata.templateVersion).toBe(3);
+    expect(result.snapshot.chartSettings).toEqual([]);
+    expect(result.snapshot.portfolioGanttWorkstreams).toHaveLength(78);
+  });
+
   it("rejects an invalid template version", async () => {
     const buffer = await createMutatedWorkbook((workbook) => {
       const rows = getSheetRows(workbook, "README");
@@ -85,7 +111,7 @@ describe("parseWorkbookBuffer", () => {
 
     await expect(parseWorkbookBuffer(buffer, "bad-version.xlsx", { skipTableValidation: true })).rejects.toMatchObject({
       name: "WorkbookValidationError",
-      issues: expect.arrayContaining(["README Template Version must equal 3."]),
+      issues: expect.arrayContaining(["README Template Version must be one of 3, 4."]),
     } satisfies Partial<WorkbookValidationError>);
   });
 
@@ -122,7 +148,7 @@ describe("parseWorkbookBuffer", () => {
     await expect(parseWorkbookBuffer(buffer, "manual-network.xlsx", { skipTableValidation: true })).rejects.toMatchObject({
       name: "WorkbookValidationError",
       issues: expect.arrayContaining([
-        'INPUT_Service_Availability must not contain manual "Network" rows in template v3.',
+        'INPUT_Service_Availability must not contain manual "Network" rows in supported workbook templates.',
       ]),
     } satisfies Partial<WorkbookValidationError>);
   });
@@ -228,5 +254,45 @@ describe("parseWorkbookBuffer", () => {
     await expect(parseWorkbookBuffer(buffer, "missing-cutoff.xlsx", { skipTableValidation: true })).rejects.toThrow(
       "Periods.Report Cut-Off Date is required.",
     );
+  });
+
+  it("rejects an unsupported chart overlay metric", async () => {
+    const buffer = await createMutatedWorkbook((workbook) => {
+      const rows = getSheetRows(workbook, CHART_SETTINGS_SHEET_NAME);
+      rows[3][4] = "Ticket Average";
+      setSheetRows(workbook, CHART_SETTINGS_SHEET_NAME, rows);
+    });
+
+    await expect(parseWorkbookBuffer(buffer, "bad-chart-metric.xlsx", { skipTableValidation: true })).rejects.toMatchObject({
+      name: "WorkbookValidationError",
+      issues: expect.arrayContaining([`${CHART_SETTINGS_SHEET_NAME}.Overlay Metric must be one of: Close Balance %.`]),
+    } satisfies Partial<WorkbookValidationError>);
+  });
+
+  it("rejects a chart overlay with an invalid rolling window", async () => {
+    const buffer = await createMutatedWorkbook((workbook) => {
+      const rows = getSheetRows(workbook, CHART_SETTINGS_SHEET_NAME);
+      rows[3][5] = "0";
+      setSheetRows(workbook, CHART_SETTINGS_SHEET_NAME, rows);
+    });
+
+    await expect(parseWorkbookBuffer(buffer, "bad-chart-window.xlsx", { skipTableValidation: true })).rejects.toMatchObject({
+      name: "WorkbookValidationError",
+      issues: expect.arrayContaining([`${CHART_SETTINGS_SHEET_NAME}.Rolling Window must be at least 1.`]),
+    } satisfies Partial<WorkbookValidationError>);
+  });
+
+  it("rejects chart thresholds where healthy is below amber", async () => {
+    const buffer = await createMutatedWorkbook((workbook) => {
+      const rows = getSheetRows(workbook, CHART_SETTINGS_SHEET_NAME);
+      rows[3][6] = "96";
+      rows[3][7] = "98";
+      setSheetRows(workbook, CHART_SETTINGS_SHEET_NAME, rows);
+    });
+
+    await expect(parseWorkbookBuffer(buffer, "bad-chart-thresholds.xlsx", { skipTableValidation: true })).rejects.toMatchObject({
+      name: "WorkbookValidationError",
+      issues: expect.arrayContaining([`${CHART_SETTINGS_SHEET_NAME}.Healthy Min must be greater than or equal to Amber Min.`]),
+    } satisfies Partial<WorkbookValidationError>);
   });
 });

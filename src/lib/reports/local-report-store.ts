@@ -47,6 +47,15 @@ interface LocalExecSummaryRecord {
   updatedAt: string;
 }
 
+interface LocalPrepStateRecord {
+  id: string;
+  reportId: string;
+  reportingMonth: string;
+  acknowledgedCheckIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 function getRootDir(): string {
   return path.resolve(process.cwd(), getEnv().LOCAL_STORAGE_DIR, "report-store");
 }
@@ -61,6 +70,10 @@ function getExportsPath(): string {
 
 function getExecSummariesPath(): string {
   return path.join(getRootDir(), "exec-summaries.json");
+}
+
+function getPrepStatesPath(): string {
+  return path.join(getRootDir(), "prep-states.json");
 }
 
 async function ensureDir(): Promise<void> {
@@ -202,6 +215,40 @@ export async function upsertLocalExecSummary(input: {
     updatedAt: nextRecord.updatedAt,
     sourceReportId: nextRecord.sourceReportId ?? null,
   };
+}
+
+export async function getLocalPrepState(reportId: string, reportingMonth: string): Promise<LocalPrepStateRecord | null> {
+  const states = await readJsonFile<LocalPrepStateRecord[]>(getPrepStatesPath(), []);
+  return states.find((state) => state.reportId === reportId && state.reportingMonth === reportingMonth) ?? null;
+}
+
+export async function upsertLocalPrepState(input: {
+  reportId: string;
+  reportingMonth: string;
+  acknowledgedCheckIds: string[];
+}): Promise<LocalPrepStateRecord> {
+  const states = await readJsonFile<LocalPrepStateRecord[]>(getPrepStatesPath(), []);
+  const existing = states.find((state) => state.reportId === input.reportId && state.reportingMonth === input.reportingMonth);
+  const now = new Date().toISOString();
+
+  const nextRecord: LocalPrepStateRecord = existing
+    ? {
+        ...existing,
+        acknowledgedCheckIds: input.acknowledgedCheckIds,
+        updatedAt: now,
+      }
+    : {
+        id: nanoid(),
+        reportId: input.reportId,
+        reportingMonth: input.reportingMonth,
+        acknowledgedCheckIds: input.acknowledgedCheckIds,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+  const filtered = states.filter((state) => !(state.reportId === input.reportId && state.reportingMonth === input.reportingMonth));
+  await writeJsonFile(getPrepStatesPath(), [nextRecord, ...filtered]);
+  return nextRecord;
 }
 
 export async function saveLocalExport(input: {

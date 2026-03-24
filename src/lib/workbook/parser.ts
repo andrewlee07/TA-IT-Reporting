@@ -4,18 +4,23 @@ import * as XLSX from "xlsx";
 import { format, isValid, parse, parseISO } from "date-fns";
 
 import {
+  CHART_OVERLAY_METRICS,
+  CHART_SETTING_KEYS,
+  CHART_SETTING_PAGE_OPTIONS,
+  CHART_SETTINGS_SHEET_NAME,
+  LEGACY_WORKBOOK_TEMPLATES,
   OFFICE_NETWORK_SHEET_NAME,
   PORTFOLIO_GANTT_DOMAINS,
   PORTFOLIO_GANTT_MILESTONES_SHEET_NAME,
   PORTFOLIO_GANTT_WORKSTREAMS_SHEET_NAME,
-  REQUIRED_SHEET_NAMES,
-  SHEET_CONTRACTS,
+  getSheetContractsForVersion,
   WORKBOOK_TEMPLATE_KEY,
   WORKBOOK_TEMPLATE_VERSION,
 } from "@/lib/workbook/contracts";
 import type {
   AssetsLifecycleRow,
   BudgetCommercialRow,
+  ChartSettingRow,
   ChangeReleaseRow,
   DerivedNetworkMetricRow,
   DevDeliveryRow,
@@ -48,6 +53,11 @@ type SheetRecord = Record<string, string>;
 interface MetadataRecord {
   templateKey: string;
   templateVersion: number;
+}
+
+interface TemplateSpec {
+  key: string;
+  version: number;
 }
 
 interface ParseWorkbookBufferOptions {
@@ -108,6 +118,16 @@ function parseNumber(value: string, fieldName: string): number {
 
   if (Number.isNaN(parsed)) {
     throw new Error(`${fieldName} must be numeric.`);
+  }
+
+  return parsed;
+}
+
+function parseInteger(value: string, fieldName: string): number {
+  const parsed = parseNumber(value, fieldName);
+
+  if (!Number.isInteger(parsed)) {
+    throw new Error(`${fieldName} must be a whole number.`);
   }
 
   return parsed;
@@ -318,8 +338,8 @@ async function extractTableMap(buffer: Buffer): Promise<Record<string, string[]>
   return tableMap;
 }
 
-function validateTables(tableMap: Record<string, string[]>, issues: string[]): void {
-  for (const contract of SHEET_CONTRACTS) {
+function validateTables(tableMap: Record<string, string[]>, issues: string[], sheetContracts: { tableName?: string; sheetName: string }[]): void {
+  for (const contract of sheetContracts) {
     if (!contract.tableName) {
       continue;
     }
@@ -332,18 +352,39 @@ function validateTables(tableMap: Record<string, string[]>, issues: string[]): v
   }
 }
 
-function ensureRequiredSheets(workbook: XLSX.WorkBook, issues: string[]): void {
+function ensureRequiredSheets(workbook: XLSX.WorkBook, issues: string[], requiredSheetNames: string[]): void {
   const presentSheets = new Set(workbook.SheetNames);
 
-  for (const requiredSheet of REQUIRED_SHEET_NAMES) {
+  for (const requiredSheet of requiredSheetNames) {
     if (!presentSheets.has(requiredSheet)) {
       issues.push(`Missing required worksheet: ${requiredSheet}.`);
     }
   }
+}
 
-  if (!presentSheets.has(README_SHEET)) {
-    issues.push("Missing required worksheet: README.");
+function resolveTemplateSpec(metadata: MetadataRecord, issues: string[]): TemplateSpec {
+  const supportedTemplates: TemplateSpec[] = [
+    ...LEGACY_WORKBOOK_TEMPLATES,
+    { key: WORKBOOK_TEMPLATE_KEY, version: WORKBOOK_TEMPLATE_VERSION },
+  ];
+
+  const templateByVersion = supportedTemplates.find((template) => template.version === metadata.templateVersion);
+
+  if (!templateByVersion) {
+    issues.push(
+      `README Template Version must be one of ${supportedTemplates
+        .map((template) => template.version)
+        .sort()
+        .join(", ")}.`,
+    );
+    return { key: WORKBOOK_TEMPLATE_KEY, version: WORKBOOK_TEMPLATE_VERSION };
   }
+
+  if (metadata.templateKey !== templateByVersion.key) {
+    issues.push(`README Template Key must equal ${templateByVersion.key} for template version ${templateByVersion.version}.`);
+  }
+
+  return templateByVersion;
 }
 
 function parsePeriods(records: SheetRecord[]): PeriodRow[] {
@@ -419,6 +460,20 @@ function parseSupportOperations(records: SheetRecord[]): SupportOperationsRow[] 
     ticketCsatScore: parseScoreOutOfFive(record["Ticket CSAT"], "INPUT_Support_Operations.Ticket CSAT"),
     csatResponseRatePct: parsePercentage(record["CSAT Response Rate %"], "INPUT_Support_Operations.CSAT Response Rate %"),
     topCategory: record["Top Category"],
+    commentary: record["Commentary"],
+  }));
+}
+
+function parseChartSettings(records: SheetRecord[]): ChartSettingRow[] {
+  return records.map((record) => ({
+    reportingMonth: record["Reporting Month"],
+    page: record["Page"],
+    chartKey: record["Chart Key"],
+    overlayEnabled: parseBoolean(record["Overlay Enabled"], `${CHART_SETTINGS_SHEET_NAME}.Overlay Enabled`),
+    overlayMetric: record["Overlay Metric"],
+    rollingWindow: parseInteger(record["Rolling Window"], `${CHART_SETTINGS_SHEET_NAME}.Rolling Window`),
+    healthyMin: parseNumber(record["Healthy Min"], `${CHART_SETTINGS_SHEET_NAME}.Healthy Min`),
+    amberMin: parseNumber(record["Amber Min"], `${CHART_SETTINGS_SHEET_NAME}.Amber Min`),
     commentary: record["Commentary"],
   }));
 }
@@ -754,6 +809,39 @@ function validatePortfolioGanttRows(
   }
 }
 
+function validateChartSettings(periods: PeriodRow[], chartSettings: ChartSettingRow[], issues: string[]): void {
+  const validMonths = new Set(periods.map((period) => period.reportingMonth));
+  const validPages = new Set<string>(CHART_SETTING_PAGE_OPTIONS);
+  const validChartKeys = new Set<string>(CHART_SETTING_KEYS);
+  const validMetrics = new Set<string>(CHART_OVERLAY_METRICS);
+
+  for (const row of chartSettings) {
+    if (!validMonths.has(row.reportingMonth)) {
+      issues.push(`Chart setting "${row.chartKey}" references unknown month ${row.reportingMonth}.`);
+    }
+
+    if (!validPages.has(row.page)) {
+      issues.push(`${CHART_SETTINGS_SHEET_NAME}.Page must be one of: ${CHART_SETTING_PAGE_OPTIONS.join(", ")}.`);
+    }
+
+    if (!validChartKeys.has(row.chartKey)) {
+      issues.push(`${CHART_SETTINGS_SHEET_NAME}.Chart Key must be one of: ${CHART_SETTING_KEYS.join(", ")}.`);
+    }
+
+    if (!validMetrics.has(row.overlayMetric)) {
+      issues.push(`${CHART_SETTINGS_SHEET_NAME}.Overlay Metric must be one of: ${CHART_OVERLAY_METRICS.join(", ")}.`);
+    }
+
+    if (row.rollingWindow < 1) {
+      issues.push(`${CHART_SETTINGS_SHEET_NAME}.Rolling Window must be at least 1.`);
+    }
+
+    if (row.healthyMin < row.amberMin) {
+      issues.push(`${CHART_SETTINGS_SHEET_NAME}.Healthy Min must be greater than or equal to Amber Min.`);
+    }
+  }
+}
+
 export async function parseWorkbookBuffer(
   buffer: Buffer,
   sourceFilename: string,
@@ -761,32 +849,32 @@ export async function parseWorkbookBuffer(
 ): Promise<ParseWorkbookResult> {
   const workbook = XLSX.read(buffer, { type: "buffer" });
   const issues: string[] = [];
+  const presentSheets = new Set(workbook.SheetNames);
 
-  ensureRequiredSheets(workbook, issues);
+  if (!presentSheets.has(README_SHEET)) {
+    throw new WorkbookValidationError(["Missing required worksheet: README."]);
+  }
+
+  const readmeMatrix = getSheetMatrix(workbook, README_SHEET);
+  const metadata = findWorkbookMetadata(readmeMatrix);
+  const templateSpec = resolveTemplateSpec(metadata, issues);
+  const sheetContracts = getSheetContractsForVersion(templateSpec.version);
+  const requiredSheetNames = sheetContracts.map((sheet) => sheet.sheetName);
+
+  ensureRequiredSheets(workbook, issues, requiredSheetNames);
 
   if (issues.length > 0) {
     throw new WorkbookValidationError(issues);
   }
 
-  const readmeMatrix = getSheetMatrix(workbook, README_SHEET);
-  const metadata = findWorkbookMetadata(readmeMatrix);
-
-  if (metadata.templateKey !== WORKBOOK_TEMPLATE_KEY) {
-    issues.push(`README Template Key must equal ${WORKBOOK_TEMPLATE_KEY}.`);
-  }
-
-  if (metadata.templateVersion !== WORKBOOK_TEMPLATE_VERSION) {
-    issues.push(`README Template Version must equal ${WORKBOOK_TEMPLATE_VERSION}.`);
-  }
-
   const tableMap = await extractTableMap(buffer);
 
   if (!options.skipTableValidation) {
-    validateTables(tableMap, issues);
+    validateTables(tableMap, issues, sheetContracts);
   }
 
   const parsedSheets = Object.fromEntries(
-    SHEET_CONTRACTS.map((contract) => [contract.sheetName, sheetMatrixToRecords(contract.sheetName, getSheetMatrix(workbook, contract.sheetName), contract.headers)]),
+    sheetContracts.map((contract) => [contract.sheetName, sheetMatrixToRecords(contract.sheetName, getSheetMatrix(workbook, contract.sheetName), contract.headers)]),
   );
 
   const periods = sortByReportingMonth(parsePeriods(parsedSheets.Periods));
@@ -804,14 +892,19 @@ export async function parseWorkbookBuffer(
       left.workstreamName.localeCompare(right.workstreamName) ||
       left.milestoneDate.localeCompare(right.milestoneDate),
   );
+  const chartSettings =
+    templateSpec.version >= WORKBOOK_TEMPLATE_VERSION && parsedSheets[CHART_SETTINGS_SHEET_NAME]
+      ? sortByReportingMonth(parseChartSettings(parsedSheets[CHART_SETTINGS_SHEET_NAME]))
+      : [];
 
   if (serviceAvailabilityInput.some((row) => row.serviceName === NETWORK_SERVICE_NAME)) {
-    issues.push(`INPUT_Service_Availability must not contain manual "${NETWORK_SERVICE_NAME}" rows in template v3.`);
+    issues.push(`INPUT_Service_Availability must not contain manual "${NETWORK_SERVICE_NAME}" rows in supported workbook templates.`);
   }
 
   const derivedNetworkMetrics = deriveNetworkMetrics(periods, officeLocations, officeNetworkAvailability, issues);
   const derivedNetworkServiceRows = buildDerivedNetworkServiceRows(derivedNetworkMetrics);
   validatePortfolioGanttRows(periods, portfolioGanttWorkstreams, portfolioGanttMilestones, issues);
+  validateChartSettings(periods, chartSettings, issues);
   const serviceAvailability = sortByReportingMonth([
     ...serviceAvailabilityInput.filter((row) => row.serviceName !== NETWORK_SERVICE_NAME),
     ...derivedNetworkServiceRows,
@@ -849,6 +942,7 @@ export async function parseWorkbookBuffer(
     rollingRoadmap: parseRollingRoadmap(parsedSheets.INPUT_Rolling_Roadmap),
     portfolioGanttWorkstreams,
     portfolioGanttMilestones,
+    chartSettings,
     budgetCommercials: sortByReportingMonth(parseBudgetCommercials(parsedSheets.INPUT_Budget_Commercials)),
     topRisks: sortByReportingMonth(parseTopRisks(parsedSheets.INPUT_Top_Risks)),
     narrativeNotes: sortByReportingMonth(parseNarrativeNotes(parsedSheets.INPUT_Narrative_Notes)),
