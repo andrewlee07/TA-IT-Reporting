@@ -123,6 +123,21 @@ export function ensureManifestConsistency(manifest: PlatformManifest): PlatformM
     })),
   }));
   const workflows = mergeByKey(manifest.workflows, starterManifest.workflows).filter((workflow) => hasRequiredText(workflow.key) && hasRequiredText(workflow.name));
+  const pageTemplates = mergeByKey(manifest.pageTemplates ?? [], starterManifest.pageTemplates ?? []).filter(
+    (template) => hasRequiredText(template.key) && hasRequiredText(template.label) && hasRequiredText(template.page.title),
+  );
+  const sectionTemplates = mergeByKey(manifest.sectionTemplates ?? [], starterManifest.sectionTemplates ?? []).filter(
+    (template) => hasRequiredText(template.key) && hasRequiredText(template.label) && hasRequiredText(template.section.title),
+  );
+  const workflowTemplates = mergeByKey(manifest.workflowTemplates ?? [], starterManifest.workflowTemplates ?? []).filter(
+    (template) => hasRequiredText(template.key) && hasRequiredText(template.name) && hasRequiredText(template.workflow.key) && hasRequiredText(template.workflow.name),
+  );
+  const subflows = mergeByKey(manifest.subflows ?? [], starterManifest.subflows ?? []).filter(
+    (subflow) => hasRequiredText(subflow.key) && hasRequiredText(subflow.name) && hasRequiredText(subflow.workflowKey),
+  );
+  const workflowTests = mergeByKey(manifest.workflowTests ?? [], starterManifest.workflowTests ?? []).filter(
+    (testCase) => hasRequiredText(testCase.key) && hasRequiredText(testCase.name) && hasRequiredText(testCase.workflowKey),
+  );
   const agents = mergeByKey(manifest.agents, starterManifest.agents).filter(
     (agent) =>
       hasRequiredText(agent.key) &&
@@ -215,11 +230,16 @@ export function ensureManifestConsistency(manifest: PlatformManifest): PlatformM
     objects,
     layouts,
     pages: normalizedPages,
+    pageTemplates,
+    sectionTemplates,
     menus: menus
       .filter((menu) => pageKeys.has(menu.pageKey))
       .sort((left, right) => left.order - right.order),
     forms,
     workflows,
+    workflowTemplates,
+    subflows,
+    workflowTests,
     tools,
     agents,
     modelProviders,

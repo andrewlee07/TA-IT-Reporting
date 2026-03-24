@@ -406,6 +406,16 @@ const workflowNodeSchema = z.discriminatedUnion("type", [
     }),
     position: z.object({ x: z.number(), y: z.number() }),
   }),
+  z.object({
+    id: nonEmptyStringSchema,
+    type: z.literal("subflow"),
+    label: nonEmptyStringSchema,
+    config: z.object({
+      workflowKey: nonEmptyStringSchema,
+      description: optionalNonEmptyStringSchema,
+    }),
+    position: z.object({ x: z.number(), y: z.number() }),
+  }),
 ]);
 
 export const workflowSchema = z.object({
@@ -427,6 +437,65 @@ export const workflowSchema = z.object({
       }),
     )
     .optional(),
+});
+
+export const pageTemplateSchema = z.object({
+  key: nonEmptyStringSchema,
+  label: nonEmptyStringSchema,
+  description: optionalNonEmptyStringSchema,
+  page: pageSchema.omit({ id: true }).extend({
+    route: optionalNonEmptyStringSchema,
+    layoutKey: optionalNonEmptyStringSchema,
+  }),
+  layout: layoutSchema.omit({ id: true, pageKey: true }),
+  source: z.enum(["platform", "tenant"]).optional(),
+});
+
+export const sectionTemplateSchema = z.object({
+  key: nonEmptyStringSchema,
+  label: nonEmptyStringSchema,
+  description: optionalNonEmptyStringSchema,
+  source: z.enum(["platform", "tenant"]).optional(),
+  section: z.object({
+    title: nonEmptyStringSchema,
+    description: optionalNonEmptyStringSchema,
+    kind: z.enum(["grid", "tabs", "drawer"]),
+    columns: z.number().int().min(1),
+    templateKey: optionalNonEmptyStringSchema,
+    placement: layoutPlacementSchema,
+    visibilityRule: visibilityRuleSchema.optional(),
+    components: z.array(layoutComponentSchema.omit({ id: true })),
+  }),
+});
+
+export const workflowTemplateSchema = z.object({
+  id: z.string().optional(),
+  key: optionalNonEmptyStringSchema,
+  name: nonEmptyStringSchema,
+  description: optionalNonEmptyStringSchema,
+  source: z.enum(["platform", "tenant"]).optional(),
+  workflow: workflowSchema,
+});
+
+export const workflowTestCaseSchema = z.object({
+  id: z.string().optional(),
+  key: optionalNonEmptyStringSchema,
+  name: nonEmptyStringSchema,
+  workflowKey: nonEmptyStringSchema,
+  description: optionalNonEmptyStringSchema,
+  payload: z.record(z.string(), z.unknown()).default({}),
+  expectedStatus: z.enum(["QUEUED", "RUNNING", "SUCCEEDED", "FAILED", "PAUSED"]).optional(),
+  expectedLogFragments: z.array(nonEmptyStringSchema).optional(),
+  expectApproval: z.boolean().optional(),
+  expectWait: z.boolean().optional(),
+});
+
+export const subflowSchema = z.object({
+  id: z.string().optional(),
+  key: optionalNonEmptyStringSchema,
+  name: nonEmptyStringSchema,
+  description: optionalNonEmptyStringSchema,
+  workflowKey: nonEmptyStringSchema,
 });
 
 export const agentSchema = z.object({
@@ -601,4 +670,21 @@ export const viewAsSchema = z.object({
   role: z.enum(["SUPER_ADMIN", "BUILDER_ADMIN", "USER"]).optional(),
   personaLabel: optionalNonEmptyStringSchema,
   actorEmail: optionalNonEmptyStringSchema,
+});
+
+export const retryDeliverySchema = z.object({
+  testPayload: z.record(z.string(), z.unknown()).optional(),
+});
+
+export const acknowledgeAlertSchema = z.object({
+  acknowledged: z.boolean().optional(),
+});
+
+export const channelTestSchema = z.object({
+  subject: optionalNonEmptyStringSchema,
+  body: nonEmptyStringSchema,
+});
+
+export const channelToggleSchema = z.object({
+  enabled: z.boolean(),
 });

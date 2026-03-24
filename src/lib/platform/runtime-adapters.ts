@@ -20,6 +20,7 @@ interface NotificationDeliveryResult {
   deliveredAt: string;
   destination?: string;
   provider: string;
+  responseSummary?: string;
 }
 
 let cachedTransporter: nodemailer.Transporter | null = null;
@@ -104,15 +105,23 @@ export async function executeAgentWithProvider(input: {
   }
 
   const endpoint = trimTrailingSlash(input.provider.endpoint || "https://api.openai.com/v1");
-  const response = await fetch(`${endpoint}/chat/completions`, {
+  const env = getEnv();
+  const isAzure = input.provider.provider === "azure_openai";
+  const azureApiVersion = env.AZURE_OPENAI_API_VERSION;
+  const requestUrl = isAzure
+    ? endpoint.includes("/openai/deployments/")
+      ? `${endpoint}/chat/completions${endpoint.includes("?") ? "&" : "?"}api-version=${encodeURIComponent(azureApiVersion)}`
+      : `${endpoint}/openai/deployments/${encodeURIComponent(input.provider.model)}/chat/completions?api-version=${encodeURIComponent(azureApiVersion)}`
+    : `${endpoint}/chat/completions`;
+  const response = await fetch(requestUrl, {
     method: "POST",
     headers: {
-      authorization: `Bearer ${apiKey}`,
+      ...(isAzure ? { "api-key": apiKey } : { authorization: `Bearer ${apiKey}` }),
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      model: input.provider.model,
-      reasoning_effort: input.provider.model.includes("gpt-5") ? "low" : undefined,
+      ...(isAzure ? {} : { model: input.provider.model }),
+      reasoning_effort: !isAzure && input.provider.model.includes("gpt-5") ? "low" : undefined,
       messages: [
         {
           role: "system",
@@ -180,6 +189,7 @@ export async function deliverNotification(input: {
       deliveredAt: new Date().toISOString(),
       destination,
       provider: "in_app",
+      responseSummary: "Stored in tenant inbox.",
     };
   }
 
@@ -209,6 +219,7 @@ export async function deliverNotification(input: {
       deliveredAt: new Date().toISOString(),
       destination,
       provider: "webhook",
+      responseSummary: `HTTP ${response.status}`,
     };
   }
 
@@ -233,6 +244,7 @@ export async function deliverNotification(input: {
       deliveredAt: new Date().toISOString(),
       destination,
       provider: "slack_style",
+      responseSummary: `HTTP ${response.status}`,
     };
   }
 
@@ -243,6 +255,7 @@ export async function deliverNotification(input: {
         deliveredAt: new Date().toISOString(),
         destination,
         provider: "email_simulated",
+        responseSummary: "Simulated local SMTP delivery.",
       };
     }
     throw new Error("SMTP_URL is required for email delivery.");
@@ -260,5 +273,6 @@ export async function deliverNotification(input: {
     deliveredAt: new Date().toISOString(),
     destination,
     provider: "email",
+    responseSummary: "SMTP accepted message.",
   };
 }

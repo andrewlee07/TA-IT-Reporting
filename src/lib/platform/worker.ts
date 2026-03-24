@@ -4,24 +4,33 @@ import { prepareAgentInvocation } from "@/lib/platform/agent-gateway";
 import { evaluateRuleAsBoolean, evaluateRuleExpression } from "@/lib/platform/rule-engine";
 import { deliverNotification, executeAgentWithProvider, summarizeAgentRunCost } from "@/lib/platform/runtime-adapters";
 import { getEnv } from "@/lib/env";
-import { createWorkflowRunWorker, enqueueWorkflowRun } from "@/lib/platform/execution-bus";
+import { createOutboxWorker, createWorkflowRunWorker, enqueueWorkflowRun } from "@/lib/platform/execution-bus";
 import {
   getLocalEnvironmentById,
   getLocalTenantById,
+  listLocalEnvironments,
   listLocalPlatformRecords,
   listLocalQueuedWorkflowRuns,
+  listLocalTenants,
   listLocalWorkflowRuns,
   updateLocalWorkflowRun,
   upsertLocalPlatformRecord,
 } from "@/lib/platform/local-store";
 import type {
+  AgentTrace,
   PlatformWorkflowRunRecord as WorkflowRunRecord,
   PlatformWorkflowRunRecord as WorkflowRunShape,
   WorkflowDefinition,
   WorkflowEdgeDefinition,
   WorkflowNodeDefinition,
 } from "@/lib/platform/types";
-import { getRuntimeManifest } from "@/lib/platform/service";
+import {
+  buildAgentTrace,
+  getRuntimeManifest,
+  processPendingOutboxEvents,
+  queueWorkflowRun,
+  validateAgentOutputSchema,
+} from "@/lib/platform/service";
 import { getPrisma } from "@/lib/prisma";
 
 const SYSTEM_OBJECT_KEYS = {
@@ -40,6 +49,10 @@ interface RuntimeState {
   waitUntil?: string;
   waitNodeId?: string;
   approvalTaskId?: string;
+  pauseReason?: "wait" | "approval" | "subflow";
+  nextRetryAt?: string;
+  subflowRunId?: string;
+  pendingAgentRunId?: string;
 }
 
 interface WorkflowRuntimeContext {
@@ -82,6 +95,10 @@ function getRuntimeState(run: {
     waitUntil: typeof raw?.waitUntil === "string" ? raw.waitUntil : undefined,
     waitNodeId: typeof raw?.waitNodeId === "string" ? raw.waitNodeId : undefined,
     approvalTaskId: typeof raw?.approvalTaskId === "string" ? raw.approvalTaskId : undefined,
+    pauseReason: typeof raw?.pauseReason === "string" ? (raw.pauseReason as RuntimeState["pauseReason"]) : undefined,
+    nextRetryAt: typeof raw?.nextRetryAt === "string" ? raw.nextRetryAt : undefined,
+    subflowRunId: typeof raw?.subflowRunId === "string" ? raw.subflowRunId : undefined,
+    pendingAgentRunId: typeof raw?.pendingAgentRunId === "string" ? raw.pendingAgentRunId : undefined,
   };
 }
 
@@ -151,6 +168,23 @@ async function createSystemRecord(input: WorkflowRuntimeContext & { objectKey: s
   });
 }
 
+async function updateSystemRecord(input: WorkflowRuntimeContext & { objectKey: string; recordId: string; data: Record<string, unknown> }) {
+  return upsertLocalPlatformRecord({
+    tenantId: input.tenantId,
+    environmentId: input.environmentId,
+    objectKey: input.objectKey,
+    recordId: input.recordId,
+    data: input.data,
+    actor: systemActor(),
+  });
+}
+
+function getExponentialRetryAt(retryCount: number): string {
+  const schedule = [60_000, 5 * 60_000, 15 * 60_000];
+  const delay = schedule[Math.max(0, Math.min(retryCount - 1, schedule.length - 1))] ?? schedule[schedule.length - 1]!;
+  return new Date(Date.now() + delay).toISOString();
+}
+
 async function markDuePausedRunsQueued(context: WorkflowRuntimeContext, useDatabase: boolean): Promise<void> {
   const now = Date.now();
   if (useDatabase) {
@@ -176,7 +210,7 @@ async function markDuePausedRunsQueued(context: WorkflowRuntimeContext, useDatab
           where: { id: run.id },
           data: {
             status: "QUEUED",
-            output: toJsonValue(withRuntimeState(output, { ...state, waitUntil: undefined, waitNodeId: undefined })),
+            output: toJsonValue(withRuntimeState(output, { ...state, waitUntil: undefined, waitNodeId: undefined, pauseReason: undefined })),
             logs: toJsonValue(
               appendLog((run.logs as Array<Record<string, unknown>> | null) ?? [], "info", "Wait duration elapsed. Re-queued workflow run."),
             ),
@@ -206,6 +240,7 @@ async function markDuePausedRunsQueued(context: WorkflowRuntimeContext, useDatab
           ...state,
           waitUntil: undefined,
           waitNodeId: undefined,
+          pauseReason: undefined,
         }),
         appendLog: {
           level: "info",
@@ -239,6 +274,42 @@ async function listApprovalTasksForRun(context: WorkflowRuntimeContext, workflow
     objectKey: systemObjectKey("approvalTask"),
   });
   return records.filter((record) => record.data.workflowRunId === workflowRunId);
+}
+
+async function getWorkflowRunById(
+  context: WorkflowRuntimeContext,
+  runId: string,
+  useDatabase: boolean,
+): Promise<WorkflowRunShape | null> {
+  if (useDatabase) {
+    const prisma = getPrisma();
+    const run = await prisma.platformWorkflowRun.findUnique({
+      where: { id: runId },
+    });
+    if (!run) {
+      return null;
+    }
+
+    return {
+      ...run,
+      workflowId: run.workflowId,
+      workflowKey: run.workflowKey,
+      status: run.status,
+      input: (run.input as Record<string, unknown> | null) ?? null,
+      output: (run.output as Record<string, unknown> | null) ?? null,
+      logs: (run.logs as Array<Record<string, unknown>> | null) ?? [],
+      startedAt: run.startedAt?.toISOString() ?? null,
+      finishedAt: run.finishedAt?.toISOString() ?? null,
+      createdAt: run.createdAt.toISOString(),
+      updatedAt: run.updatedAt.toISOString(),
+    };
+  }
+
+  const runs = await listLocalWorkflowRuns({
+    tenantId: context.tenantId,
+    environmentId: context.environmentId,
+  });
+  return runs.find((run) => run.id === runId) ?? null;
 }
 
 async function persistDbWorkflowRun(input: {
@@ -311,12 +382,19 @@ async function recordNotificationDelivery(context: WorkflowRuntimeContext, data:
   });
 }
 
-async function recordAgentRun(context: WorkflowRuntimeContext, data: Record<string, unknown>) {
-  const runRecord = await createSystemRecord({
-    ...context,
-    objectKey: systemObjectKey("agentRun"),
-    data,
-  });
+async function recordAgentRun(context: WorkflowRuntimeContext, data: Record<string, unknown>, recordId?: string) {
+  const runRecord = recordId
+    ? await updateSystemRecord({
+        ...context,
+        objectKey: systemObjectKey("agentRun"),
+        recordId,
+        data,
+      })
+    : await createSystemRecord({
+        ...context,
+        objectKey: systemObjectKey("agentRun"),
+        data,
+      });
 
   await createSystemRecord({
     ...context,
@@ -331,6 +409,8 @@ async function recordAgentRun(context: WorkflowRuntimeContext, data: Record<stri
       summary: `Workflow model-call cost for ${data.agentKey}.`,
     },
   });
+
+  return runRecord;
 }
 
 async function executeWorkflowNode(input: {
@@ -502,7 +582,7 @@ async function executeWorkflowNode(input: {
       logs.push({ level: "info", message: `Wait ${node.label} elapsed.`, at: nowIso() });
       return {
         status: "RUNNING",
-        state: { ...state, cursor: state.cursor + 1, waitUntil: undefined, waitNodeId: undefined },
+        state: { ...state, cursor: state.cursor + 1, waitUntil: undefined, waitNodeId: undefined, pauseReason: undefined },
         logs,
         advance: false,
       };
@@ -512,7 +592,7 @@ async function executeWorkflowNode(input: {
     logs.push({ level: "info", message: `Paused at wait node ${node.label} until ${nextWaitUntil}.`, at: nowIso() });
     return {
       status: "PAUSED",
-      state: { ...state, waitUntil: nextWaitUntil, waitNodeId: node.id },
+      state: { ...state, waitUntil: nextWaitUntil, waitNodeId: node.id, pauseReason: "wait" },
       logs,
       advance: false,
     };
@@ -527,7 +607,7 @@ async function executeWorkflowNode(input: {
       logs.push({ level: "info", message: `Approval task ${node.label} created.`, at: nowIso() });
       return {
         status: "PAUSED",
-        state: { ...state, approvalTaskId: created.id },
+        state: { ...state, approvalTaskId: created.id, pauseReason: "approval" },
         logs,
         advance: false,
       };
@@ -537,7 +617,7 @@ async function executeWorkflowNode(input: {
       logs.push({ level: "info", message: `Approval task ${node.label} approved.`, at: nowIso() });
       return {
         status: "RUNNING",
-        state: { ...state, cursor: state.cursor + 1, approvalTaskId: task.id },
+        state: { ...state, cursor: state.cursor + 1, approvalTaskId: task.id, pauseReason: undefined },
         logs,
         advance: false,
       };
@@ -550,7 +630,81 @@ async function executeWorkflowNode(input: {
     logs.push({ level: "info", message: `Workflow waiting on approval for ${node.label}.`, at: nowIso() });
     return {
       status: "PAUSED",
-      state: { ...state, approvalTaskId: task.id },
+      state: { ...state, approvalTaskId: task.id, pauseReason: "approval" },
+      logs,
+      advance: false,
+    };
+  }
+
+  if (node.type === "subflow" && "workflowKey" in node.config) {
+    const childWorkflowKey = node.config.workflowKey;
+    const childWorkflow = manifest.workflows.find((candidate) => candidate.key === childWorkflowKey);
+    if (!childWorkflow) {
+      throw new Error(`Subflow ${node.label} references missing workflow ${childWorkflowKey}.`);
+    }
+
+    if (!state.subflowRunId) {
+      const childRun = await queueWorkflowRun({
+        tenantSlug: context.tenantSlug,
+        environmentSlug: context.environmentSlug,
+        workflowId: childWorkflow.id,
+        payload: {
+          parentWorkflowKey: workflow.key,
+          parentNodeId: node.id,
+          parentContext: state.context,
+        },
+        meta: {
+          parentWorkflowRunId: run.id,
+        },
+      });
+      logs.push({ level: "info", message: `Queued subflow ${childWorkflow.key} from ${node.label}.`, at: nowIso() });
+      return {
+        status: "PAUSED",
+        state: {
+          ...state,
+          subflowRunId: childRun.id,
+          pauseReason: "subflow",
+        },
+        logs,
+        advance: false,
+      };
+    }
+
+    const childRun = await getWorkflowRunById(context, state.subflowRunId, input.useDatabase);
+    if (!childRun) {
+      throw new Error(`Subflow run ${state.subflowRunId} could not be found.`);
+    }
+
+    if (childRun.status === "SUCCEEDED") {
+      logs.push({ level: "info", message: `Subflow ${childWorkflow.key} completed.`, at: nowIso() });
+      return {
+        status: "RUNNING",
+        state: {
+          ...state,
+          cursor: state.cursor + 1,
+          pauseReason: undefined,
+          subflowRunId: undefined,
+          context: {
+            ...state.context,
+            [`${node.id}_subflowOutput`]: childRun.output ?? {},
+          },
+        },
+        logs,
+        advance: false,
+      };
+    }
+
+    if (childRun.status === "FAILED") {
+      throw new Error(`Subflow ${childWorkflow.key} failed.`);
+    }
+
+    logs.push({ level: "info", message: `Waiting for subflow ${childWorkflow.key}.`, at: nowIso() });
+    return {
+      status: "PAUSED",
+      state: {
+        ...state,
+        pauseReason: "subflow",
+      },
       logs,
       advance: false,
     };
@@ -577,44 +731,304 @@ async function executeWorkflowNode(input: {
         updatedAt: record.updatedAt,
       })),
     });
+    const prompt = typeof state.context.prompt === "string" ? state.context.prompt : node.label;
+    const approvalTasks = await listApprovalTasksForRun(context, run.id);
+    const agentApprovalTask = approvalTasks.find(
+      (candidate) => candidate.data.nodeId === node.id && candidate.data.taskType === "agent_execution",
+    );
 
-    const agentOutput = await executeAgentWithProvider({
-      agent: prepared.agent,
-      provider: prepared.provider,
-      prompt: typeof state.context.prompt === "string" ? state.context.prompt : node.label,
-      maskedRecords: prepared.inputRecords,
-    });
-    const costUsd = summarizeAgentRunCost(prepared.provider.model, agentOutput.tokensIn, agentOutput.tokensOut);
-    await recordAgentRun(context, {
-      agentId: prepared.agent.id,
-      agentKey: prepared.agent.key,
-      status: "succeeded",
-      input: {
-        workflowRunId: run.id,
-        workflowKey: workflow.key,
-      },
-      output: {
-        summary: agentOutput.outputText,
-      },
-      logs: [
-        {
-          level: "info",
-          message: `Workflow ${workflow.key} invoked ${prepared.agent.key}.`,
-          at: nowIso(),
+    if (prepared.agent.approvalPolicy?.required && (!agentApprovalTask || agentApprovalTask.data.status === "pending")) {
+      let agentRunId = state.pendingAgentRunId;
+      if (!agentRunId) {
+        const blockedRun = await recordAgentRun(context, {
+          agentId: prepared.agent.id,
+          agentKey: prepared.agent.key,
+          status: "blocked",
+          runMode: "runtime",
+          approvalStatus: "pending",
+          input: {
+            workflowRunId: run.id,
+            workflowKey: workflow.key,
+            prompt,
+            objectKey: objectKey ?? prepared.agent.objectKeys[0] ?? "",
+            maskedRecords: prepared.inputRecords,
+          },
+          output: null,
+          logs: [
+            {
+              level: "warning",
+              message: `Execution blocked pending approval for ${prepared.agent.key}.`,
+              at: nowIso(),
+            },
+          ],
+          modelProviderKey: prepared.provider.key,
+          costUsd: 0,
+          tokensIn: 0,
+          tokensOut: 0,
+          trace: buildAgentTrace({
+            agent: prepared.agent,
+            provider: prepared.provider,
+            policyDecisions: ["approval:required", `provider:${prepared.provider.key}`],
+            stages: [
+              {
+                stage: "policy_preflight",
+                status: "succeeded",
+                summary: `Preflight passed for ${prepared.provider.name}.`,
+                at: nowIso(),
+              },
+              {
+                stage: "provider_execution",
+                status: "blocked",
+                summary: "Execution blocked pending approval.",
+                at: nowIso(),
+              },
+            ] satisfies AgentTrace["stages"],
+          }),
+          completedAt: null,
+        });
+        agentRunId = blockedRun.id;
+      }
+
+      const approvalTask =
+        agentApprovalTask ??
+        (await createSystemRecord({
+          ...context,
+          objectKey: systemObjectKey("approvalTask"),
+          data: {
+            workflowRunId: run.id,
+            workflowKey: workflow.key,
+            nodeId: node.id,
+            nodeLabel: node.label,
+            taskType: "agent_execution",
+            agentRunId,
+            agentKey: prepared.agent.key,
+            approverRole: prepared.agent.approvalPolicy.approverRole ?? "BUILDER_ADMIN",
+            status: "pending",
+            instructions: prepared.agent.approvalPolicy.notes ?? "Approve agent execution before provider invocation.",
+          },
+        }));
+
+      logs.push({ level: "info", message: `Agent ${prepared.agent.key} blocked pending approval.`, at: nowIso() });
+      return {
+        status: "PAUSED",
+        state: {
+          ...state,
+          approvalTaskId: approvalTask.id,
+          pauseReason: "approval",
+          pendingAgentRunId: agentRunId,
         },
-      ],
-      modelProviderKey: prepared.provider.key,
-      costUsd,
-      tokensIn: agentOutput.tokensIn,
-      tokensOut: agentOutput.tokensOut,
-      completedAt: nowIso(),
+        logs,
+        advance: false,
+      };
+    }
+
+    if (agentApprovalTask?.data.status === "rejected") {
+      throw new Error(`Agent execution ${prepared.agent.key} was rejected.`);
+    }
+
+    const traceStages: AgentTrace["stages"] = [
+      {
+        stage: "policy_preflight",
+        status: "succeeded",
+        summary: `Preflight passed for ${prepared.provider.name}.`,
+        at: nowIso(),
+      },
+      {
+        stage: "prompt_assembly",
+        status: "succeeded",
+        summary: `Prepared ${prepared.agent.promptBlocks.length + 1} prompt blocks.`,
+        at: nowIso(),
+      },
+    ];
+    const policyDecisions = [
+      `provider:${prepared.provider.key}`,
+      `zeroRetention:${String(prepared.agent.zeroRetentionRequired)}`,
+      `approval:${agentApprovalTask ? "approved" : "not_required"}`,
+    ];
+
+    let agentOutput;
+    try {
+      agentOutput = await executeAgentWithProvider({
+        agent: prepared.agent,
+        provider: prepared.provider,
+        prompt,
+        maskedRecords: prepared.inputRecords,
+      });
+      traceStages.push({
+        stage: "provider_execution",
+        status: "succeeded",
+        summary: `Provider responded using ${prepared.provider.model}.`,
+        at: nowIso(),
+        meta: {
+          tokensIn: agentOutput.tokensIn,
+          tokensOut: agentOutput.tokensOut,
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Agent execution failed.";
+      traceStages.push({
+        stage: "provider_execution",
+        status: "failed",
+        summary: message,
+        at: nowIso(),
+      });
+      await recordAgentRun(
+        context,
+        {
+          agentId: prepared.agent.id,
+          agentKey: prepared.agent.key,
+          status: "failed",
+          runMode: "runtime",
+          approvalStatus: agentApprovalTask ? "approved" : "not_required",
+          input: {
+            workflowRunId: run.id,
+            workflowKey: workflow.key,
+            prompt,
+          },
+          output: null,
+          logs: [
+            {
+              level: "error",
+              message,
+              at: nowIso(),
+            },
+          ],
+          modelProviderKey: prepared.provider.key,
+          costUsd: 0,
+          tokensIn: 0,
+          tokensOut: 0,
+          trace: buildAgentTrace({
+            agent: prepared.agent,
+            provider: prepared.provider,
+            policyDecisions,
+            stages: traceStages,
+          }),
+          parentWorkflowRunId: run.id,
+          approvalTaskId: typeof agentApprovalTask?.id === "string" ? agentApprovalTask.id : null,
+          completedAt: nowIso(),
+        },
+        state.pendingAgentRunId,
+      );
+      throw error instanceof Error ? error : new Error(message);
+    }
+
+    const costUsd = summarizeAgentRunCost(prepared.provider.model, agentOutput.tokensIn, agentOutput.tokensOut);
+    const schemaValidation = validateAgentOutputSchema(prepared.agent.outputSchema, agentOutput.outputText);
+    traceStages.push({
+      stage: "output_validation",
+      status: schemaValidation.passed ? "succeeded" : "failed",
+      summary: schemaValidation.summary,
+      at: nowIso(),
     });
+
+    let handoffWorkflowRunId: string | null = null;
+    if (schemaValidation.passed && prepared.agent.handoffWorkflowKeys.length > 0) {
+      const handoffWorkflow = manifest.workflows.find((candidate) => prepared.agent.handoffWorkflowKeys.includes(candidate.key));
+      if (handoffWorkflow) {
+        const handoffRun = await queueWorkflowRun({
+          tenantSlug: context.tenantSlug,
+          environmentSlug: context.environmentSlug,
+          workflowId: handoffWorkflow.id,
+          payload: {
+            parentAgentKey: prepared.agent.key,
+            parentWorkflowRunId: run.id,
+            outputSummary: agentOutput.outputText,
+          },
+          meta: {
+            parentWorkflowRunId: run.id,
+          },
+        }).catch(() => null);
+        handoffWorkflowRunId = handoffRun?.id ?? null;
+        traceStages.push({
+          stage: "workflow_handoff",
+          status: handoffRun ? "succeeded" : "failed",
+          summary: handoffRun ? `Queued handoff to ${handoffWorkflow.key}.` : `Failed to queue handoff to ${handoffWorkflow.key}.`,
+          at: nowIso(),
+        });
+      }
+    }
+
+    traceStages.push({
+      stage: "cost_evaluation",
+      status:
+        prepared.agent.costBudgetUsd != null && costUsd >= prepared.agent.costBudgetUsd ? "blocked" : "succeeded",
+      summary:
+        prepared.agent.costBudgetUsd != null && costUsd >= prepared.agent.costBudgetUsd
+          ? `Budget threshold breached at ${costUsd.toFixed(4)} USD.`
+          : `Cost ${costUsd.toFixed(4)} USD within budget.`,
+      at: nowIso(),
+    });
+    traceStages.push({
+      stage: "audit",
+      status: "succeeded",
+      summary: "Persisted runtime trace.",
+      at: nowIso(),
+    });
+
+    await recordAgentRun(
+      context,
+      {
+        agentId: prepared.agent.id,
+        agentKey: prepared.agent.key,
+        status: schemaValidation.passed ? "succeeded" : "failed",
+        runMode: "runtime",
+        approvalStatus: agentApprovalTask ? "approved" : "not_required",
+        input: {
+          workflowRunId: run.id,
+          workflowKey: workflow.key,
+          prompt,
+        },
+        output: {
+          summary: agentOutput.outputText,
+        },
+        logs: [
+          {
+            level: schemaValidation.passed ? "info" : "error",
+            message: schemaValidation.passed
+              ? `Workflow ${workflow.key} invoked ${prepared.agent.key}.`
+              : schemaValidation.summary,
+            at: nowIso(),
+          },
+        ],
+        modelProviderKey: prepared.provider.key,
+        costUsd,
+        tokensIn: agentOutput.tokensIn,
+        tokensOut: agentOutput.tokensOut,
+        trace: buildAgentTrace({
+          agent: prepared.agent,
+          provider: prepared.provider,
+          policyDecisions,
+          outputValidationPassed: schemaValidation.passed,
+          handoffWorkflowKey: prepared.agent.handoffWorkflowKeys[0],
+          stages: traceStages,
+        }),
+        parentWorkflowRunId: run.id,
+        approvalTaskId: typeof agentApprovalTask?.id === "string" ? agentApprovalTask.id : null,
+        handoffWorkflowRunId,
+        outputValidationPassed: schemaValidation.passed,
+        schemaValidation: {
+          passed: schemaValidation.passed,
+          summary: schemaValidation.summary,
+        },
+        completedAt: nowIso(),
+      },
+      state.pendingAgentRunId,
+    );
+
+    if (!schemaValidation.passed) {
+      await recordRuntimeAlert(context, `Agent output validation failed for ${prepared.agent.key}`, schemaValidation.summary, run.id);
+      throw new Error(schemaValidation.summary);
+    }
+
     logs.push({ level: "info", message: `Model call ${node.label} completed.`, at: nowIso() });
     return {
       status: "RUNNING",
       state: {
         ...state,
         cursor: state.cursor + 1,
+        pauseReason: undefined,
+        approvalTaskId: undefined,
+        pendingAgentRunId: undefined,
         context: {
           ...state.context,
           [`${node.id}_output`]: agentOutput.outputText,
@@ -647,6 +1061,10 @@ async function processRun(input: {
     input: (input.run.input as Record<string, unknown> | null) ?? null,
     output: (input.run.output as Record<string, unknown> | null) ?? null,
   });
+  state = {
+    ...state,
+    nextRetryAt: undefined,
+  };
 
   if (logs.length === 0) {
     logs = appendLog(logs, "info", `Starting workflow ${input.workflow.name}.`);
@@ -702,12 +1120,15 @@ async function processRun(input: {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : `Failed at node ${node.label}.`;
       const retries = state.retryCounts[node.id] ?? 0;
+      const nextRetryCount = retries + 1;
       state = {
         ...state,
         retryCounts: {
           ...state.retryCounts,
-          [node.id]: retries + 1,
+          [node.id]: nextRetryCount,
         },
+        nextRetryAt: getExponentialRetryAt(nextRetryCount),
+        pauseReason: undefined,
       };
       logs = appendLog(logs, "error", errorMessage, { nodeId: node.id });
 
@@ -763,7 +1184,16 @@ async function withLocalFallback<T>(action: () => Promise<T>, fallback: () => Pr
 }
 
 async function processLocalQueuedRuns(targetRunId?: string): Promise<number> {
-  const runs = (await listLocalQueuedWorkflowRuns()).filter((run) => !targetRunId || run.id === targetRunId);
+  const runs = (await listLocalQueuedWorkflowRuns()).filter((run) => {
+    if (targetRunId && run.id !== targetRunId) {
+      return false;
+    }
+    const state = getRuntimeState({
+      input: (run.input as Record<string, unknown> | null) ?? null,
+      output: (run.output as Record<string, unknown> | null) ?? null,
+    });
+    return !state.nextRetryAt || new Date(state.nextRetryAt).getTime() <= Date.now();
+  });
   let processed = 0;
 
   for (const run of runs) {
@@ -820,9 +1250,37 @@ async function processLocalQueuedRuns(targetRunId?: string): Promise<number> {
   return processed;
 }
 
+async function processLocalOutboxEvents(): Promise<{
+  processed: number;
+  deliveries: number;
+  alerts: number;
+}> {
+  const tenants = await listLocalTenants();
+  const totals = {
+    processed: 0,
+    deliveries: 0,
+    alerts: 0,
+  };
+
+  for (const tenant of tenants) {
+    const environments = await listLocalEnvironments(tenant.id);
+    for (const environment of environments) {
+      const result = await processPendingOutboxEvents({
+        tenantSlug: tenant.slug,
+        environmentSlug: environment.slug,
+      });
+      totals.processed += result.processed;
+      totals.deliveries += result.deliveries;
+      totals.alerts += result.alerts;
+    }
+  }
+
+  return totals;
+}
+
 async function processDatabaseQueuedRuns(targetRunId?: string): Promise<number> {
   const prisma = getPrisma();
-  const runs = await prisma.platformWorkflowRun.findMany({
+  const queuedRuns = await prisma.platformWorkflowRun.findMany({
     where: {
       status: "QUEUED",
       ...(targetRunId ? { id: targetRunId } : {}),
@@ -833,6 +1291,13 @@ async function processDatabaseQueuedRuns(targetRunId?: string): Promise<number> 
     },
     orderBy: { createdAt: "asc" },
     take: 20,
+  });
+  const runs = queuedRuns.filter((run) => {
+    const state = getRuntimeState({
+      input: (run.input as Record<string, unknown> | null) ?? null,
+      output: (run.output as Record<string, unknown> | null) ?? null,
+    });
+    return !state.nextRetryAt || new Date(state.nextRetryAt).getTime() <= Date.now();
   });
 
   let processed = 0;
@@ -906,9 +1371,22 @@ export async function startPlatformWorker(intervalMs = 10_000): Promise<void> {
     const processed = await runWorkflowWorkerCycle(runId);
     console.log(`[platform-worker] processed ${processed} queued run(s) from execution bus`);
   });
+  const outboxWorker = createOutboxWorker(async ({ tenantSlug, environmentSlug, eventId }) => {
+    const processed = await processPendingOutboxEvents({
+      tenantSlug,
+      environmentSlug,
+      eventId,
+    });
+    console.log(
+      `[platform-worker] processed ${processed.processed} outbox event(s), ${processed.deliveries} deliveries, ${processed.alerts} alerts`,
+    );
+  });
 
   if (queueWorker) {
     console.log("[platform-worker] BullMQ worker active");
+  }
+  if (outboxWorker) {
+    console.log("[platform-worker] Outbox worker active");
   }
 
   while (true) {
@@ -916,6 +1394,15 @@ export async function startPlatformWorker(intervalMs = 10_000): Promise<void> {
       const processed = await runWorkflowWorkerCycle();
       if (processed > 0) {
         console.log(`[platform-worker] processed ${processed} queued run(s)`);
+      }
+
+      if (!outboxWorker && getEnv().PLATFORM_LOCAL_DEV_MODE) {
+        const outboxResults = await processLocalOutboxEvents();
+        if (outboxResults.processed > 0 || outboxResults.deliveries > 0 || outboxResults.alerts > 0) {
+          console.log(
+            `[platform-worker] processed ${outboxResults.processed} local outbox event(s), ${outboxResults.deliveries} deliveries, ${outboxResults.alerts} alerts`,
+          );
+        }
       }
     } catch (error) {
       console.error("[platform-worker] cycle failed", error);

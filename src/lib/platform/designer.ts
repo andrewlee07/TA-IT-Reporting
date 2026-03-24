@@ -163,6 +163,17 @@ function componentPlacement(zone: LayoutZone, span: number, overrides?: Partial<
   });
 }
 
+function mergeTemplateByKey<T extends { key: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    if (seen.has(item.key)) {
+      return false;
+    }
+    seen.add(item.key);
+    return true;
+  });
+}
+
 export const DESIGNER_COMPONENT_PRESETS: PlatformComponentPreset[] = [
   {
     key: "hero",
@@ -413,11 +424,76 @@ export const DESIGNER_SECTION_TEMPLATES: PlatformSectionTemplate[] = [
   },
 ];
 
+export const DESIGNER_PAGE_TEMPLATES: PlatformPageTemplate[] = [
+  {
+    key: "ops_overview",
+    label: "Operations overview",
+    description: "Hero, stat strip, live operations feed, and action rail for an operator landing page.",
+    source: "platform",
+    page: {
+      key: "operations_overview",
+      title: "Operations Overview",
+      description: "Use this landing page for operational status, automation entry points, and queue management.",
+      objectKey: "booking_request",
+      isHome: true,
+      previewNote: "Platform base template",
+    },
+    layout: {
+      key: "operations_overview",
+      name: "Operations Overview",
+      mobileColumns: 1,
+      tabletColumns: 2,
+      desktopColumns: 12,
+      sections: [
+        {
+          ...DESIGNER_SECTION_TEMPLATES[0]!.section,
+        },
+        {
+          ...DESIGNER_SECTION_TEMPLATES[2]!.section,
+        },
+      ],
+    },
+  },
+  {
+    key: "records_workspace",
+    label: "Records workspace",
+    description: "Main table with rail actions, ideal for queue management and admin operations.",
+    source: "platform",
+    page: {
+      key: "records_workspace",
+      title: "Records Workspace",
+      description: "Present a record table alongside forms, workflows, or agent actions.",
+      objectKey: "booking_request",
+      isHome: false,
+      previewNote: "Platform base template",
+    },
+    layout: {
+      key: "records_workspace",
+      name: "Records Workspace",
+      mobileColumns: 1,
+      tabletColumns: 2,
+      desktopColumns: 12,
+      sections: [
+        {
+          ...DESIGNER_SECTION_TEMPLATES[1]!.section,
+        },
+      ],
+    },
+  },
+];
+
 export function createDesignerCatalog(manifest: PlatformManifest): PlatformDesignerCatalog {
   return {
     componentPresets: DESIGNER_COMPONENT_PRESETS,
-    sectionTemplates: DESIGNER_SECTION_TEMPLATES,
-    pageTemplates: getTenantPageTemplates(manifest),
+    sectionTemplates: mergeTemplateByKey([
+      ...(manifest.sectionTemplates ?? []).map((template) => ({ ...template, source: template.source ?? "tenant" as const })),
+      ...DESIGNER_SECTION_TEMPLATES.map((template) => ({ ...template, source: template.source ?? "platform" as const })),
+    ]),
+    pageTemplates: mergeTemplateByKey([
+      ...(manifest.pageTemplates ?? []),
+      ...getTenantPageTemplates(manifest),
+      ...DESIGNER_PAGE_TEMPLATES,
+    ]),
   };
 }
 
@@ -496,8 +572,12 @@ export function createSectionFromTemplate(input: {
   templateKey: string;
   idFactory: (prefix: string) => string;
   objectKey?: string;
+  availableTemplates?: PlatformSectionTemplate[];
 }): LayoutSectionDefinition {
-  const template = DESIGNER_SECTION_TEMPLATES.find((candidate) => candidate.key === input.templateKey) ?? DESIGNER_SECTION_TEMPLATES[0]!;
+  const template =
+    input.availableTemplates?.find((candidate) => candidate.key === input.templateKey) ??
+    DESIGNER_SECTION_TEMPLATES.find((candidate) => candidate.key === input.templateKey) ??
+    DESIGNER_SECTION_TEMPLATES[0]!;
   return normalizeLayoutSectionDefinition({
     id: input.idFactory("section"),
     title: template.section.title,

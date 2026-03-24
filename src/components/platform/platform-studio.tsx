@@ -16,19 +16,24 @@ import { formatPlatformDateTime } from "@/lib/platform/format";
 import { getThemeCssVariables } from "@/lib/platform/theme";
 import type {
   AgentDefinition,
+  AgentRunDetail,
   AgentRunRecord,
   AppShellDefinition,
   CostLedgerRecord,
+  DeadLetterRecord,
   FormDefinition,
   LayoutComponentDefinition,
   LayoutDefinition,
   LayoutSectionDefinition,
   MenuItemDefinition,
   ModelProviderDefinition,
+  NotificationAttemptRecord,
+  NotificationChannelHealth,
   NotificationCenterDefinition,
   NotificationDeliveryRecord,
   ObjectDefinition,
   PageDefinition,
+  PageDiagnostic,
   PlatformAlertRecord,
   PlatformApprovalTaskRecord,
   PlatformFormSubmissionRecord,
@@ -41,10 +46,14 @@ import type {
   PlatformWorkflowRunRecord,
   SecurityPolicyDefinition,
   TenantBrandingDefinition,
+  WorkflowRunDetail,
+  WorkflowDiagnostic,
   WorkflowDefinition,
   WorkflowEdgeDefinition,
   WorkflowNodeDefinition,
   WorkflowNodeType,
+  WorkflowTemplateDefinition,
+  WorkflowTestCaseDefinition,
 } from "@/lib/platform/types";
 
 import styles from "./platform-shell.module.css";
@@ -122,6 +131,8 @@ function parseJsonPayloadSafely(value: string): Record<string, unknown> {
 
   return parsed as Record<string, unknown>;
 }
+
+type ControlTowerSelectionType = "workflow-run" | "agent-run" | "delivery" | "alert" | "approval" | "dead-letter";
 
 function createBlankLayout(pageKey: string, title: string): LayoutDefinition {
   return {
@@ -285,6 +296,17 @@ function createWorkflowNode(type: WorkflowNodeType, index: number): WorkflowNode
         },
         position,
       };
+    case "subflow":
+      return {
+        id: createClientId("node"),
+        type,
+        label: "Subflow",
+        config: {
+          workflowKey: "booking_triage",
+          description: "Invoke a published reusable workflow.",
+        },
+        position,
+      };
   }
 }
 
@@ -297,6 +319,7 @@ const WORKFLOW_NODE_LIBRARY: Array<{ type: WorkflowNodeType; title: string; note
   { type: "wait", title: "Wait", note: "Pause the workflow for a duration." },
   { type: "approval", title: "Approval", note: "Insert a governed approval checkpoint." },
   { type: "model_call", title: "Model call", note: "Run a tenant agent at a node step." },
+  { type: "subflow", title: "Subflow", note: "Reuse a published workflow as a node." },
 ];
 
 function createBlankAgent(): AgentDefinition {
@@ -614,6 +637,16 @@ export function PlatformStudio({
   const [activeTab, setActiveTab] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [controlTowerSelection, setControlTowerSelection] = useState<{ type: ControlTowerSelectionType; id: string } | null>(null);
+  const [controlTowerDetail, setControlTowerDetail] = useState<Record<string, unknown> | null>(null);
+  const [controlTowerFilters, setControlTowerFilters] = useState({
+    status: "all",
+    workflowKey: "",
+    agentKey: "",
+    severity: "all",
+    fromDate: "",
+    toDate: "",
+  });
   const [isPending, startTransition] = useTransition();
 
   const manifest = bootstrap.draftManifest;
@@ -674,26 +707,135 @@ export function PlatformStudio({
     }
     return diagnostics;
   }, [formDraft]);
-  const pageDiagnostics = useMemo(() => {
-    const diagnostics: string[] = [];
+  const pageDiagnostics = useMemo<PageDiagnostic[]>(() => {
+    const diagnostics: PageDiagnostic[] = [];
     if (!pageDraft.title.trim()) {
-      diagnostics.push("Page title is missing.");
+      diagnostics.push({ id: "page-title", severity: "blocking", category: "content", message: "Page title is missing." });
     }
     if (!pageDraft.route.trim()) {
-      diagnostics.push("Route is missing.");
+      diagnostics.push({ id: "page-route", severity: "blocking", category: "route", message: "Route is missing." });
     }
     if (!layoutDraft?.sections.length) {
-      diagnostics.push("Add at least one section.");
+      diagnostics.push({ id: "page-sections", severity: "blocking", category: "content", message: "Add at least one section." });
     }
     if (layoutDraft?.sections.some((section) => section.components.length === 0)) {
-      diagnostics.push("Every section should contain at least one component.");
+      diagnostics.push({
+        id: "page-empty-section",
+        severity: "warning",
+        category: "content",
+        message: "Every section should contain at least one component.",
+      });
+    }
+    if (layoutDraft?.sections.some((section) => section.components.some((component) => component.placement.responsive.desktopSpan && component.placement.responsive.desktopSpan > 12))) {
+      diagnostics.push({
+        id: "page-responsive-span",
+        severity: "blocking",
+        category: "responsive",
+        message: "One or more components exceed the supported desktop span.",
+      });
+    }
+    if (layoutDraft?.sections.some((section) => section.components.some((component) => Boolean(component.visibilityRule?.expression) && component.visibilityRule?.expression?.trim().length === 0))) {
+      diagnostics.push({
+        id: "page-visibility",
+        severity: "warning",
+        category: "visibility",
+        message: "A component visibility rule is configured but empty.",
+      });
     }
     const hasMenu = sortedMenus.some((menu) => menu.pageKey === (pageDraft.key || selectedPage?.key));
     if (!hasMenu) {
-      diagnostics.push("This page is not exposed in the runtime menu.");
+      diagnostics.push({
+        id: "page-menu",
+        severity: "warning",
+        category: "menu",
+        message: "This page is not exposed in the runtime menu.",
+      });
+    }
+    const routeConflict = publishPreview?.routeImpacts.find((impact) => impact.pageKey === pageDraft.key && impact.status === "updated");
+    if (routeConflict) {
+      diagnostics.push({
+        id: "page-route-conflict",
+        severity: "info",
+        category: "route",
+        message: `Publishing will change the live route to /${routeConflict.route}.`,
+      });
     }
     return diagnostics;
-  }, [layoutDraft, pageDraft.key, pageDraft.route, pageDraft.title, selectedPage?.key, sortedMenus]);
+  }, [layoutDraft, pageDraft.key, pageDraft.route, pageDraft.title, publishPreview?.routeImpacts, selectedPage?.key, sortedMenus]);
+  const pageReadinessScore = useMemo(() => {
+    return Math.max(
+      0,
+      100 -
+        pageDiagnostics.filter((diagnostic) => diagnostic.severity === "blocking").length * 30 -
+        pageDiagnostics.filter((diagnostic) => diagnostic.severity === "warning").length * 12 -
+        pageDiagnostics.filter((diagnostic) => diagnostic.severity === "info").length * 4,
+    );
+  }, [pageDiagnostics]);
+  const filteredWorkflowRuns = useMemo(() => {
+    return allWorkflowRuns.filter((run) => {
+      if (controlTowerFilters.status !== "all" && run.status !== controlTowerFilters.status) {
+        return false;
+      }
+      if (controlTowerFilters.workflowKey && !run.workflowKey.toLowerCase().includes(controlTowerFilters.workflowKey.toLowerCase())) {
+        return false;
+      }
+      if (controlTowerFilters.fromDate && run.createdAt.slice(0, 10) < controlTowerFilters.fromDate) {
+        return false;
+      }
+      if (controlTowerFilters.toDate && run.createdAt.slice(0, 10) > controlTowerFilters.toDate) {
+        return false;
+      }
+      return true;
+    });
+  }, [allWorkflowRuns, controlTowerFilters.fromDate, controlTowerFilters.status, controlTowerFilters.toDate, controlTowerFilters.workflowKey]);
+  const filteredAgentRuns = useMemo(() => {
+    return agentRuns.filter((run) => {
+      if (controlTowerFilters.status !== "all" && run.status !== controlTowerFilters.status) {
+        return false;
+      }
+      if (controlTowerFilters.agentKey && !run.agentKey.toLowerCase().includes(controlTowerFilters.agentKey.toLowerCase())) {
+        return false;
+      }
+      if (controlTowerFilters.fromDate && run.createdAt.slice(0, 10) < controlTowerFilters.fromDate) {
+        return false;
+      }
+      if (controlTowerFilters.toDate && run.createdAt.slice(0, 10) > controlTowerFilters.toDate) {
+        return false;
+      }
+      return true;
+    });
+  }, [agentRuns, controlTowerFilters.agentKey, controlTowerFilters.fromDate, controlTowerFilters.status, controlTowerFilters.toDate]);
+  const filteredAlerts = useMemo(() => {
+    return platformAlerts.filter((alert) => {
+      if (controlTowerFilters.severity !== "all" && alert.severity !== controlTowerFilters.severity) {
+        return false;
+      }
+      if (controlTowerFilters.fromDate && alert.createdAt.slice(0, 10) < controlTowerFilters.fromDate) {
+        return false;
+      }
+      if (controlTowerFilters.toDate && alert.createdAt.slice(0, 10) > controlTowerFilters.toDate) {
+        return false;
+      }
+      return true;
+    });
+  }, [controlTowerFilters.fromDate, controlTowerFilters.severity, controlTowerFilters.toDate, platformAlerts]);
+  const filteredDeliveries = useMemo(() => {
+    return notificationDeliveries.filter((delivery) => {
+      if (controlTowerFilters.status !== "all" && delivery.status !== controlTowerFilters.status) {
+        return false;
+      }
+      if (controlTowerFilters.severity !== "all" && delivery.severity !== controlTowerFilters.severity) {
+        return false;
+      }
+      if (controlTowerFilters.fromDate && delivery.createdAt.slice(0, 10) < controlTowerFilters.fromDate) {
+        return false;
+      }
+      if (controlTowerFilters.toDate && delivery.createdAt.slice(0, 10) > controlTowerFilters.toDate) {
+        return false;
+      }
+      return true;
+    });
+  }, [controlTowerFilters.fromDate, controlTowerFilters.severity, controlTowerFilters.status, controlTowerFilters.toDate, notificationDeliveries]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -1128,6 +1270,58 @@ export function PlatformStudio({
     await handlePageSave();
   }
 
+  async function handleSavePageTemplate(): Promise<void> {
+    const pageKey = pageDraft.key || selectedPage?.key;
+    if (!pageKey) {
+      setError("Save the page first, then save it as a template.");
+      return;
+    }
+
+    await executeAction(
+      async () => {
+        await fetchJson(`/api/platform/tenants/${bootstrap.tenant.slug}/page-templates`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            pageKey,
+            label: pageDraft.title || "Reusable page template",
+            description: pageDraft.description || "Saved from the page builder.",
+          }),
+        });
+      },
+      `Saved ${pageDraft.title || pageKey} as a tenant page template.`,
+    );
+  }
+
+  async function handleSaveSectionTemplate(sectionId?: string): Promise<void> {
+    const targetSectionId = sectionId ?? selectedSection?.id;
+    const targetSection = layoutDraft?.sections.find((section) => section.id === targetSectionId);
+    if (!layoutDraft || !targetSectionId || !targetSection) {
+      setError("Select a section before saving a template.");
+      return;
+    }
+
+    await executeAction(
+      async () => {
+        await fetchJson(`/api/platform/tenants/${bootstrap.tenant.slug}/section-templates`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            layoutKey: layoutDraft.key,
+            sectionId: targetSectionId,
+            label: targetSection.title,
+            description: targetSection.description || "Saved from the page builder.",
+          }),
+        });
+      },
+      `Saved ${targetSection.title} as a section template.`,
+    );
+  }
+
   async function handleMenuSave(): Promise<void> {
     await executeAction(
       async () => {
@@ -1188,6 +1382,41 @@ export function PlatformStudio({
     );
   }
 
+  async function handleTestNotificationChannel(channelKey: string): Promise<void> {
+    await executeAction(
+      async () => {
+        await fetchJson(`/api/platform/tenants/${bootstrap.tenant.slug}/notifications/channels/${channelKey}/test`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            subject: "Platform channel test",
+            body: `Control Tower sent a delivery test for ${channelKey}.`,
+          }),
+        });
+        await refreshControlTower();
+      },
+      `Sent test notification for ${channelKey}.`,
+    );
+  }
+
+  async function handleToggleNotificationChannel(channelKey: string, enabled: boolean): Promise<void> {
+    await executeAction(
+      async () => {
+        await fetchJson(`/api/platform/tenants/${bootstrap.tenant.slug}/notifications/channels/${channelKey}/toggle`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ enabled }),
+        });
+        await refreshControlTower();
+      },
+      `${enabled ? "Enabled" : "Disabled"} channel ${channelKey}.`,
+    );
+  }
+
   async function handleWorkflowSave(): Promise<void> {
     await executeAction(
       async () => {
@@ -1203,6 +1432,60 @@ export function PlatformStudio({
       },
       `Saved workflow ${workflowDraft.name}.`,
     );
+  }
+
+  async function handleSaveWorkflowTemplate(): Promise<void> {
+    const workflowId = selectedWorkflow?.id || workflowDraft.id;
+    if (!workflowId) {
+      setError("Save the workflow first, then save it as a template.");
+      return;
+    }
+    await executeAction(
+      async () => {
+        await fetchJson(`/api/platform/tenants/${bootstrap.tenant.slug}/workflow-templates`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            workflowId,
+            name: workflowDraft.name || "Reusable workflow template",
+            description: workflowDraft.description || "Saved from the workflow studio.",
+          }),
+        });
+      },
+      `Saved ${workflowDraft.name || workflowId} as a workflow template.`,
+    );
+  }
+
+  async function handleSaveWorkflowTestCase(): Promise<void> {
+    const workflowKey = workflowDraft.key || selectedWorkflow?.key;
+    if (!workflowKey) {
+      setError("Save the workflow before storing a test case.");
+      return;
+    }
+    try {
+      const payload = parseJsonPayloadSafely(workflowTestPayload);
+      await executeAction(
+        async () => {
+          await fetchJson(`/api/platform/tenants/${bootstrap.tenant.slug}/workflow-tests`, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              name: `${workflowDraft.name || workflowKey} draft test`,
+              workflowKey,
+              payload,
+              expectedStatus: "SUCCEEDED",
+            }),
+          });
+        },
+        `Saved a named workflow test for ${workflowDraft.name || workflowKey}.`,
+      );
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Invalid workflow test payload.");
+    }
   }
 
   async function handleWorkflowTest(workflowId: string): Promise<void> {
@@ -1260,6 +1543,70 @@ export function PlatformStudio({
       },
       "Workflow run replayed.",
     );
+  }
+
+  async function handleAcknowledgeAlert(alertId: string): Promise<void> {
+    await executeAction(
+      async () => {
+        await fetchJson(`/api/platform/tenants/${bootstrap.tenant.slug}/alerts/${alertId}/acknowledge`, {
+          method: "POST",
+        });
+        await refreshControlTower();
+      },
+      "Alert acknowledged.",
+    );
+  }
+
+  async function handleRetryDelivery(deliveryId: string): Promise<void> {
+    await executeAction(
+      async () => {
+        await fetchJson(`/api/platform/tenants/${bootstrap.tenant.slug}/deliveries/${deliveryId}/retry`, {
+          method: "POST",
+        });
+        await refreshControlTower();
+      },
+      "Notification delivery retried.",
+    );
+  }
+
+  async function handleResumeAgentRun(runId: string): Promise<void> {
+    await executeAction(
+      async () => {
+        await fetchJson(`/api/platform/tenants/${bootstrap.tenant.slug}/agent-runs/${runId}/resume`, {
+          method: "POST",
+        });
+        await refreshControlTower();
+      },
+      "Agent run resumed.",
+    );
+  }
+
+  async function handleInspectControlTowerDetail(type: ControlTowerSelectionType, id: string): Promise<void> {
+    try {
+      setError(null);
+      setControlTowerSelection({ type, id });
+      const endpoint =
+        type === "workflow-run"
+          ? `/api/platform/tenants/${bootstrap.tenant.slug}/workflow-runs/${id}`
+          : type === "agent-run"
+            ? `/api/platform/tenants/${bootstrap.tenant.slug}/agent-runs/${id}`
+            : type === "delivery"
+              ? `/api/platform/tenants/${bootstrap.tenant.slug}/deliveries/${id}`
+              : type === "alert"
+                ? `/api/platform/tenants/${bootstrap.tenant.slug}/alerts/${id}`
+                : type === "approval"
+                  ? `/api/platform/tenants/${bootstrap.tenant.slug}/approval-tasks/${id}`
+                  : `/api/platform/tenants/${bootstrap.tenant.slug}/dead-letters/${id}`;
+      const payload = await fetchJson<Record<string, unknown>>(endpoint);
+      const detail =
+        "detail" in payload && payload.detail && typeof payload.detail === "object" && !Array.isArray(payload.detail)
+          ? (payload.detail as Record<string, unknown>)
+          : payload;
+      setControlTowerDetail(detail);
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Failed to load operator detail.");
+      setControlTowerDetail(null);
+    }
   }
 
   async function handleResolveApprovalTask(taskId: string, resolution: "approved" | "rejected"): Promise<void> {
@@ -1564,6 +1911,7 @@ export function PlatformStudio({
           templateKey,
           idFactory: createClientId,
           objectKey: pageDraft.objectKey || undefined,
+          availableTemplates: bootstrap.designerCatalog.sectionTemplates,
         })
       : normalizeLayoutSectionDefinition({
           id: createClientId("section"),
@@ -2257,9 +2605,33 @@ export function PlatformStudio({
                   <span>{template.label}</span>
                   <strong>{template.section.components.length} components</strong>
                   <p className={styles.metricMeta}>{template.description}</p>
-                  <button className={styles.secondaryButton} onClick={() => addLayoutSection(template.key)} type="button">
-                    Add to page
-                  </button>
+                  <div className={styles.inlineList}>
+                    <button className={styles.secondaryButton} onClick={() => addLayoutSection(template.key)} type="button">
+                      Add to page
+                    </button>
+                    <button
+                      className={styles.ghostButton}
+                      disabled={!selectedSection}
+                      onClick={() => {
+                        if (!selectedSection || !layoutDraft) {
+                          return;
+                        }
+                        const replacement = createSectionFromTemplate({
+                          templateKey: template.key,
+                          idFactory: createClientId,
+                          objectKey: pageDraft.objectKey || undefined,
+                          availableTemplates: bootstrap.designerCatalog.sectionTemplates,
+                        });
+                        updateLayoutSection(selectedSection.id, () => ({
+                          ...replacement,
+                          id: selectedSection.id,
+                        }));
+                      }}
+                      type="button"
+                    >
+                      Replace selected
+                    </button>
+                  </div>
                 </article>
               ))}
             </div>
@@ -2324,7 +2696,7 @@ export function PlatformStudio({
             </div>
             <div className={styles.sidebarMeta}>
               <span>Diagnostics</span>
-              <strong>{pageDiagnostics.length === 0 ? "Clean" : `${pageDiagnostics.length} issues`}</strong>
+              <strong>{pageDiagnostics.length === 0 ? `${pageReadinessScore}% ready` : `${pageDiagnostics.length} issues`}</strong>
             </div>
           </div>
 
@@ -2364,6 +2736,9 @@ export function PlatformStudio({
               <button className={styles.secondaryButton} disabled={designerHistory.length === 0} onClick={handleUndoDesignerChange} type="button">
                 Undo
               </button>
+              <button className={styles.secondaryButton} onClick={() => void handleSavePageTemplate()} type="button">
+                Save page as template
+              </button>
               <button className={styles.primaryButton} onClick={() => void handleLayoutSave()} type="button">
                 Save now
               </button>
@@ -2391,6 +2766,9 @@ export function PlatformStudio({
                       </button>
                       <button className={styles.ghostButton} onClick={() => duplicateSection(section.id)} type="button">
                         Duplicate
+                      </button>
+                      <button className={styles.ghostButton} onClick={() => { setSelectedSectionId(section.id); void handleSaveSectionTemplate(section.id); }} type="button">
+                        Save as template
                       </button>
                       <button className={styles.ghostButton} onClick={() => addComponentToSection(section.id)} type="button">
                         Add component
@@ -2665,8 +3043,8 @@ export function PlatformStudio({
             ) : (
               <div className={styles.listStack}>
                 {pageDiagnostics.map((diagnostic) => (
-                  <div className={styles.errorBanner} key={diagnostic}>
-                    {diagnostic}
+                  <div className={diagnostic.severity === "blocking" ? styles.errorBanner : styles.sidebarPanel} key={diagnostic.id}>
+                    <strong>{diagnostic.severity.toUpperCase()}</strong> {diagnostic.message}
                   </div>
                 ))}
               </div>
@@ -3617,6 +3995,17 @@ export function PlatformStudio({
                       <input checked={channel.enabled} onChange={(event) => setNotificationDraft((current) => ({ ...current, channels: current.channels.map((candidate, candidateIndex) => candidateIndex === index ? { ...candidate, enabled: event.target.checked } : candidate) }))} type="checkbox" />
                       <span>{channel.kind}</span>
                     </label>
+                    <div className={styles.inlineList}>
+                      <button className={styles.ghostButton} onClick={() => void handleTestNotificationChannel(channel.key)} type="button">
+                        Test send
+                      </button>
+                      <button className={styles.ghostButton} onClick={() => void handleToggleNotificationChannel(channel.key, false)} type="button">
+                        Disable runtime
+                      </button>
+                      <button className={styles.ghostButton} onClick={() => void handleToggleNotificationChannel(channel.key, true)} type="button">
+                        Enable runtime
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -3667,18 +4056,39 @@ export function PlatformStudio({
   }
 
   function renderWorkflowsWorkspace() {
-    const workflowDiagnostics: string[] = [];
+    const workflowDiagnostics: WorkflowDiagnostic[] = [];
     if (!workflowDraft.name.trim()) {
-      workflowDiagnostics.push("Workflow name is required.");
+      workflowDiagnostics.push({ id: "workflow-name", severity: "blocking", category: "graph", message: "Workflow name is required." });
     }
     if (!workflowDraft.triggers.length) {
-      workflowDiagnostics.push("Add at least one trigger.");
+      workflowDiagnostics.push({ id: "workflow-trigger", severity: "blocking", category: "trigger", message: "Add at least one trigger." });
     }
     if (!workflowDraft.nodes.length) {
-      workflowDiagnostics.push("Add at least one node.");
+      workflowDiagnostics.push({ id: "workflow-node", severity: "blocking", category: "graph", message: "Add at least one node." });
     }
     if (workflowDraft.nodes.length > 1 && workflowDraft.edges.length === 0) {
-      workflowDiagnostics.push("Connect nodes with at least one edge.");
+      workflowDiagnostics.push({ id: "workflow-edges", severity: "blocking", category: "graph", message: "Connect nodes with at least one edge." });
+    }
+    const orphanNode = workflowDraft.nodes.find((node) => !workflowDraft.edges.some((edge) => edge.sourceId === node.id || edge.targetId === node.id) && workflowDraft.nodes.length > 1);
+    if (orphanNode) {
+      workflowDiagnostics.push({ id: "workflow-orphan", severity: "warning", category: "graph", message: `Node "${orphanNode.label}" is disconnected from the graph.` });
+    }
+    const invalidConditionEdge = workflowDraft.nodes
+      .filter((node) => node.type === "condition")
+      .find((node) => workflowDraft.edges.some((edge) => edge.sourceId === node.id && edge.label && !["true", "false", "yes", "no", "success", "failure", "else", "match"].includes(edge.label.trim().toLowerCase())));
+    if (invalidConditionEdge) {
+      workflowDiagnostics.push({ id: "workflow-branch-label", severity: "warning", category: "branching", message: `Condition node "${invalidConditionEdge.label}" has a branch label outside the supported set.` });
+    }
+    const invalidSubflowNode = workflowDraft.nodes.find(
+      (node) =>
+        node.type === "subflow" &&
+        !manifest.workflows.some((workflow) => {
+          const subflowConfig = node.config as { workflowKey: string };
+          return workflow.key === subflowConfig.workflowKey || workflow.id === subflowConfig.workflowKey;
+        }),
+    );
+    if (invalidSubflowNode) {
+      workflowDiagnostics.push({ id: "workflow-subflow", severity: "blocking", category: "subflow", message: `Subflow node "${invalidSubflowNode.label}" references an unknown workflow.` });
     }
 
     return (
@@ -3692,6 +4102,30 @@ export function PlatformStudio({
             <button className={styles.secondaryButton} onClick={() => selectWorkflow(undefined)} type="button">
               New workflow
             </button>
+          </div>
+          <div className={styles.sidebarSection}>
+            <p className={styles.sidebarLabel}>Templates</p>
+            <div className={styles.listStack}>
+              {manifest.workflowTemplates.length === 0 ? (
+                <div className={styles.sidebarPanel}>Save a workflow as a reusable template once it has a stable shape.</div>
+              ) : (
+                manifest.workflowTemplates.slice(0, 6).map((template: WorkflowTemplateDefinition) => (
+                  <button
+                    className={styles.listItem}
+                    key={template.id}
+                    onClick={() => {
+                      setWorkflowDraft(structuredClone(template.workflow));
+                      setSelectedWorkflowId("");
+                      setSelectedWorkflowNodeId(template.workflow.nodes[0]?.id ?? "");
+                    }}
+                    type="button"
+                  >
+                    <span>{template.name}</span>
+                    <small>{template.source}</small>
+                  </button>
+                ))
+              )}
+            </div>
           </div>
           <div className={styles.listStack}>
             {manifest.workflows.map((workflow) => (
@@ -3721,6 +4155,12 @@ export function PlatformStudio({
                   <div className={styles.inlineList}>
                     <button className={styles.secondaryButton} onClick={() => void handleWorkflowTest(selectedWorkflow.id)} type="button">
                       Run draft test
+                    </button>
+                    <button className={styles.secondaryButton} onClick={() => void handleSaveWorkflowTemplate()} type="button">
+                      Save as template
+                    </button>
+                    <button className={styles.secondaryButton} onClick={() => void handleSaveWorkflowTestCase()} type="button">
+                      Save test case
                     </button>
                     <button className={styles.secondaryButton} onClick={() => void handleQueueWorkflowRun(selectedWorkflow.id)} type="button">
                       Queue run
@@ -3830,8 +4270,28 @@ export function PlatformStudio({
                   </div>
                   <textarea className={styles.textareaTall} onChange={(event) => setWorkflowTestPayload(event.target.value)} value={workflowTestPayload} />
                   <div className={styles.sidebarPanel}>
-                    {workflowDiagnostics.length === 0 ? "Graph passes the current structural checks." : workflowDiagnostics.join(" ")}
+                    {workflowDiagnostics.length === 0
+                      ? "Graph passes the current structural checks."
+                      : workflowDiagnostics.map((diagnostic) => diagnostic.message).join(" ")}
                   </div>
+                  {manifest.workflowTests.filter((testCase: WorkflowTestCaseDefinition) => testCase.workflowKey === (workflowDraft.key || selectedWorkflow?.key)).length > 0 ? (
+                    <div className={styles.listStack}>
+                      {manifest.workflowTests
+                        .filter((testCase: WorkflowTestCaseDefinition) => testCase.workflowKey === (workflowDraft.key || selectedWorkflow?.key))
+                        .slice(0, 4)
+                        .map((testCase: WorkflowTestCaseDefinition) => (
+                          <button
+                            className={styles.listItem}
+                            key={testCase.id}
+                            onClick={() => setWorkflowTestPayload(JSON.stringify(testCase.payload, null, 2))}
+                            type="button"
+                          >
+                            <span>{testCase.name}</span>
+                            <small>{testCase.expectedStatus ?? "No expected status"}</small>
+                          </button>
+                        ))}
+                    </div>
+                  ) : null}
                 </article>
               </div>
               <div className={styles.workflowEditorGrid}>
@@ -4180,6 +4640,28 @@ export function PlatformStudio({
                               {manifest.agents.map((agent) => (
                                 <option key={agent.id} value={agent.id}>
                                   {agent.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        ) : null}
+                        {"workflowKey" in selectedWorkflowNode.config ? (
+                          <label className={styles.formField}>
+                            <span>Subflow workflow</span>
+                            <select
+                              className={styles.select}
+                              onChange={(event) =>
+                                updateWorkflowNode(selectedWorkflowNode.id, (current) => ({
+                                  ...current,
+                                  config: { ...current.config, workflowKey: event.target.value },
+                                }))
+                              }
+                              value={selectedWorkflowNode.config.workflowKey}
+                            >
+                              <option value="">Choose workflow</option>
+                              {manifest.workflows.map((workflow) => (
+                                <option key={workflow.id} value={workflow.key}>
+                                  {workflow.name}
                                 </option>
                               ))}
                             </select>
@@ -4555,6 +5037,11 @@ export function PlatformStudio({
                 <div className={styles.sidebarPanel}>
                   Latest budget: ${(agentDraft.costBudgetUsd ?? 0).toFixed(2)} · Handoffs: {agentDraft.handoffWorkflowKeys.length || 0}
                 </div>
+                <div className={styles.sidebarPanel}>
+                  Governance: {agentDraft.approvalPolicy?.required ? "approval required" : "allowed"} ·
+                  {agentDraft.outputSchema?.trim() ? " schema enforced" : " schema optional"} ·
+                  {agentDraft.zeroRetentionRequired ? " zero retention" : " standard retention"}
+                </div>
               </article>
               <article className={styles.scopeCard}>
                 <div className={styles.sectionHeader}>
@@ -4588,9 +5075,664 @@ export function PlatformStudio({
     );
   }
 
+  function renderControlTowerDetailPanel() {
+    if (!controlTowerSelection || !controlTowerDetail) {
+      return null;
+    }
+
+    function humanizeToken(value: string): string {
+      return value
+        .replace(/[_-]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .replace(/\b\w/g, (character) => character.toUpperCase());
+    }
+
+    function formatInlineValue(value: unknown): string {
+      if (value == null) {
+        return "No value";
+      }
+      if (typeof value === "string") {
+        return value.length > 120 ? `${value.slice(0, 117)}...` : value;
+      }
+      if (typeof value === "number" || typeof value === "boolean") {
+        return String(value);
+      }
+      if (Array.isArray(value)) {
+        return value.length === 0 ? "No items" : `${value.length} item${value.length === 1 ? "" : "s"}`;
+      }
+      const entries = Object.entries(value as Record<string, unknown>);
+      if (entries.length === 0) {
+        return "Empty object";
+      }
+      return entries
+        .slice(0, 3)
+        .map(([key, nestedValue]) => `${humanizeToken(key)}: ${formatInlineValue(nestedValue)}`)
+        .join(" · ");
+    }
+
+    function renderStructuredPanel(label: string, value: unknown) {
+      if (value == null) {
+        return null;
+      }
+
+      if (Array.isArray(value)) {
+        return (
+          <article className={styles.scopeCard}>
+            <div className={styles.sectionHeader}>
+              <div>
+                <p className={styles.cardEyebrow}>{label}</p>
+                <h3>{value.length} entries</h3>
+              </div>
+            </div>
+            <div className={styles.listStack}>
+              {value.length === 0 ? <div className={styles.sidebarPanel}>No entries recorded.</div> : null}
+              {value.map((entry, index) => (
+                <article className={styles.auditRow} key={`${label}-${index}`}>
+                  <div>
+                    <strong>{`Entry ${index + 1}`}</strong>
+                    <p>{formatInlineValue(entry)}</p>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </article>
+        );
+      }
+
+      if (typeof value === "object") {
+        return (
+          <article className={styles.scopeCard}>
+            <div className={styles.sectionHeader}>
+              <div>
+                <p className={styles.cardEyebrow}>{label}</p>
+                <h3>Structured snapshot</h3>
+              </div>
+            </div>
+            <div className={styles.listStack}>
+              {Object.entries(value as Record<string, unknown>).map(([key, nestedValue]) => (
+                <article className={styles.auditRow} key={`${label}-${key}`}>
+                  <div>
+                    <strong>{humanizeToken(key)}</strong>
+                    <p>{formatInlineValue(nestedValue)}</p>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </article>
+        );
+      }
+
+      return (
+        <article className={styles.scopeCard}>
+          <div className={styles.sectionHeader}>
+            <div>
+              <p className={styles.cardEyebrow}>{label}</p>
+              <h3>Snapshot</h3>
+            </div>
+          </div>
+          <div className={styles.sidebarPanel}>{formatInlineValue(value)}</div>
+        </article>
+      );
+    }
+
+    function renderTimeline(label: string, entries: Array<Record<string, unknown>>) {
+      if (entries.length === 0) {
+        return null;
+      }
+      return (
+        <article className={styles.scopeCard}>
+          <div className={styles.sectionHeader}>
+            <div>
+              <p className={styles.cardEyebrow}>{label}</p>
+              <h3>Timeline</h3>
+            </div>
+          </div>
+          <div className={styles.listStack}>
+            {entries.map((entry, index) => (
+              <article className={styles.auditRow} key={`${label}-${index}`}>
+                <div>
+                  <strong>{String(entry.message ?? entry.summary ?? entry.lifecycleStage ?? entry.status ?? "Event")}</strong>
+                  <p>{String(entry.level ?? entry.provider ?? entry.responseSummary ?? entry.errorMessage ?? "")}</p>
+                </div>
+                <span>{formatPlatformDateTime(String(entry.at ?? entry.createdAt ?? ""))}</span>
+              </article>
+            ))}
+          </div>
+        </article>
+      );
+    }
+
+    function renderRelationList(input: {
+      label: string;
+      title: string;
+      emptyLabel: string;
+      items: Array<{
+        id: string;
+        primary: string;
+        secondary?: string;
+        tags?: string[];
+        inspectType?: ControlTowerSelectionType;
+      }>;
+    }) {
+      return (
+        <article className={styles.scopeCard}>
+          <div className={styles.sectionHeader}>
+            <div>
+              <p className={styles.cardEyebrow}>{input.label}</p>
+              <h3>{input.title}</h3>
+            </div>
+          </div>
+          <div className={styles.listStack}>
+            {input.items.length === 0 ? <div className={styles.sidebarPanel}>{input.emptyLabel}</div> : null}
+            {input.items.map((item) => (
+              <article className={styles.auditRow} key={`${input.label}-${item.id}`}>
+                <div>
+                  <strong>{item.primary}</strong>
+                  <p>{item.secondary ?? item.id}</p>
+                  {item.tags && item.tags.length > 0 ? (
+                    <div className={styles.inlineList}>
+                      {item.tags.map((tag) => (
+                        <span className={styles.inlineTag} key={`${item.id}-${tag}`}>
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+                {item.inspectType ? (
+                  <button className={styles.ghostButton} onClick={() => void handleInspectControlTowerDetail(item.inspectType!, item.id)} type="button">
+                    Inspect
+                  </button>
+                ) : null}
+              </article>
+            ))}
+          </div>
+        </article>
+      );
+    }
+
+    function renderAgentTracePanel(trace: AgentRunRecord["trace"]) {
+      if (!trace) {
+        return null;
+      }
+
+      return (
+        <article className={styles.scopeCard}>
+          <div className={styles.sectionHeader}>
+            <div>
+              <p className={styles.cardEyebrow}>Execution trace</p>
+              <h3>
+                {trace.providerKey} · {trace.providerModel}
+              </h3>
+            </div>
+          </div>
+          <div className={styles.sidebarPanel}>
+            {trace.outputValidationPassed === undefined ? "Schema optional" : trace.outputValidationPassed ? "Schema passed" : "Schema failed"}
+            {trace.handoffWorkflowKey ? ` · Handoff ${trace.handoffWorkflowKey}` : ""}
+          </div>
+          {trace.promptBlockSummary.length > 0 ? (
+            <div className={styles.listStack}>
+              {trace.promptBlockSummary.map((block) => (
+                <article className={styles.auditRow} key={block.id}>
+                  <div>
+                    <strong>{block.label}</strong>
+                    <p>{humanizeToken(block.kind)}</p>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : null}
+          {trace.policyDecisions.length > 0 ? (
+            <div className={styles.listStack}>
+              {trace.policyDecisions.map((decision, index) => (
+                <article className={styles.auditRow} key={`decision-${index}`}>
+                  <div>
+                    <strong>{`Policy decision ${index + 1}`}</strong>
+                    <p>{decision}</p>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : null}
+          {renderTimeline("Stage timeline", trace.stages as unknown as Array<Record<string, unknown>>)}
+        </article>
+      );
+    }
+
+    const workflowDetail = controlTowerSelection.type === "workflow-run" ? (controlTowerDetail as unknown as WorkflowRunDetail) : null;
+    const agentDetail = controlTowerSelection.type === "agent-run" ? (controlTowerDetail as unknown as AgentRunDetail) : null;
+    const deliveryDetail =
+      controlTowerSelection.type === "delivery"
+        ? (controlTowerDetail as unknown as {
+            delivery: NotificationDeliveryRecord;
+            attempts: NotificationAttemptRecord[];
+            channelHealth: NotificationChannelHealth | null;
+          })
+        : null;
+    const alertDetail =
+      controlTowerSelection.type === "alert"
+        ? (controlTowerDetail as unknown as {
+            alert: PlatformAlertRecord;
+            relatedDeliveries: NotificationDeliveryRecord[];
+            relatedWorkflowRuns: PlatformWorkflowRunRecord[];
+            relatedAgentRuns: AgentRunRecord[];
+          })
+        : null;
+    const approvalDetail =
+      controlTowerSelection.type === "approval"
+        ? (controlTowerDetail as unknown as {
+            task: PlatformApprovalTaskRecord;
+            workflowRun: PlatformWorkflowRunRecord | null;
+            agentRun: AgentRunRecord | null;
+          })
+        : null;
+    const deadLetterDetail = controlTowerSelection.type === "dead-letter" ? (controlTowerDetail as unknown as DeadLetterRecord) : null;
+
+    return (
+      <section className={styles.panelWide}>
+        <div className={styles.sectionHeader}>
+          <div>
+            <p className={styles.cardEyebrow}>Drill-down</p>
+            <h2>
+              {controlTowerSelection.type} · {controlTowerSelection.id}
+            </h2>
+          </div>
+        </div>
+        {workflowDetail ? (
+          <div className={styles.scopeGrid}>
+            <article className={styles.scopeCard}>
+              <p className={styles.cardEyebrow}>Workflow run</p>
+              <h3>{workflowDetail.run.workflowKey}</h3>
+              <div className={styles.inlineList}>
+                <span className={styles.inlineTag}>{workflowDetail.run.status}</span>
+                {workflowDetail.run.pauseReason ? <span className={styles.inlineTag}>{workflowDetail.run.pauseReason}</span> : null}
+                {workflowDetail.run.subflowRunId ? <span className={styles.inlineTag}>subflow linked</span> : null}
+              </div>
+              <div className={styles.sidebarPanel}>
+                Created {formatPlatformDateTime(workflowDetail.run.createdAt)}
+                {workflowDetail.run.startedAt ? ` · Started ${formatPlatformDateTime(workflowDetail.run.startedAt)}` : ""}
+                {workflowDetail.run.finishedAt ? ` · Finished ${formatPlatformDateTime(workflowDetail.run.finishedAt)}` : ""}
+              </div>
+              <div className={styles.sidebarPanel}>
+                Related cost ${workflowDetail.relatedAgentRuns.reduce((sum, run) => sum + run.costUsd, 0).toFixed(4)}
+                {workflowDetail.run.nextRetryAt ? ` · Next retry ${formatPlatformDateTime(workflowDetail.run.nextRetryAt)}` : ""}
+              </div>
+              <div className={styles.inlineList}>
+                <button className={styles.secondaryButton} onClick={() => void handleReplayWorkflowRun(workflowDetail.run.id)} type="button">
+                  Replay run
+                </button>
+              </div>
+            </article>
+            {renderStructuredPanel("Input snapshot", workflowDetail.run.input)}
+            {renderStructuredPanel("Output snapshot", workflowDetail.run.output)}
+            {renderTimeline("Run logs", workflowDetail.run.logs)}
+            {renderRelationList({
+              label: "Run lineage",
+              title: "Parent and child runs",
+              emptyLabel: "No parent or child runs linked.",
+              items: [
+                ...(workflowDetail.parentRun
+                  ? [
+                      {
+                        id: workflowDetail.parentRun.id,
+                        primary: workflowDetail.parentRun.workflowKey,
+                        secondary: `Parent run · ${workflowDetail.parentRun.status}`,
+                        tags: ["parent"],
+                        inspectType: "workflow-run" as const,
+                      },
+                    ]
+                  : []),
+                ...workflowDetail.childRuns.map((run) => ({
+                  id: run.id,
+                  primary: run.workflowKey,
+                  secondary: `Child run · ${run.status}`,
+                  tags: run.pauseReason ? [run.pauseReason] : [],
+                  inspectType: "workflow-run" as const,
+                })),
+              ],
+            })}
+            {renderRelationList({
+              label: "Related runs",
+              title: "Agent executions",
+              emptyLabel: "No agent runs linked to this workflow.",
+              items: workflowDetail.relatedAgentRuns.map((run) => ({
+                id: run.id,
+                primary: run.agentKey,
+                secondary: `${run.status} · ${run.modelProviderKey} · $${run.costUsd.toFixed(4)}`,
+                tags: [run.runMode, run.approvalStatus],
+                inspectType: "agent-run" as const,
+              })),
+            })}
+            {renderRelationList({
+              label: "Operational links",
+              title: "Deliveries and approvals",
+              emptyLabel: "No deliveries or approvals linked.",
+              items: [
+                ...workflowDetail.deliveries.map((delivery) => ({
+                  id: delivery.id,
+                  primary: delivery.ruleKey,
+                  secondary: `${delivery.status} · ${delivery.channelKey}`,
+                  tags: [delivery.severity],
+                  inspectType: "delivery" as const,
+                })),
+                ...workflowDetail.approvals.map((task) => ({
+                  id: task.id,
+                  primary: task.nodeLabel,
+                  secondary: `${task.status} · ${task.approverRole}`,
+                  tags: [task.taskType ?? "workflow"],
+                  inspectType: "approval" as const,
+                })),
+              ],
+            })}
+            {renderRelationList({
+              label: "Dead letters",
+              title: "Terminal failures",
+              emptyLabel: "No dead letters recorded.",
+              items: workflowDetail.deadLetters.map((entry) => ({
+                id: entry.id,
+                primary: entry.type,
+                secondary: entry.reason,
+                tags: ["dead letter"],
+                inspectType: "dead-letter" as const,
+              })),
+            })}
+          </div>
+        ) : null}
+        {agentDetail ? (
+          <div className={styles.scopeGrid}>
+            <article className={styles.scopeCard}>
+              <p className={styles.cardEyebrow}>Agent run</p>
+              <h3>{agentDetail.run.agentKey}</h3>
+              <div className={styles.inlineList}>
+                <span className={styles.inlineTag}>{agentDetail.run.status}</span>
+                <span className={styles.inlineTag}>{agentDetail.run.runMode}</span>
+                <span className={styles.inlineTag}>{agentDetail.run.approvalStatus}</span>
+              </div>
+              <div className={styles.sidebarPanel}>
+                Provider {agentDetail.run.modelProviderKey} · ${agentDetail.run.costUsd.toFixed(4)} · {agentDetail.run.tokensIn + agentDetail.run.tokensOut} tokens
+              </div>
+              {agentDetail.run.schemaValidation ? (
+                <div className={styles.sidebarPanel}>
+                  Schema: {agentDetail.run.schemaValidation.passed ? "passed" : "failed"} · {agentDetail.run.schemaValidation.summary}
+                </div>
+              ) : null}
+              <div className={styles.inlineList}>
+                {agentDetail.run.status === "blocked" && agentDetail.run.approvalStatus === "approved" ? (
+                  <button className={styles.secondaryButton} onClick={() => void handleResumeAgentRun(agentDetail.run.id)} type="button">
+                    Resume
+                  </button>
+                ) : null}
+                {agentDetail.parentWorkflowRun ? <span className={styles.inlineTag}>workflow linked</span> : null}
+                {agentDetail.handoffWorkflowRun ? <span className={styles.inlineTag}>handoff linked</span> : null}
+              </div>
+            </article>
+            {renderStructuredPanel("Input snapshot", agentDetail.run.input)}
+            {renderStructuredPanel("Output snapshot", agentDetail.run.output)}
+            {renderTimeline("Run logs", agentDetail.run.logs)}
+            {renderAgentTracePanel(agentDetail.run.trace)}
+            {renderRelationList({
+              label: "Workflow links",
+              title: "Parent and handoff workflows",
+              emptyLabel: "No workflow lineage linked.",
+              items: [
+                ...(agentDetail.parentWorkflowRun
+                  ? [
+                      {
+                        id: agentDetail.parentWorkflowRun.id,
+                        primary: agentDetail.parentWorkflowRun.workflowKey,
+                        secondary: `Parent workflow · ${agentDetail.parentWorkflowRun.status}`,
+                        tags: ["parent"],
+                        inspectType: "workflow-run" as const,
+                      },
+                    ]
+                  : []),
+                ...(agentDetail.handoffWorkflowRun
+                  ? [
+                      {
+                        id: agentDetail.handoffWorkflowRun.id,
+                        primary: agentDetail.handoffWorkflowRun.workflowKey,
+                        secondary: `Handoff workflow · ${agentDetail.handoffWorkflowRun.status}`,
+                        tags: ["handoff"],
+                        inspectType: "workflow-run" as const,
+                      },
+                    ]
+                  : []),
+              ],
+            })}
+            {renderRelationList({
+              label: "Operational links",
+              title: "Deliveries and approvals",
+              emptyLabel: "No deliveries or approvals linked.",
+              items: [
+                ...agentDetail.deliveries.map((delivery) => ({
+                  id: delivery.id,
+                  primary: delivery.ruleKey,
+                  secondary: `${delivery.status} · ${delivery.channelKey}`,
+                  tags: [delivery.severity],
+                  inspectType: "delivery" as const,
+                })),
+                ...agentDetail.approvals.map((task) => ({
+                  id: task.id,
+                  primary: task.nodeLabel,
+                  secondary: `${task.status} · ${task.approverRole}`,
+                  tags: [task.taskType ?? "agent"],
+                  inspectType: "approval" as const,
+                })),
+              ],
+            })}
+          </div>
+        ) : null}
+        {deliveryDetail ? (
+          <div className={styles.scopeGrid}>
+            <article className={styles.scopeCard}>
+              <p className={styles.cardEyebrow}>Notification delivery</p>
+              <h3>{deliveryDetail.delivery.ruleKey}</h3>
+              <div className={styles.inlineList}>
+                <span className={styles.inlineTag}>{deliveryDetail.delivery.status}</span>
+                <span className={styles.inlineTag}>{deliveryDetail.delivery.channelKey}</span>
+                <span className={styles.inlineTag}>{deliveryDetail.delivery.severity}</span>
+              </div>
+              <div className={styles.sidebarPanel}>
+                Attempts {deliveryDetail.delivery.attemptCount ?? 0}/{deliveryDetail.delivery.maxAttempts ?? "—"}
+                {deliveryDetail.delivery.nextRetryAt ? ` · Next retry ${formatPlatformDateTime(deliveryDetail.delivery.nextRetryAt)}` : ""}
+              </div>
+              {deliveryDetail.channelHealth ? (
+                <div className={styles.sidebarPanel}>
+                  Channel health: {deliveryDetail.channelHealth.status} · success rate {(deliveryDetail.channelHealth.successRate * 100).toFixed(0)}%
+                </div>
+              ) : null}
+              <div className={styles.inlineList}>
+                <button className={styles.secondaryButton} disabled={deliveryDetail.delivery.status === "sent"} onClick={() => void handleRetryDelivery(deliveryDetail.delivery.id)} type="button">
+                  Retry delivery
+                </button>
+              </div>
+            </article>
+            {renderStructuredPanel("Resolved payload", deliveryDetail.delivery.resolvedPayload)}
+            {renderTimeline("Delivery attempts", deliveryDetail.attempts as unknown as Array<Record<string, unknown>>)}
+            {deliveryDetail.channelHealth ? renderStructuredPanel("Channel health", deliveryDetail.channelHealth) : null}
+          </div>
+        ) : null}
+        {alertDetail ? (
+          <div className={styles.scopeGrid}>
+            <article className={styles.scopeCard}>
+              <p className={styles.cardEyebrow}>Alert</p>
+              <h3>{alertDetail.alert.title}</h3>
+              <div className={styles.inlineList}>
+                <span className={styles.inlineTag}>{alertDetail.alert.category}</span>
+                <span className={styles.inlineTag}>{alertDetail.alert.severity}</span>
+              </div>
+              <div className={styles.sidebarPanel}>{alertDetail.alert.summary}</div>
+              <div className={styles.inlineList}>
+                <button className={styles.secondaryButton} disabled={Boolean(alertDetail.alert.acknowledgedAt)} onClick={() => void handleAcknowledgeAlert(alertDetail.alert.id)} type="button">
+                  Acknowledge
+                </button>
+              </div>
+            </article>
+            {renderRelationList({
+              label: "Related deliveries",
+              title: "Delivery impact",
+              emptyLabel: "No deliveries linked to this alert.",
+              items: alertDetail.relatedDeliveries.map((delivery) => ({
+                id: delivery.id,
+                primary: delivery.ruleKey,
+                secondary: `${delivery.status} · ${delivery.channelKey}`,
+                tags: [delivery.severity],
+                inspectType: "delivery" as const,
+              })),
+            })}
+            {renderRelationList({
+              label: "Related workflows",
+              title: "Workflow runs",
+              emptyLabel: "No workflow runs linked to this alert.",
+              items: alertDetail.relatedWorkflowRuns.map((run) => ({
+                id: run.id,
+                primary: run.workflowKey,
+                secondary: run.status,
+                tags: run.pauseReason ? [run.pauseReason] : [],
+                inspectType: "workflow-run" as const,
+              })),
+            })}
+            {renderRelationList({
+              label: "Related agents",
+              title: "Agent runs",
+              emptyLabel: "No agent runs linked to this alert.",
+              items: alertDetail.relatedAgentRuns.map((run) => ({
+                id: run.id,
+                primary: run.agentKey,
+                secondary: `${run.status} · ${run.modelProviderKey}`,
+                tags: [run.runMode, run.approvalStatus],
+                inspectType: "agent-run" as const,
+              })),
+            })}
+          </div>
+        ) : null}
+        {approvalDetail ? (
+          <div className={styles.scopeGrid}>
+            <article className={styles.scopeCard}>
+              <p className={styles.cardEyebrow}>Approval task</p>
+              <h3>{approvalDetail.task.nodeLabel}</h3>
+              <div className={styles.inlineList}>
+                <span className={styles.inlineTag}>{approvalDetail.task.status}</span>
+                <span className={styles.inlineTag}>{approvalDetail.task.approverRole}</span>
+              </div>
+              {approvalDetail.task.instructions ? <div className={styles.sidebarPanel}>{approvalDetail.task.instructions}</div> : null}
+              <div className={styles.inlineList}>
+                <button className={styles.secondaryButton} disabled={approvalDetail.task.status !== "pending"} onClick={() => void handleResolveApprovalTask(approvalDetail.task.id, "approved")} type="button">
+                  Approve
+                </button>
+                <button className={styles.ghostButtonDanger} disabled={approvalDetail.task.status !== "pending"} onClick={() => void handleResolveApprovalTask(approvalDetail.task.id, "rejected")} type="button">
+                  Reject
+                </button>
+              </div>
+            </article>
+            {renderRelationList({
+              label: "Workflow link",
+              title: "Workflow run",
+              emptyLabel: "No workflow run linked.",
+              items: approvalDetail.workflowRun
+                ? [
+                    {
+                      id: approvalDetail.workflowRun.id,
+                      primary: approvalDetail.workflowRun.workflowKey,
+                      secondary: approvalDetail.workflowRun.status,
+                      tags: [approvalDetail.task.taskType ?? "workflow"],
+                      inspectType: "workflow-run" as const,
+                    },
+                  ]
+                : [],
+            })}
+            {renderRelationList({
+              label: "Agent link",
+              title: "Agent run",
+              emptyLabel: "No agent run linked.",
+              items: approvalDetail.agentRun
+                ? [
+                    {
+                      id: approvalDetail.agentRun.id,
+                      primary: approvalDetail.agentRun.agentKey,
+                      secondary: `${approvalDetail.agentRun.status} · ${approvalDetail.agentRun.modelProviderKey}`,
+                      tags: [approvalDetail.agentRun.runMode, approvalDetail.agentRun.approvalStatus],
+                      inspectType: "agent-run" as const,
+                    },
+                  ]
+                : [],
+            })}
+          </div>
+        ) : null}
+        {deadLetterDetail ? (
+          <div className={styles.scopeGrid}>
+            <article className={styles.scopeCard}>
+              <p className={styles.cardEyebrow}>Dead letter</p>
+              <h3>{deadLetterDetail.type}</h3>
+              <div className={styles.sidebarPanel}>
+                {deadLetterDetail.reason} · Captured {formatPlatformDateTime(deadLetterDetail.createdAt)}
+              </div>
+            </article>
+            {renderStructuredPanel("Payload", deadLetterDetail.payload)}
+          </div>
+        ) : null}
+      </section>
+    );
+  }
+
   function renderControlTowerWorkspace() {
     return (
       <div className={styles.workspaceGrid}>
+        <section className={styles.panelWide}>
+          <div className={styles.sectionHeader}>
+            <div>
+              <p className={styles.cardEyebrow}>Filters</p>
+              <h2>Operator scope</h2>
+            </div>
+          </div>
+          <div className={styles.formGrid}>
+            <label className={styles.formField}>
+              <span>Status</span>
+              <select className={styles.select} onChange={(event) => setControlTowerFilters((current) => ({ ...current, status: event.target.value }))} value={controlTowerFilters.status}>
+                <option value="all">All</option>
+                <option value="QUEUED">Queued</option>
+                <option value="RUNNING">Running</option>
+                <option value="PAUSED">Paused</option>
+                <option value="SUCCEEDED">Succeeded</option>
+                <option value="FAILED">Failed</option>
+                <option value="queued">Queued agent</option>
+                <option value="running">Running agent</option>
+                <option value="blocked">Blocked agent</option>
+                <option value="succeeded">Succeeded agent</option>
+                <option value="failed">Failed agent</option>
+                <option value="retrying">Retrying delivery</option>
+                <option value="exhausted">Exhausted delivery</option>
+              </select>
+            </label>
+            <label className={styles.formField}>
+              <span>Workflow key</span>
+              <input className={styles.input} onChange={(event) => setControlTowerFilters((current) => ({ ...current, workflowKey: event.target.value }))} value={controlTowerFilters.workflowKey} />
+            </label>
+            <label className={styles.formField}>
+              <span>Agent key</span>
+              <input className={styles.input} onChange={(event) => setControlTowerFilters((current) => ({ ...current, agentKey: event.target.value }))} value={controlTowerFilters.agentKey} />
+            </label>
+            <label className={styles.formField}>
+              <span>Severity</span>
+              <select className={styles.select} onChange={(event) => setControlTowerFilters((current) => ({ ...current, severity: event.target.value }))} value={controlTowerFilters.severity}>
+                <option value="all">All</option>
+                <option value="info">Info</option>
+                <option value="success">Success</option>
+                <option value="warning">Warning</option>
+                <option value="critical">Critical</option>
+              </select>
+            </label>
+            <label className={styles.formField}>
+              <span>From</span>
+              <input className={styles.input} onChange={(event) => setControlTowerFilters((current) => ({ ...current, fromDate: event.target.value }))} type="date" value={controlTowerFilters.fromDate} />
+            </label>
+            <label className={styles.formField}>
+              <span>To</span>
+              <input className={styles.input} onChange={(event) => setControlTowerFilters((current) => ({ ...current, toDate: event.target.value }))} type="date" value={controlTowerFilters.toDate} />
+            </label>
+          </div>
+        </section>
         {activeTab === 0 ? (
           <>
             <section className={styles.panel}>
@@ -4604,19 +5746,23 @@ export function PlatformStudio({
                 </button>
               </div>
               <div className={styles.listStack}>
-                {allWorkflowRuns.length === 0 ? (
+                {filteredWorkflowRuns.length === 0 ? (
                   <div className={styles.emptyState}>No workflow runs yet.</div>
                 ) : (
-                  allWorkflowRuns.slice(0, 12).map((run) => (
+                  filteredWorkflowRuns.slice(0, 12).map((run) => (
                     <article className={styles.auditRow} key={run.id}>
                       <div>
                         <strong>{run.workflowKey}</strong>
                         <p>
                           {run.status} · {run.logs.length} log events
+                          {run.pauseReason ? ` · ${run.pauseReason}` : ""}
                         </p>
                       </div>
                       <div className={styles.inlineList}>
                         <span>{formatPlatformDateTime(run.createdAt)}</span>
+                        <button className={styles.ghostButton} onClick={() => void handleInspectControlTowerDetail("workflow-run", run.id)} type="button">
+                          Inspect
+                        </button>
                         <button className={styles.ghostButton} onClick={() => void handleReplayWorkflowRun(run.id)} type="button">
                           Replay
                         </button>
@@ -4634,18 +5780,29 @@ export function PlatformStudio({
                 </div>
               </div>
               <div className={styles.listStack}>
-                {agentRuns.slice(0, 6).map((run) => (
+                {filteredAgentRuns.slice(0, 6).map((run) => (
                   <article className={styles.workflowCard} key={`detail-${run.id}`}>
                     <strong>{run.agentKey}</strong>
                     <p>{run.logs[0]?.message ? String(run.logs[0].message) : "Simulation completed."}</p>
                     <div className={styles.inlineList}>
                       <span className={styles.inlineTag}>{run.modelProviderKey}</span>
+                      <span className={styles.inlineTag}>{run.runMode}</span>
+                      <span className={styles.inlineTag}>{run.approvalStatus}</span>
                       <span className={styles.inlineTag}>{run.tokensIn + run.tokensOut} tokens</span>
+                      <button className={styles.ghostButton} onClick={() => void handleInspectControlTowerDetail("agent-run", run.id)} type="button">
+                        Inspect
+                      </button>
+                      {run.status === "blocked" && run.approvalStatus === "approved" ? (
+                        <button className={styles.ghostButton} onClick={() => void handleResumeAgentRun(run.id)} type="button">
+                          Resume
+                        </button>
+                      ) : null}
                     </div>
                   </article>
                 ))}
               </div>
             </section>
+            {renderControlTowerDetailPanel()}
           </>
         ) : null}
 
@@ -4701,10 +5858,10 @@ export function PlatformStudio({
               </div>
             </div>
             <div className={styles.listStack}>
-              {platformAlerts.length === 0 ? (
+              {filteredAlerts.length === 0 ? (
                 <div className={styles.emptyState}>No alerts triggered.</div>
               ) : (
-                platformAlerts.slice(0, 12).map((alert) => (
+                filteredAlerts.slice(0, 12).map((alert) => (
                   <article className={styles.auditRow} key={alert.id}>
                     <div>
                       <strong>{alert.title}</strong>
@@ -4713,11 +5870,18 @@ export function PlatformStudio({
                     <div className={styles.inlineList}>
                       <span className={styles.inlineTag}>{alert.category}</span>
                       <span className={styles.inlineTag}>{alert.severity}</span>
+                      <button className={styles.ghostButton} onClick={() => void handleInspectControlTowerDetail("alert", alert.id)} type="button">
+                        Inspect
+                      </button>
+                      <button className={styles.ghostButton} disabled={Boolean(alert.acknowledgedAt)} onClick={() => void handleAcknowledgeAlert(alert.id)} type="button">
+                        {alert.acknowledgedAt ? "Acknowledged" : "Acknowledge"}
+                      </button>
                     </div>
                   </article>
                 ))
               )}
             </div>
+            {renderControlTowerDetailPanel()}
           </section>
         ) : null}
 
@@ -4741,14 +5905,24 @@ export function PlatformStudio({
                   </tr>
                 </thead>
                 <tbody>
-                  {notificationDeliveries.length > 0 ? (
-                    notificationDeliveries.slice(0, 12).map((delivery) => (
+                  {filteredDeliveries.length > 0 ? (
+                    filteredDeliveries.slice(0, 12).map((delivery) => (
                       <tr key={delivery.id}>
                         <td>{delivery.ruleKey}</td>
                         <td>{delivery.channelKey}</td>
                         <td>{delivery.status}</td>
                         <td>{delivery.severity}</td>
-                        <td>{formatPlatformDateTime(delivery.deliveredAt ?? delivery.createdAt)}</td>
+                        <td>
+                          <div className={styles.inlineList}>
+                            <span>{formatPlatformDateTime(delivery.deliveredAt ?? delivery.createdAt)}</span>
+                            <button className={styles.ghostButton} onClick={() => void handleInspectControlTowerDetail("delivery", delivery.id)} type="button">
+                              Inspect
+                            </button>
+                            <button className={styles.ghostButton} disabled={delivery.status === "sent"} onClick={() => void handleRetryDelivery(delivery.id)} type="button">
+                              Retry
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     ))
                   ) : (
@@ -4761,6 +5935,7 @@ export function PlatformStudio({
                 </tbody>
               </table>
             </div>
+            {renderControlTowerDetailPanel()}
           </section>
         ) : null}
 
@@ -4784,6 +5959,9 @@ export function PlatformStudio({
                     </p>
                     {task.instructions ? <div className={styles.sidebarPanel}>{task.instructions}</div> : null}
                     <div className={styles.inlineList}>
+                      <button className={styles.ghostButton} onClick={() => void handleInspectControlTowerDetail("approval", task.id)} type="button">
+                        Inspect
+                      </button>
                       <button className={styles.secondaryButton} disabled={task.status !== "pending"} onClick={() => void handleResolveApprovalTask(task.id, "approved")} type="button">
                         Approve
                       </button>
@@ -4795,6 +5973,7 @@ export function PlatformStudio({
                 ))
               )}
             </div>
+            {renderControlTowerDetailPanel()}
           </section>
         ) : null}
 
@@ -4816,11 +5995,17 @@ export function PlatformStudio({
                       <strong>{entry.type}</strong>
                       <p>{entry.reason}</p>
                     </div>
-                    <span>{formatPlatformDateTime(entry.createdAt)}</span>
+                    <div className={styles.inlineList}>
+                      <span>{formatPlatformDateTime(entry.createdAt)}</span>
+                      <button className={styles.ghostButton} onClick={() => void handleInspectControlTowerDetail("dead-letter", entry.id)} type="button">
+                        Inspect
+                      </button>
+                    </div>
                   </article>
                 ))
               )}
             </div>
+            {renderControlTowerDetailPanel()}
           </section>
         ) : null}
       </div>

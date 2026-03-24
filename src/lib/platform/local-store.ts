@@ -122,6 +122,15 @@ async function listEnvironments(): Promise<LocalEnvironmentRecord[]> {
   return readJsonFile(getPath("environments.json"), []);
 }
 
+export async function listLocalTenants(): Promise<LocalTenantRecord[]> {
+  return sortByUpdatedDesc(await listTenants());
+}
+
+export async function listLocalEnvironments(tenantId?: string): Promise<LocalEnvironmentRecord[]> {
+  const environments = await listEnvironments();
+  return sortByUpdatedDesc(tenantId ? environments.filter((environment) => environment.tenantId === tenantId) : environments);
+}
+
 async function listUsers(): Promise<LocalUserRecord[]> {
   return readJsonFile(getPath("users.json"), []);
 }

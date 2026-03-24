@@ -573,6 +573,8 @@ export function createStarterManifest(tenantSlug: string, tenantName = "TeacherA
         ],
       },
     ],
+    pageTemplates: [],
+    sectionTemplates: [],
     layouts: [
       {
         id: "layout-ops-overview",
@@ -1025,6 +1027,9 @@ export function createStarterManifest(tenantSlug: string, tenantName = "TeacherA
         ],
       },
     ],
+    workflowTemplates: [],
+    subflows: [],
+    workflowTests: [],
     tools: [
       {
         id: "tool-booking-triage",

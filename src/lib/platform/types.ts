@@ -3,7 +3,9 @@ export const PLATFORM_SCHEMA_VERSION = 3 as const;
 export type PlatformRole = "SUPER_ADMIN" | "BUILDER_ADMIN" | "USER";
 export type PlatformVersionStatus = "DRAFT" | "ACTIVE" | "ROLLED_BACK";
 export type WorkflowRunStatus = "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED" | "PAUSED";
+export type WorkflowPauseReason = "wait" | "approval" | "subflow";
 export type RuleExpressionMode = "text" | "json_logic";
+export type DiagnosticSeverity = "blocking" | "warning" | "info";
 
 export type FieldType =
   | "text"
@@ -52,7 +54,8 @@ export type WorkflowNodeType =
   | "notification"
   | "wait"
   | "approval"
-  | "model_call";
+  | "model_call"
+  | "subflow";
 
 export type TriggerType = "manual" | "record_created" | "record_updated";
 export type AgentScope = "node" | "workspace";
@@ -69,8 +72,11 @@ export type BrandAssetKind = "logo" | "icon" | "brand_book" | "reference";
 export type ShellNavigationMode = "sidebar" | "topbar";
 export type NotificationChannelKind = "in_app" | "email" | "webhook" | "slack_style";
 export type NotificationSeverity = "info" | "success" | "warning" | "critical";
-export type NotificationDeliveryStatus = "pending" | "sent" | "failed";
+export type NotificationDeliveryStatus = "pending" | "retrying" | "sent" | "failed" | "exhausted";
 export type AgentRunStatus = "queued" | "running" | "succeeded" | "failed" | "blocked";
+export type AgentTraceStageStatus = "pending" | "succeeded" | "failed" | "blocked";
+export type AgentRunMode = "simulation" | "runtime";
+export type AgentApprovalStatus = "not_required" | "pending" | "approved" | "rejected";
 
 export interface PlatformActor {
   email: string;
@@ -189,6 +195,12 @@ export interface LayoutBindingDefinition {
   viewKey?: string;
   promptAsset?: string;
   formKey?: string;
+}
+
+export interface ComponentPresetOverride {
+  presetKey: string;
+  stylePreset?: string;
+  props?: Record<string, unknown>;
 }
 
 export interface LayoutComponentDefinition {
@@ -484,6 +496,11 @@ export interface ModelCallNodeConfig {
   promptAsset?: string;
 }
 
+export interface SubflowNodeConfig {
+  workflowKey: string;
+  description?: string;
+}
+
 export type WorkflowNodeConfig =
   | ConditionNodeConfig
   | CrudNodeConfig
@@ -492,7 +509,8 @@ export type WorkflowNodeConfig =
   | NotificationNodeConfig
   | WaitNodeConfig
   | ApprovalNodeConfig
-  | ModelCallNodeConfig;
+  | ModelCallNodeConfig
+  | SubflowNodeConfig;
 
 export interface WorkflowNodeDefinition {
   id: string;
@@ -522,6 +540,36 @@ export interface WorkflowDefinition {
   triggers: TriggerDefinition[];
   nodes: WorkflowNodeDefinition[];
   edges: WorkflowEdgeDefinition[];
+}
+
+export interface WorkflowTemplateDefinition {
+  id: string;
+  key: string;
+  name: string;
+  description?: string;
+  workflow: WorkflowDefinition;
+  source: "platform" | "tenant";
+}
+
+export interface WorkflowTestCaseDefinition {
+  id: string;
+  key: string;
+  name: string;
+  workflowKey: string;
+  description?: string;
+  payload: Record<string, unknown>;
+  expectedStatus?: WorkflowRunStatus;
+  expectedLogFragments?: string[];
+  expectApproval?: boolean;
+  expectWait?: boolean;
+}
+
+export interface SubflowDefinition {
+  id: string;
+  key: string;
+  name: string;
+  description?: string;
+  workflowKey: string;
 }
 
 export interface ToolDefinition {
@@ -652,9 +700,57 @@ export interface NotificationDeliveryRecord {
   subject?: string;
   body: string;
   destination?: string;
+  provider?: string;
+  providerResponseSummary?: string | null;
+  attemptCount?: number;
+  maxAttempts?: number;
+  lastAttemptAt?: string | null;
+  nextRetryAt?: string | null;
+  disabledAt?: string | null;
+  resolvedPayload?: Record<string, unknown> | null;
   createdAt: string;
   deliveredAt?: string | null;
+  exhaustedAt?: string | null;
   errorMessage?: string | null;
+}
+
+export interface NotificationAttemptRecord {
+  id: string;
+  deliveryId: string;
+  eventId: string;
+  channelKey: string;
+  status: NotificationDeliveryStatus;
+  provider: string;
+  destination?: string;
+  attemptNumber: number;
+  lifecycleStage?: "attempt_started" | "attempt_succeeded" | "attempt_failed" | "exhausted";
+  responseSummary?: string | null;
+  errorMessage?: string | null;
+  createdAt: string;
+}
+
+export interface NotificationChannelHealth {
+  id: string;
+  channelKey: string;
+  status: "healthy" | "degraded" | "disabled";
+  successCount: number;
+  failureCount: number;
+  consecutiveFailures: number;
+  successRate: number;
+  lastDeliveredAt?: string | null;
+  lastFailedAt?: string | null;
+  disabledAt?: string | null;
+  updatedAt: string;
+}
+
+export interface NotificationRuleMatchRecord {
+  id: string;
+  eventId: string;
+  ruleKey: string;
+  templateKey: string;
+  matchedAt: string;
+  channelKeys: string[];
+  payload: Record<string, unknown>;
 }
 
 export interface DeadLetterRecord {
@@ -683,6 +779,9 @@ export interface PlatformApprovalTaskRecord {
   workflowKey: string;
   nodeId: string;
   nodeLabel: string;
+  taskType?: "workflow_node" | "agent_execution";
+  agentRunId?: string | null;
+  agentKey?: string | null;
   approverRole: PlatformRole;
   status: "pending" | "approved" | "rejected";
   instructions?: string | null;
@@ -722,9 +821,14 @@ export interface PlatformManifest {
   objects: ObjectDefinition[];
   layouts: LayoutDefinition[];
   pages: PageDefinition[];
+  pageTemplates: PlatformPageTemplate[];
+  sectionTemplates: PlatformSectionTemplate[];
   menus: MenuItemDefinition[];
   forms: FormDefinition[];
   workflows: WorkflowDefinition[];
+  workflowTemplates: WorkflowTemplateDefinition[];
+  subflows: SubflowDefinition[];
+  workflowTests: WorkflowTestCaseDefinition[];
   tools: ToolDefinition[];
   agents: AgentDefinition[];
   modelProviders: ModelProviderDefinition[];
@@ -787,6 +891,11 @@ export interface PlatformWorkflowRunRecord {
   input?: Record<string, unknown> | null;
   output?: Record<string, unknown> | null;
   logs: Array<Record<string, unknown>>;
+  parentWorkflowRunId?: string | null;
+  replayedFromRunId?: string | null;
+  pauseReason?: WorkflowPauseReason | null;
+  subflowRunId?: string | null;
+  nextRetryAt?: string | null;
   startedAt?: string | null;
   finishedAt?: string | null;
   createdAt: string;
@@ -819,6 +928,8 @@ export interface AgentRunRecord {
   agentId: string;
   agentKey: string;
   status: AgentRunStatus;
+  runMode: AgentRunMode;
+  approvalStatus: AgentApprovalStatus;
   input: Record<string, unknown>;
   output?: Record<string, unknown> | null;
   logs: Array<Record<string, unknown>>;
@@ -826,8 +937,39 @@ export interface AgentRunRecord {
   costUsd: number;
   tokensIn: number;
   tokensOut: number;
+  trace?: AgentTrace | null;
+  approvalTaskId?: string | null;
+  handoffWorkflowRunId?: string | null;
+  parentWorkflowRunId?: string | null;
+  outputValidationPassed?: boolean | null;
+  schemaValidation?: {
+    passed: boolean;
+    summary: string;
+  } | null;
   createdAt: string;
   completedAt?: string | null;
+}
+
+export interface AgentTraceStage {
+  stage: "policy_preflight" | "prompt_assembly" | "provider_execution" | "output_validation" | "workflow_handoff" | "cost_evaluation" | "audit";
+  status: AgentTraceStageStatus;
+  summary: string;
+  at: string;
+  meta?: Record<string, unknown>;
+}
+
+export interface AgentTrace {
+  stages: AgentTraceStage[];
+  promptBlockSummary: Array<{
+    id: string;
+    label: string;
+    kind: "system" | "policy" | "instruction" | "example";
+  }>;
+  policyDecisions: string[];
+  providerKey: string;
+  providerModel: string;
+  outputValidationPassed?: boolean;
+  handoffWorkflowKey?: string;
 }
 
 export interface AgentPlaygroundSession {
@@ -890,6 +1032,20 @@ export interface PlatformPublishPreview {
   };
   pageImpacts: PlatformPublishPageImpact[];
   routeImpacts: PlatformPublishRouteImpact[];
+}
+
+export interface PageDiagnostic {
+  id: string;
+  severity: DiagnosticSeverity;
+  category: "route" | "menu" | "binding" | "responsive" | "content" | "visibility";
+  message: string;
+}
+
+export interface WorkflowDiagnostic {
+  id: string;
+  severity: DiagnosticSeverity;
+  category: "trigger" | "graph" | "branching" | "subflow" | "binding" | "testing";
+  message: string;
 }
 
 export interface PlatformAgentPreview {
@@ -964,6 +1120,8 @@ export interface PlatformSectionTemplate {
   key: string;
   label: string;
   description: string;
+  source?: "platform" | "tenant";
+  presetOverrides?: ComponentPresetOverride[];
   section: Omit<LayoutSectionDefinition, "id" | "components"> & {
     components: Array<Omit<LayoutComponentDefinition, "id">>;
   };
@@ -973,6 +1131,7 @@ export interface PlatformPageTemplate {
   key: string;
   label: string;
   description: string;
+  presetOverrides?: ComponentPresetOverride[];
   page: Omit<PageDefinition, "id" | "route" | "layoutKey"> & { route?: string; layoutKey?: string };
   layout: Omit<LayoutDefinition, "id" | "pageKey" | "sections"> & {
     sections: Array<Omit<LayoutSectionDefinition, "id" | "components"> & { components: Array<Omit<LayoutComponentDefinition, "id">> }>;
@@ -984,6 +1143,28 @@ export interface PlatformDesignerCatalog {
   componentPresets: PlatformComponentPreset[];
   sectionTemplates: PlatformSectionTemplate[];
   pageTemplates: PlatformPageTemplate[];
+}
+
+export interface WorkflowRunDetail {
+  run: PlatformWorkflowRunRecord;
+  parentRun?: PlatformWorkflowRunRecord | null;
+  childRuns: PlatformWorkflowRunRecord[];
+  costs: CostLedgerRecord[];
+  alerts: PlatformAlertRecord[];
+  deliveries: NotificationDeliveryRecord[];
+  approvals: PlatformApprovalTaskRecord[];
+  deadLetters: DeadLetterRecord[];
+  relatedAgentRuns: AgentRunRecord[];
+}
+
+export interface AgentRunDetail {
+  run: AgentRunRecord;
+  costs: CostLedgerRecord[];
+  alerts: PlatformAlertRecord[];
+  deliveries: NotificationDeliveryRecord[];
+  approvals: PlatformApprovalTaskRecord[];
+  parentWorkflowRun?: PlatformWorkflowRunRecord | null;
+  handoffWorkflowRun?: PlatformWorkflowRunRecord | null;
 }
 
 export function cloneManifest(manifest: PlatformManifest): PlatformManifest {
