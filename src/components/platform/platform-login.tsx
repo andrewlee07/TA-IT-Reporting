@@ -184,7 +184,7 @@ export function PlatformLogin({ initialSession, inviteToken = "", requestedTenan
             ) : (
               <div className={styles.tileGrid}>
                 {orderedMemberships.map((membership) => (
-                  <article className={styles.metricCard} key={`${membership.tenantId}-${membership.role}`}>
+                  <article className={`${styles.metricCard} ${styles.staggerChild}`} key={`${membership.tenantId}-${membership.role}`}>
                     <span>{membership.role}</span>
                     <strong>{membership.tenantName}</strong>
                     <p className={styles.metricMeta}>{membership.tenantSlug}</p>

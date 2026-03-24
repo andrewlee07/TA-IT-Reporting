@@ -507,7 +507,7 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
           </div>
           <div className={styles.metricGrid}>
             {metrics.map((metric) => (
-              <article className={styles.metricCard} key={metric.label}>
+              <article className={`${styles.metricCard} ${styles.staggerChild}`} key={metric.label}>
                 <span>{metric.label}</span>
                 <strong>{metricValue(manifest, metric.metric)}</strong>
               </article>
@@ -670,7 +670,7 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
           </div>
           <div className={styles.listStack}>
             {workflows.map((workflow) => (
-              <article className={styles.runCard} key={workflow.id}>
+              <article className={`${styles.runCard} ${styles.staggerChild}`} key={workflow.id}>
                 <div className={styles.runCardHeader}>
                   <div>
                     <strong>{workflow.name}</strong>

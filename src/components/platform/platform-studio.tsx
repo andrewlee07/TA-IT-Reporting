@@ -702,8 +702,26 @@ export function PlatformStudio({
     if (danglingStep) {
       diagnostics.push(`Step "${danglingStep.title}" references a field key that is not defined.`);
     }
+    const duplicateFieldKeys = formDraft.fields
+      .map((field) => field.key.trim())
+      .filter(Boolean)
+      .filter((key, index, values) => values.indexOf(key) !== index);
+    if (duplicateFieldKeys.length > 0) {
+      diagnostics.push(`Field keys must be unique. Duplicate keys: ${[...new Set(duplicateFieldKeys)].join(", ")}.`);
+    }
+    const emptyStep = formDraft.steps.find((step) => step.fieldKeys.length === 0);
+    if (emptyStep) {
+      diagnostics.push(`Step "${emptyStep.title}" has no fields assigned.`);
+    }
+    const unassignedField = formDraft.fields.find((field) => !formDraft.steps.some((step) => step.fieldKeys.includes(field.key)));
+    if (unassignedField) {
+      diagnostics.push(`Field "${unassignedField.label}" is not assigned to any step.`);
+    }
     if (formDraft.requireAuthentication && formDraft.deliveryMode === "public") {
       diagnostics.push("Authenticated forms should not remain in public delivery mode.");
+    }
+    if (formDraft.saveAndResume && !formDraft.analyticsEnabled) {
+      diagnostics.push("Consider enabling analytics when save-and-resume is active so drop-off can be measured.");
     }
     return diagnostics;
   }, [formDraft]);
@@ -726,15 +744,35 @@ export function PlatformStudio({
         message: "Every section should contain at least one component.",
       });
     }
-    if (layoutDraft?.sections.some((section) => section.components.some((component) => component.placement.responsive.desktopSpan && component.placement.responsive.desktopSpan > 12))) {
+    if (
+      layoutDraft?.sections.some((section) =>
+        section.components.some((component) => {
+          const responsive = component.placement.responsive;
+          return (
+            (responsive.desktopSpan != null && responsive.desktopSpan > 12) ||
+            (responsive.tabletSpan != null && responsive.tabletSpan > 12) ||
+            (responsive.mobileSpan != null && responsive.mobileSpan > 12) ||
+            component.placement.span > 12
+          );
+        }),
+      )
+    ) {
       diagnostics.push({
         id: "page-responsive-span",
         severity: "blocking",
         category: "responsive",
-        message: "One or more components exceed the supported desktop span.",
+        message: "One or more components exceed the supported grid span for mobile, tablet, or desktop.",
       });
     }
-    if (layoutDraft?.sections.some((section) => section.components.some((component) => Boolean(component.visibilityRule?.expression) && component.visibilityRule?.expression?.trim().length === 0))) {
+    if (
+      layoutDraft?.sections.some((section) =>
+        section.components.some(
+          (component) =>
+            component.visibilityRule != null &&
+            (!component.visibilityRule.expression || component.visibilityRule.expression.trim().length === 0),
+        ),
+      )
+    ) {
       diagnostics.push({
         id: "page-visibility",
         severity: "warning",
@@ -742,13 +780,46 @@ export function PlatformStudio({
         message: "A component visibility rule is configured but empty.",
       });
     }
+    const componentMissingBinding = layoutDraft?.sections
+      .flatMap((section) => section.components)
+      .find((component) => {
+        if (component.kind === "record_table" || component.kind === "record_form" || component.kind === "related_records") {
+          return !(component.binding?.objectKey || component.objectKey || component.binding?.relatedObjectKey || component.relatedObjectKey);
+        }
+        if (component.kind === "workflow_launcher") {
+          return !(component.binding?.workflowKey || component.workflowKey);
+        }
+        if (component.kind === "agent_summary" || component.kind === "agent_panel") {
+          return !(component.binding?.agentId || component.agentId);
+        }
+        return false;
+      });
+    if (componentMissingBinding) {
+      diagnostics.push({
+        id: "page-binding",
+        severity: "blocking",
+        category: "binding",
+        message: `Component "${componentMissingBinding.title}" is missing its required runtime binding.`,
+      });
+    }
     const hasMenu = sortedMenus.some((menu) => menu.pageKey === (pageDraft.key || selectedPage?.key));
-    if (!hasMenu) {
+    if (!hasMenu && !pageDraft.isHome) {
       diagnostics.push({
         id: "page-menu",
         severity: "warning",
         category: "menu",
         message: "This page is not exposed in the runtime menu.",
+      });
+    }
+    const duplicateRoute = manifest.pages.find(
+      (page) => page.id !== (selectedPage?.id ?? pageDraft.id) && page.route.trim().toLowerCase() === pageDraft.route.trim().toLowerCase() && pageDraft.route.trim(),
+    );
+    if (duplicateRoute) {
+      diagnostics.push({
+        id: "page-duplicate-route",
+        severity: "blocking",
+        category: "route",
+        message: `Route /${pageDraft.route} is already owned by ${duplicateRoute.title}.`,
       });
     }
     const routeConflict = publishPreview?.routeImpacts.find((impact) => impact.pageKey === pageDraft.key && impact.status === "updated");
@@ -761,7 +832,7 @@ export function PlatformStudio({
       });
     }
     return diagnostics;
-  }, [layoutDraft, pageDraft.key, pageDraft.route, pageDraft.title, publishPreview?.routeImpacts, selectedPage?.key, sortedMenus]);
+  }, [layoutDraft, manifest.pages, pageDraft.id, pageDraft.isHome, pageDraft.key, pageDraft.route, pageDraft.title, publishPreview?.routeImpacts, selectedPage?.id, selectedPage?.key, sortedMenus]);
   const pageReadinessScore = useMemo(() => {
     return Math.max(
       0,
@@ -2527,7 +2598,7 @@ export function PlatformStudio({
             <div className={styles.listStack}>
               {manifest.pages.map((page) => (
                 <button
-                  className={page.id === selectedPage?.id ? styles.activeListItem : styles.listItem}
+                  className={`${page.id === selectedPage?.id ? styles.activeListItem : styles.listItem} ${styles.staggerChild}`}
                   key={page.id}
                   onClick={() => applySelectedPage(page)}
                   type="button"
@@ -2601,7 +2672,7 @@ export function PlatformStudio({
             </div>
             <div className={styles.tileGrid}>
               {bootstrap.designerCatalog.sectionTemplates.map((template) => (
-                <article className={styles.metricCard} key={template.key}>
+                <article className={`${styles.metricCard} ${styles.staggerChild}`} key={template.key}>
                   <span>{template.label}</span>
                   <strong>{template.section.components.length} components</strong>
                   <p className={styles.metricMeta}>{template.description}</p>
@@ -2669,7 +2740,7 @@ export function PlatformStudio({
           <div className={styles.listStack}>
             {manifest.pages.map((page) => (
               <button
-                className={page.id === selectedPage?.id ? styles.activeListItem : styles.listItem}
+                className={`${page.id === selectedPage?.id ? styles.activeListItem : styles.listItem} ${styles.staggerChild}`}
                 key={page.id}
                 onClick={() => applySelectedPage(page)}
                 type="button"
@@ -3015,7 +3086,7 @@ export function PlatformStudio({
             <div className={styles.listStack}>
               {bootstrap.designerCatalog.componentPresets.map((preset) => (
                 <button
-                  className={styles.listItem}
+                  className={`${styles.listItem} ${styles.staggerChild}`}
                   key={preset.key}
                   onClick={() => {
                     if (selectedSection) {
@@ -3071,7 +3142,7 @@ export function PlatformStudio({
           <div className={styles.listStack}>
             {manifest.forms.map((form) => (
               <button
-                className={form.id === selectedForm?.id ? styles.activeListItem : styles.listItem}
+                className={`${form.id === selectedForm?.id ? styles.activeListItem : styles.listItem} ${styles.staggerChild}`}
                 key={form.id}
                 onClick={() => {
                   setSelectedFormId(form.id);
@@ -3460,6 +3531,10 @@ export function PlatformStudio({
             <span>Assets</span>
             <strong>{manifest.branding.assets.length}</strong>
           </div>
+          <div className={styles.sidebarMeta}>
+            <span>Review state</span>
+            <strong>{brandingDraft.mode}</strong>
+          </div>
         </section>
         <section className={styles.panelWide}>
           {activeTab === 0 ? (
@@ -3471,6 +3546,29 @@ export function PlatformStudio({
                 </div>
                 <button className={styles.primaryButton} onClick={() => void handleBrandingSave()} type="button">
                   Save theme
+                </button>
+              </div>
+              <div className={styles.inlineList}>
+                <button
+                  className={brandingDraft.mode === "draft" ? styles.primaryButton : styles.secondaryButton}
+                  onClick={() => setBrandingDraft((current) => ({ ...current, mode: "draft" }))}
+                  type="button"
+                >
+                  Draft
+                </button>
+                <button
+                  className={brandingDraft.mode === "review" ? styles.primaryButton : styles.secondaryButton}
+                  onClick={() => setBrandingDraft((current) => ({ ...current, mode: "review" }))}
+                  type="button"
+                >
+                  Ready for review
+                </button>
+                <button
+                  className={brandingDraft.mode === "approved" ? styles.primaryButton : styles.secondaryButton}
+                  onClick={() => setBrandingDraft((current) => ({ ...current, mode: "approved" }))}
+                  type="button"
+                >
+                  Approved
                 </button>
               </div>
               <div className={styles.formGrid}>
@@ -3552,6 +3650,11 @@ export function PlatformStudio({
                   ) : (
                     <div className={styles.sidebarPanel}>Theme tokens are currently passing the core contrast checks used by shell, forms, and runtime pages.</div>
                   )}
+                  <div className={styles.sidebarPanel}>
+                    {brandingDraft.brandBookAssetId
+                      ? "A brand book is attached. Move the theme into review once the suggested tokens and accessibility checks look right."
+                      : "Attach a brand book to anchor review and approval against a source asset."}
+                  </div>
                 </article>
                 <article className={styles.scopeCard}>
                   <div className={styles.sectionHeader}>
@@ -3574,7 +3677,7 @@ export function PlatformStudio({
                     </div>
                     <div className={styles.tileGrid}>
                       {sortedMenus.slice(0, 4).map((menu) => (
-                        <article className={styles.metricCard} key={menu.id}>
+                        <article className={`${styles.metricCard} ${styles.staggerChild}`} key={menu.id}>
                           <span>{menu.group}</span>
                           <strong>{menu.label}</strong>
                           <p className={styles.metricMeta}>/{manifest.pages.find((page) => page.key === menu.pageKey)?.route ?? menu.pageKey}</p>
@@ -4079,6 +4182,24 @@ export function PlatformStudio({
     if (invalidConditionEdge) {
       workflowDiagnostics.push({ id: "workflow-branch-label", severity: "warning", category: "branching", message: `Condition node "${invalidConditionEdge.label}" has a branch label outside the supported set.` });
     }
+    const incompleteConditionNode = workflowDraft.nodes
+      .filter((node) => node.type === "condition")
+      .find((node) => {
+        const labels = workflowDraft.edges
+          .filter((edge) => edge.sourceId === node.id)
+          .map((edge) => (edge.label ?? "").trim().toLowerCase());
+        const hasPositive = labels.some((label) => ["true", "yes", "success", "match"].includes(label));
+        const hasNegative = labels.some((label) => ["false", "no", "failure", "else"].includes(label));
+        return !hasPositive || !hasNegative;
+      });
+    if (incompleteConditionNode) {
+      workflowDiagnostics.push({
+        id: "workflow-branch-coverage",
+        severity: "warning",
+        category: "branching",
+        message: `Condition node "${incompleteConditionNode.label}" should expose both positive and negative branches.`,
+      });
+    }
     const invalidSubflowNode = workflowDraft.nodes.find(
       (node) =>
         node.type === "subflow" &&
@@ -4089,6 +4210,66 @@ export function PlatformStudio({
     );
     if (invalidSubflowNode) {
       workflowDiagnostics.push({ id: "workflow-subflow", severity: "blocking", category: "subflow", message: `Subflow node "${invalidSubflowNode.label}" references an unknown workflow.` });
+    }
+    const selfReferentialSubflow = workflowDraft.nodes.find((node) => {
+      if (node.type !== "subflow") {
+        return false;
+      }
+      const subflowConfig = node.config as { workflowKey?: string };
+      return Boolean(subflowConfig.workflowKey) && (subflowConfig.workflowKey === workflowDraft.key || subflowConfig.workflowKey === selectedWorkflow?.id);
+    });
+    if (selfReferentialSubflow) {
+      workflowDiagnostics.push({
+        id: "workflow-subflow-self",
+        severity: "blocking",
+        category: "subflow",
+        message: `Subflow node "${selfReferentialSubflow.label}" cannot reference the workflow currently being edited.`,
+      });
+    }
+    const rootNodes = workflowDraft.nodes.filter((node) => !workflowDraft.edges.some((edge) => edge.targetId === node.id));
+    if (workflowDraft.nodes.length > 1 && rootNodes.length > 1) {
+      workflowDiagnostics.push({
+        id: "workflow-multiple-roots",
+        severity: "warning",
+        category: "graph",
+        message: "The graph has multiple root nodes. Consider a single entry path or explicit trigger fan-out.",
+      });
+    }
+    const reachableNodeIds = new Set<string>();
+    const stack = [...rootNodes.map((node) => node.id)];
+    while (stack.length > 0) {
+      const nextNodeId = stack.pop();
+      if (!nextNodeId || reachableNodeIds.has(nextNodeId)) {
+        continue;
+      }
+      reachableNodeIds.add(nextNodeId);
+      workflowDraft.edges
+        .filter((edge) => edge.sourceId === nextNodeId)
+        .forEach((edge) => {
+          if (!reachableNodeIds.has(edge.targetId)) {
+            stack.push(edge.targetId);
+          }
+        });
+    }
+    const unreachableNode = workflowDraft.nodes.find((node) => !reachableNodeIds.has(node.id));
+    if (unreachableNode) {
+      workflowDiagnostics.push({
+        id: "workflow-unreachable",
+        severity: "warning",
+        category: "graph",
+        message: `Node "${unreachableNode.label}" is not reachable from any root path.`,
+      });
+    }
+    const hasSavedTestCase = manifest.workflowTests.some(
+      (testCase: WorkflowTestCaseDefinition) => testCase.workflowKey === (workflowDraft.key || selectedWorkflow?.key),
+    );
+    if (workflowDraft.nodes.length > 0 && !hasSavedTestCase) {
+      workflowDiagnostics.push({
+        id: "workflow-test-case",
+        severity: "info",
+        category: "testing",
+        message: "Save at least one draft test case before publishing this workflow.",
+      });
     }
 
     return (
@@ -4111,7 +4292,7 @@ export function PlatformStudio({
               ) : (
                 manifest.workflowTemplates.slice(0, 6).map((template: WorkflowTemplateDefinition) => (
                   <button
-                    className={styles.listItem}
+                    className={`${styles.listItem} ${styles.staggerChild}`}
                     key={template.id}
                     onClick={() => {
                       setWorkflowDraft(structuredClone(template.workflow));
@@ -4130,7 +4311,7 @@ export function PlatformStudio({
           <div className={styles.listStack}>
             {manifest.workflows.map((workflow) => (
               <button
-                className={workflow.id === selectedWorkflow?.id ? styles.activeListItem : styles.listItem}
+                className={`${workflow.id === selectedWorkflow?.id ? styles.activeListItem : styles.listItem} ${styles.staggerChild}`}
                 key={workflow.id}
                 onClick={() => selectWorkflow(workflow)}
                 type="button"
@@ -6404,7 +6585,7 @@ export function PlatformStudio({
           <nav className={styles.navStack}>
             {WORKSPACES.map((entry) => (
               <button
-                className={entry.key === workspace ? styles.activeNavItem : styles.navItem}
+                className={`${entry.key === workspace ? styles.activeNavItem : styles.navItem} ${styles.staggerChild}`}
                 key={entry.key}
                 onClick={() => { setWorkspace(entry.key); setActiveTab(0); }}
                 type="button"
@@ -6512,6 +6693,13 @@ export function PlatformStudio({
               <h3>Next activation will create v{publishPreview.nextVersionNumber}</h3>
             </div>
             <div className={styles.previewMetrics}>
+              <div className={styles.previewMetric}>
+                <span>Branding</span>
+                <strong>
+                  +{publishPreview.summary.branding.added.length} / ~{publishPreview.summary.branding.updated.length} / -
+                  {publishPreview.summary.branding.removed.length}
+                </strong>
+              </div>
               <div className={styles.previewMetric}>
                 <span>Workflows</span>
                 <strong>

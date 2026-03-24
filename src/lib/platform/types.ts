@@ -1022,6 +1022,7 @@ export interface PlatformPublishPreview {
   nextVersionNumber: number;
   summary: {
     objects: PublishPreviewBucket;
+    branding: PublishPreviewBucket;
     pages: PublishPreviewBucket;
     layouts: PublishPreviewBucket;
     menus: PublishPreviewBucket;

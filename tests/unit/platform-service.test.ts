@@ -15,6 +15,7 @@ import {
   listLocalPlatformRecords,
   setLocalActiveVersion,
   upsertLocalDraft,
+  upsertLocalPlatformRecord,
 } from "@/lib/platform/local-store";
 import {
   acceptPlatformInvite,
@@ -32,6 +33,7 @@ import {
   savePageDefinition,
   savePlatformRecord,
   saveWorkflowDefinition,
+  runNotificationMaintenanceCycle,
 } from "@/lib/platform/service";
 import { runWorkflowWorkerCycle } from "@/lib/platform/worker";
 
@@ -269,6 +271,89 @@ describe("platform hardening and workflow depth", () => {
 
     expect(runs[0]?.status).toBe("SUCCEEDED");
     expect(runs[0]?.logs.length).toBeGreaterThan(0);
+  });
+
+  it("processes due notification retries from the maintenance cycle without a fresh outbox event", async () => {
+    const { tenant, environment } = await seedTenant({ tenantSlug: "notification-maintenance", activeVersion: true });
+
+    const eventRecord = await upsertLocalPlatformRecord({
+      tenantId: tenant.id,
+      environmentId: environment.id,
+      objectKey: "__system_outbox_event",
+      actor: {
+        email: "system@test.local",
+        name: "System",
+        role: "SUPER_ADMIN",
+      },
+      data: {
+        type: "workflow.run.updated",
+        source: "workflow",
+        resourceType: "workflow_run",
+        resourceId: "run_123",
+        tenantSlug: tenant.slug,
+        environmentSlug: environment.slug,
+        emittedAt: new Date().toISOString(),
+        processedAt: new Date().toISOString(),
+        payload: {
+          workflowKey: "booking_triage",
+          status: "FAILED",
+        },
+      },
+    });
+
+    await upsertLocalPlatformRecord({
+      tenantId: tenant.id,
+      environmentId: environment.id,
+      objectKey: "__system_notification_delivery",
+      actor: {
+        email: "system@test.local",
+        name: "System",
+        role: "SUPER_ADMIN",
+      },
+      data: {
+        eventId: eventRecord.id,
+        ruleKey: "workflow_run_changed",
+        channelKey: "in_app_primary",
+        templateKey: "workflow_run_status",
+        status: "retrying",
+        severity: "info",
+        subject: "Workflow update",
+        body: "booking_triage changed to FAILED.",
+        provider: "in_app",
+        attemptCount: 0,
+        maxAttempts: 1,
+        nextRetryAt: new Date(Date.now() - 60_000).toISOString(),
+        resolvedPayload: {
+          workflowKey: "booking_triage",
+          status: "FAILED",
+        },
+      },
+    });
+
+    const result = await runNotificationMaintenanceCycle();
+    expect(result.scopes).toBeGreaterThan(0);
+    expect(result.deliveries).toBe(1);
+
+    const deliveries = await listLocalPlatformRecords({
+      tenantId: tenant.id,
+      environmentId: environment.id,
+      objectKey: "__system_notification_delivery",
+    });
+    expect(deliveries[0]?.data.status).toBe("sent");
+
+    const attempts = await listLocalPlatformRecords({
+      tenantId: tenant.id,
+      environmentId: environment.id,
+      objectKey: "__system_notification_delivery_attempt",
+    });
+    expect(attempts.some((attempt) => attempt.data.lifecycleStage === "attempt_succeeded")).toBe(true);
+
+    const channelHealth = await listLocalPlatformRecords({
+      tenantId: tenant.id,
+      environmentId: environment.id,
+      objectKey: "__system_notification_channel_health",
+    });
+    expect(channelHealth[0]?.data.successCount).toBe(1);
   });
 
   it("allows builder-side agent preview on draft definitions and preserves the published flow", async () => {

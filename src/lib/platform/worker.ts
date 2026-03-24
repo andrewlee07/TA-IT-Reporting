@@ -29,6 +29,7 @@ import {
   getRuntimeManifest,
   processPendingOutboxEvents,
   queueWorkflowRun,
+  runNotificationMaintenanceCycle,
   validateAgentOutputSchema,
 } from "@/lib/platform/service";
 import { getPrisma } from "@/lib/prisma";
@@ -150,7 +151,27 @@ function appendLog(logs: Array<Record<string, unknown>>, level: string, message:
   ];
 }
 
-async function listSystemRecords(input: WorkflowRuntimeContext & { objectKey: string }) {
+async function listSystemRecords(input: WorkflowRuntimeContext & { objectKey: string; useDatabase: boolean }) {
+  if (input.useDatabase) {
+    const prisma = getPrisma();
+    const records = await prisma.platformRecord.findMany({
+      where: {
+        tenantId: input.tenantId,
+        environmentId: input.environmentId,
+        objectKey: input.objectKey,
+      },
+      orderBy: [{ updatedAt: "desc" }],
+    });
+
+    return records.map((record) => ({
+      id: record.id,
+      objectKey: record.objectKey,
+      data: (record.data as Record<string, unknown>) ?? {},
+      createdAt: record.createdAt.toISOString(),
+      updatedAt: record.updatedAt.toISOString(),
+    }));
+  }
+
   return listLocalPlatformRecords({
     tenantId: input.tenantId,
     environmentId: input.environmentId,
@@ -158,7 +179,29 @@ async function listSystemRecords(input: WorkflowRuntimeContext & { objectKey: st
   });
 }
 
-async function createSystemRecord(input: WorkflowRuntimeContext & { objectKey: string; data: Record<string, unknown> }) {
+async function createSystemRecord(input: WorkflowRuntimeContext & { objectKey: string; data: Record<string, unknown>; useDatabase: boolean }) {
+  if (input.useDatabase) {
+    const prisma = getPrisma();
+    const record = await prisma.platformRecord.create({
+      data: {
+        tenantId: input.tenantId,
+        environmentId: input.environmentId,
+        objectKey: input.objectKey,
+        data: toJsonValue(input.data),
+        createdByEmail: systemActor().email,
+        updatedByEmail: systemActor().email,
+      },
+    });
+
+    return {
+      id: record.id,
+      objectKey: record.objectKey,
+      data: (record.data as Record<string, unknown>) ?? {},
+      createdAt: record.createdAt.toISOString(),
+      updatedAt: record.updatedAt.toISOString(),
+    };
+  }
+
   return upsertLocalPlatformRecord({
     tenantId: input.tenantId,
     environmentId: input.environmentId,
@@ -168,7 +211,38 @@ async function createSystemRecord(input: WorkflowRuntimeContext & { objectKey: s
   });
 }
 
-async function updateSystemRecord(input: WorkflowRuntimeContext & { objectKey: string; recordId: string; data: Record<string, unknown> }) {
+async function updateSystemRecord(input: WorkflowRuntimeContext & { objectKey: string; recordId: string; data: Record<string, unknown>; useDatabase: boolean }) {
+  if (input.useDatabase) {
+    const prisma = getPrisma();
+    const existing = await prisma.platformRecord.findFirst({
+      where: {
+        id: input.recordId,
+        tenantId: input.tenantId,
+        environmentId: input.environmentId,
+        objectKey: input.objectKey,
+      },
+    });
+    if (!existing) {
+      throw new Error(`System record ${input.recordId} was not found for ${input.objectKey}.`);
+    }
+
+    const record = await prisma.platformRecord.update({
+      where: { id: existing.id },
+      data: {
+        data: toJsonValue(input.data),
+        updatedByEmail: systemActor().email,
+      },
+    });
+
+    return {
+      id: record.id,
+      objectKey: record.objectKey,
+      data: (record.data as Record<string, unknown>) ?? {},
+      createdAt: record.createdAt.toISOString(),
+      updatedAt: record.updatedAt.toISOString(),
+    };
+  }
+
   return upsertLocalPlatformRecord({
     tenantId: input.tenantId,
     environmentId: input.environmentId,
@@ -252,10 +326,18 @@ async function markDuePausedRunsQueued(context: WorkflowRuntimeContext, useDatab
   }
 }
 
-async function createApprovalTask(context: WorkflowRuntimeContext, run: WorkflowRunShape, node: WorkflowNodeDefinition, approverRole: "SUPER_ADMIN" | "BUILDER_ADMIN" | "USER", instructions?: string) {
+async function createApprovalTask(
+  context: WorkflowRuntimeContext,
+  run: WorkflowRunShape,
+  node: WorkflowNodeDefinition,
+  approverRole: "SUPER_ADMIN" | "BUILDER_ADMIN" | "USER",
+  instructions: string | undefined,
+  useDatabase: boolean,
+) {
   return createSystemRecord({
     ...context,
     objectKey: systemObjectKey("approvalTask"),
+    useDatabase,
     data: {
       workflowRunId: run.id,
       workflowKey: run.workflowKey,
@@ -268,10 +350,11 @@ async function createApprovalTask(context: WorkflowRuntimeContext, run: Workflow
   });
 }
 
-async function listApprovalTasksForRun(context: WorkflowRuntimeContext, workflowRunId: string) {
+async function listApprovalTasksForRun(context: WorkflowRuntimeContext, workflowRunId: string, useDatabase: boolean) {
   const records = await listSystemRecords({
     ...context,
     objectKey: systemObjectKey("approvalTask"),
+    useDatabase,
   });
   return records.filter((record) => record.data.workflowRunId === workflowRunId);
 }
@@ -347,10 +430,18 @@ async function persistLocalWorkflowRun(input: {
   });
 }
 
-async function recordDeadLetter(context: WorkflowRuntimeContext, eventId: string, type: string, reason: string, payload: Record<string, unknown>) {
+async function recordDeadLetter(
+  context: WorkflowRuntimeContext,
+  eventId: string,
+  type: string,
+  reason: string,
+  payload: Record<string, unknown>,
+  useDatabase: boolean,
+) {
   await createSystemRecord({
     ...context,
     objectKey: systemObjectKey("deadLetter"),
+    useDatabase,
     data: {
       eventId,
       type,
@@ -360,10 +451,17 @@ async function recordDeadLetter(context: WorkflowRuntimeContext, eventId: string
   });
 }
 
-async function recordRuntimeAlert(context: WorkflowRuntimeContext, title: string, summary: string, sourceId: string) {
+async function recordRuntimeAlert(
+  context: WorkflowRuntimeContext,
+  title: string,
+  summary: string,
+  sourceId: string,
+  useDatabase: boolean,
+) {
   await createSystemRecord({
     ...context,
     objectKey: systemObjectKey("alert"),
+    useDatabase,
     data: {
       category: "runtime",
       severity: "warning",
@@ -374,31 +472,35 @@ async function recordRuntimeAlert(context: WorkflowRuntimeContext, title: string
   });
 }
 
-async function recordNotificationDelivery(context: WorkflowRuntimeContext, data: Record<string, unknown>) {
+async function recordNotificationDelivery(context: WorkflowRuntimeContext, data: Record<string, unknown>, useDatabase: boolean) {
   await createSystemRecord({
     ...context,
     objectKey: systemObjectKey("delivery"),
+    useDatabase,
     data,
   });
 }
 
-async function recordAgentRun(context: WorkflowRuntimeContext, data: Record<string, unknown>, recordId?: string) {
+async function recordAgentRun(context: WorkflowRuntimeContext, data: Record<string, unknown>, useDatabase: boolean, recordId?: string) {
   const runRecord = recordId
     ? await updateSystemRecord({
         ...context,
         objectKey: systemObjectKey("agentRun"),
         recordId,
+        useDatabase,
         data,
       })
     : await createSystemRecord({
         ...context,
         objectKey: systemObjectKey("agentRun"),
+        useDatabase,
         data,
       });
 
   await createSystemRecord({
     ...context,
     objectKey: systemObjectKey("costLedger"),
+    useDatabase,
     data: {
       category: "agent_run",
       referenceId: runRecord.id,
@@ -538,33 +640,41 @@ async function executeWorkflowNode(input: {
           },
         },
       });
-      await recordNotificationDelivery(context, {
-        eventId: run.id,
-        ruleKey: `workflow-node-${node.id}`,
-        channelKey: deliveryChannel.key,
+      await recordNotificationDelivery(
+        context,
+        {
+          eventId: run.id,
+          ruleKey: `workflow-node-${node.id}`,
+          channelKey: deliveryChannel.key,
         templateKey: "workflow_node",
         status: "sent",
         severity: "info",
-        body,
-        subject: `${workflow.name} notification`,
-        destination: result.destination,
-        deliveredAt: result.deliveredAt,
-      });
+          body,
+          subject: `${workflow.name} notification`,
+          destination: result.destination,
+          deliveredAt: result.deliveredAt,
+        },
+        input.useDatabase,
+      );
       logs.push({ level: "info", message: `Notification ${node.label} delivered via ${kind}.`, at: nowIso() });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Notification delivery failed.";
-      await recordNotificationDelivery(context, {
-        eventId: run.id,
-        ruleKey: `workflow-node-${node.id}`,
-        channelKey: deliveryChannel.key,
+      await recordNotificationDelivery(
+        context,
+        {
+          eventId: run.id,
+          ruleKey: `workflow-node-${node.id}`,
+          channelKey: deliveryChannel.key,
         templateKey: "workflow_node",
         status: "failed",
         severity: "warning",
-        body,
-        subject: `${workflow.name} notification`,
-        destination,
-        errorMessage,
-      });
+          body,
+          subject: `${workflow.name} notification`,
+          destination,
+          errorMessage,
+        },
+        input.useDatabase,
+      );
       throw new Error(errorMessage);
     }
 
@@ -599,11 +709,11 @@ async function executeWorkflowNode(input: {
   }
 
   if (node.type === "approval" && "approverRole" in node.config) {
-    const existingTasks = await listApprovalTasksForRun(context, run.id);
+    const existingTasks = await listApprovalTasksForRun(context, run.id, input.useDatabase);
     const task = existingTasks.find((candidate) => candidate.data.nodeId === node.id);
 
     if (!task) {
-      const created = await createApprovalTask(context, run, node, node.config.approverRole, node.config.instructions);
+      const created = await createApprovalTask(context, run, node, node.config.approverRole, node.config.instructions, input.useDatabase);
       logs.push({ level: "info", message: `Approval task ${node.label} created.`, at: nowIso() });
       return {
         status: "PAUSED",
@@ -717,6 +827,7 @@ async function executeWorkflowNode(input: {
       ? await listSystemRecords({
           ...context,
           objectKey,
+          useDatabase: input.useDatabase,
         })
       : [];
     const prepared = prepareAgentInvocation({
@@ -732,7 +843,7 @@ async function executeWorkflowNode(input: {
       })),
     });
     const prompt = typeof state.context.prompt === "string" ? state.context.prompt : node.label;
-    const approvalTasks = await listApprovalTasksForRun(context, run.id);
+    const approvalTasks = await listApprovalTasksForRun(context, run.id, input.useDatabase);
     const agentApprovalTask = approvalTasks.find(
       (candidate) => candidate.data.nodeId === node.id && candidate.data.taskType === "agent_execution",
     );
@@ -740,10 +851,12 @@ async function executeWorkflowNode(input: {
     if (prepared.agent.approvalPolicy?.required && (!agentApprovalTask || agentApprovalTask.data.status === "pending")) {
       let agentRunId = state.pendingAgentRunId;
       if (!agentRunId) {
-        const blockedRun = await recordAgentRun(context, {
-          agentId: prepared.agent.id,
-          agentKey: prepared.agent.key,
-          status: "blocked",
+        const blockedRun = await recordAgentRun(
+          context,
+          {
+            agentId: prepared.agent.id,
+            agentKey: prepared.agent.key,
+            status: "blocked",
           runMode: "runtime",
           approvalStatus: "pending",
           input: {
@@ -785,7 +898,9 @@ async function executeWorkflowNode(input: {
             ] satisfies AgentTrace["stages"],
           }),
           completedAt: null,
-        });
+          },
+          input.useDatabase,
+        );
         agentRunId = blockedRun.id;
       }
 
@@ -794,6 +909,7 @@ async function executeWorkflowNode(input: {
         (await createSystemRecord({
           ...context,
           objectKey: systemObjectKey("approvalTask"),
+          useDatabase: input.useDatabase,
           data: {
             workflowRunId: run.id,
             workflowKey: workflow.key,
@@ -907,6 +1023,7 @@ async function executeWorkflowNode(input: {
           approvalTaskId: typeof agentApprovalTask?.id === "string" ? agentApprovalTask.id : null,
           completedAt: nowIso(),
         },
+        input.useDatabase,
         state.pendingAgentRunId,
       );
       throw error instanceof Error ? error : new Error(message);
@@ -1012,11 +1129,12 @@ async function executeWorkflowNode(input: {
         },
         completedAt: nowIso(),
       },
+      input.useDatabase,
       state.pendingAgentRunId,
     );
 
     if (!schemaValidation.passed) {
-      await recordRuntimeAlert(context, `Agent output validation failed for ${prepared.agent.key}`, schemaValidation.summary, run.id);
+      await recordRuntimeAlert(context, `Agent output validation failed for ${prepared.agent.key}`, schemaValidation.summary, run.id, input.useDatabase);
       throw new Error(schemaValidation.summary);
     }
 
@@ -1134,17 +1252,24 @@ async function processRun(input: {
 
       if (retries < 2) {
         await persist("QUEUED");
-        await recordRuntimeAlert(input.context, `Retry scheduled for ${node.label}`, errorMessage, input.run.id);
+        await recordRuntimeAlert(input.context, `Retry scheduled for ${node.label}`, errorMessage, input.run.id, input.useDatabase);
         await enqueueWorkflowRun(input.run.id).catch(() => undefined);
         return;
       }
 
-      await recordDeadLetter(input.context, input.run.id, input.workflow.key, errorMessage, {
-        nodeId: node.id,
-        nodeLabel: node.label,
-        workflowKey: input.workflow.key,
-      });
-      await recordRuntimeAlert(input.context, `Workflow failed at ${node.label}`, errorMessage, input.run.id);
+      await recordDeadLetter(
+        input.context,
+        input.run.id,
+        input.workflow.key,
+        errorMessage,
+        {
+          nodeId: node.id,
+          nodeLabel: node.label,
+          workflowKey: input.workflow.key,
+        },
+        input.useDatabase,
+      );
+      await recordRuntimeAlert(input.context, `Workflow failed at ${node.label}`, errorMessage, input.run.id, input.useDatabase);
       await persist("FAILED", true);
       return;
     }
@@ -1401,6 +1526,13 @@ export async function startPlatformWorker(intervalMs = 10_000): Promise<void> {
         if (outboxResults.processed > 0 || outboxResults.deliveries > 0 || outboxResults.alerts > 0) {
           console.log(
             `[platform-worker] processed ${outboxResults.processed} local outbox event(s), ${outboxResults.deliveries} deliveries, ${outboxResults.alerts} alerts`,
+          );
+        }
+      } else if (outboxWorker) {
+        const maintenanceResults = await runNotificationMaintenanceCycle();
+        if (maintenanceResults.deliveries > 0 || maintenanceResults.alerts > 0) {
+          console.log(
+            `[platform-worker] processed ${maintenanceResults.deliveries} scheduled delivery retry(s) across ${maintenanceResults.scopes} scope(s), ${maintenanceResults.alerts} alerts`,
           );
         }
       }

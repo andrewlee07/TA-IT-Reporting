@@ -36,9 +36,11 @@ import {
   getLocalTenantBySlug,
   getLocalUserByEmail,
   listLocalAuditEvents,
+  listLocalEnvironments,
   listLocalInvites,
   listLocalPlatformRecords,
   listLocalTenantMembershipSummariesForUser,
+  listLocalTenants,
   listLocalWorkflowRuns,
   listLocalVersions,
   setLocalActiveVersion,
@@ -124,6 +126,14 @@ interface PlatformContext {
   activeVersion: PlatformPublishedVersionRecord | null;
   versions: PlatformPublishedVersionRecord[];
   auditEvents: PlatformAuditEventRecord[];
+}
+
+function systemMaintenanceActor(): PlatformActor {
+  return {
+    email: "platform-worker@local.test",
+    name: "Platform Worker",
+    role: "SUPER_ADMIN",
+  };
 }
 
 type EditableFormFieldInput = Partial<Omit<FormFieldDefinition, "id" | "key">> &
@@ -961,6 +971,104 @@ async function getPlatformSessionSummary(input?: {
         memberships,
         source: identity.source,
       };
+    },
+  );
+}
+
+async function listNotificationMaintenanceScopes(): Promise<Array<{
+  context: PlatformContext;
+  manifest: PlatformManifest;
+}>> {
+  return withLocalFallback(
+    async () => {
+      const prisma = getPrisma();
+      const environments = await prisma.platformEnvironment.findMany({
+        include: {
+          tenant: true,
+          versions: {
+            where: {
+              status: "ACTIVE",
+            },
+            orderBy: [{ createdAt: "desc" }],
+            take: 1,
+          },
+        },
+      });
+
+      return environments
+        .filter((environment) => environment.versions[0]?.manifest)
+        .map((environment) => {
+          const activeVersion = environment.versions[0]!;
+          const manifest = ensureManifestConsistency(activeVersion.manifest as unknown as PlatformManifest);
+          return {
+            context: {
+              tenantId: environment.tenantId,
+              environmentId: environment.id,
+              tenant: {
+                ...toTenantSummary({
+                  id: environment.tenant.id,
+                  slug: environment.tenant.slug,
+                  name: environment.tenant.name,
+                  description: environment.tenant.description,
+                  environments: [{ slug: environment.slug, isDefault: environment.isDefault }],
+                }),
+                defaultEnvironmentSlug: environment.isDefault
+                  ? environment.slug
+                  : getEnv().PLATFORM_DEFAULT_ENVIRONMENT_SLUG,
+              },
+              environment: toEnvironmentSummary({
+                id: environment.id,
+                slug: environment.slug,
+                name: environment.name,
+                isDefault: environment.isDefault,
+              }),
+              actor: systemMaintenanceActor(),
+              draftManifest: manifest,
+              activeVersion: toVersionRecord(activeVersion),
+              versions: [toVersionRecord(activeVersion)],
+              auditEvents: [],
+            },
+            manifest,
+          };
+        });
+    },
+    async () => {
+      const tenants = await listLocalTenants();
+      const scopes: Array<{
+        context: PlatformContext;
+        manifest: PlatformManifest;
+      }> = [];
+
+      for (const tenant of tenants) {
+        const environments = await listLocalEnvironments(tenant.id);
+        for (const environment of environments) {
+          const activeVersion = await getLocalActiveVersion({
+            tenantId: tenant.id,
+            environmentId: environment.id,
+          });
+          if (!activeVersion) {
+            continue;
+          }
+
+          const manifest = ensureManifestConsistency(activeVersion.manifest);
+          scopes.push({
+            context: {
+              tenantId: tenant.id,
+              environmentId: environment.id,
+              tenant,
+              environment,
+              actor: systemMaintenanceActor(),
+              draftManifest: manifest,
+              activeVersion,
+              versions: [activeVersion],
+              auditEvents: [],
+            },
+            manifest,
+          });
+        }
+      }
+
+      return scopes;
     },
   );
 }
@@ -4258,6 +4366,12 @@ export async function getPublishPreview(input: {
         getKey: (item) => item.key,
         getLabel: (item) => item.label,
       }),
+      branding: diffPreviewBucket({
+        draftItems: [context.draftManifest.branding],
+        activeItems: activeManifest ? [activeManifest.branding] : [],
+        getKey: () => "tenant-branding",
+        getLabel: (item) => item.themeName,
+      }),
       pages: diffPreviewBucket({
         draftItems: context.draftManifest.pages,
         activeItems: activeManifest?.pages ?? [],
@@ -5095,6 +5209,31 @@ export async function processPendingOutboxEvents(input: {
     processed,
     deliveries: deliveries + retryResults.deliveries,
     alerts: alerts + retryResults.alerts,
+  };
+}
+
+export async function runNotificationMaintenanceCycle(): Promise<{
+  scopes: number;
+  deliveries: number;
+  alerts: number;
+}> {
+  const scopes = await listNotificationMaintenanceScopes();
+  let deliveries = 0;
+  let alerts = 0;
+
+  for (const scope of scopes) {
+    const result = await processDueNotificationRetries({
+      context: scope.context,
+      manifest: scope.manifest,
+    });
+    deliveries += result.deliveries;
+    alerts += result.alerts;
+  }
+
+  return {
+    scopes: scopes.length,
+    deliveries,
+    alerts,
   };
 }
 
