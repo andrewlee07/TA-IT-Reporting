@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useEffectEvent, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState, useTransition } from "react";
 
 import { createThemeAccessibilityReport, createThemeSuggestions } from "@/lib/platform/branding-review";
 import {
@@ -78,7 +78,7 @@ const WORKSPACES: Array<{ key: WorkspaceKey; label: string; note: string; code: 
   { key: "forms", label: "Forms", note: "Public forms, embedded intake flows, submissions", code: "FM" },
   { key: "branding", label: "Branding", note: "Tenant theme, logos, brand assets, shell identity", code: "BR" },
   { key: "profiles", label: "Profiles", note: "Profile pages, settings, admin view-as-user lens", code: "PF" },
-  { key: "navigation", label: "Shell", note: "Menus, shell chrome, quick actions, notification routing", code: "SH" },
+  { key: "navigation", label: "Navigation & Shell", note: "Menus, shell chrome, quick actions, notification routing", code: "SH" },
   { key: "workflows", label: "Workflows", note: "Visual graph metadata and execution scaffolding", code: "WF" },
   { key: "agents", label: "Agent Studio", note: "Prompt blocks, scope, tools, policy, handoffs", code: "AG" },
   { key: "control-tower", label: "Control Tower", note: "Agent runs, costs, alerts, deliveries, operator visibility", code: "CT" },
@@ -99,14 +99,73 @@ const WORKSPACE_TABS: Record<WorkspaceKey, string[]> = {
   forms: ["Builder", "Submissions"],
   branding: ["Theme", "Assets"],
   profiles: ["Experience", "View As"],
-  navigation: ["Menu Items", "Shell", "Notifications", "Routes"],
+  navigation: ["Menus", "App Chrome", "Notifications"],
   workflows: ["Definitions", "Runs"],
-  agents: ["Definitions", "Prompts", "Scope", "Simulate"],
-  "control-tower": ["Runs", "Costs", "Alerts", "Deliveries", "Approvals", "Dead Letters"],
+  agents: ["Agents", "Configure", "Test"],
+  "control-tower": ["Execution", "Alerts & Approvals", "Messaging"],
   models: ["Providers", "Configuration"],
-  security: ["Policies", "Access", "Masking Rules"],
+  security: ["Policies", "Roles & Access", "Data Masking"],
   audit: ["History", "Activity"],
 };
+
+type ToastKind = "success" | "error" | "info";
+
+interface ToastAction {
+  label: string;
+  onClick: () => void;
+  tone?: "default" | "danger";
+}
+
+interface ToastRecord {
+  id: string;
+  kind: ToastKind;
+  text: string;
+  createdAt: number;
+  dismissed: boolean;
+  paused: boolean;
+  durationMs: number;
+  remainingMs: number;
+  lastResumedAt: number;
+  cycle: number;
+  action?: ToastAction;
+  onExpire?: () => Promise<void> | void;
+}
+
+interface InlineUndoState {
+  key: string;
+  expiresAt: number;
+}
+
+function tabKeyFromLabel(label: string): string {
+  return label
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function getTabLabelFromKey(workspace: WorkspaceKey, key: string | null | undefined): number {
+  if (!key) {
+    return 0;
+  }
+
+  const index = WORKSPACE_TABS[workspace].findIndex((label) => tabKeyFromLabel(label) === key);
+  return index >= 0 ? index : 0;
+}
+
+function isValidCssColor(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  if (typeof CSS !== "undefined" && typeof CSS.supports === "function") {
+    return CSS.supports("color", trimmed);
+  }
+
+  return /^#([a-f0-9]{3}|[a-f0-9]{6}|[a-f0-9]{8})$/i.test(trimmed);
+}
 
 function createClientId(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
@@ -641,13 +700,13 @@ export function PlatformStudio({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [hasLoadedSidebarPreference, setHasLoadedSidebarPreference] = useState(false);
   const [activeTabByWorkspace, setActiveTabByWorkspace] = useState<Partial<Record<WorkspaceKey, number>>>({});
-  const [message, setMessage] = useState<string | null>(null);
-  const [messageExiting, setMessageExiting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [toasts, setToasts] = useState<ToastRecord[]>([]);
   const [confirmDialog, setConfirmDialog] = useState<{ title: string; message: string; confirmLabel: string; onConfirm: () => void } | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [commandPaletteQuery, setCommandPaletteQuery] = useState("");
   const [commandPaletteIndex, setCommandPaletteIndex] = useState(0);
+  const [commandPaletteRecentIds, setCommandPaletteRecentIds] = useState<string[]>([]);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [controlTowerFiltersExpanded, setControlTowerFiltersExpanded] = useState(false);
   const [controlTowerListLimits, setControlTowerListLimits] = useState({ workflowRuns: 12, costs: 12, alerts: 12, deliveries: 12, approvals: 12, deadLetters: 12 });
@@ -662,7 +721,23 @@ export function PlatformStudio({
     fromDate: "",
     toDate: "",
   });
+  const [scrolledPast, setScrolledPast] = useState(false);
+  const [pendingInlineDelete, setPendingInlineDelete] = useState<InlineUndoState | null>(null);
+  const [sectionActionMenuId, setSectionActionMenuId] = useState<string | null>(null);
+  const [hasHydratedUrlState, setHasHydratedUrlState] = useState(false);
+  const [isPublishPreviewLoading, setIsPublishPreviewLoading] = useState(false);
+  const [isControlTowerLoading, setIsControlTowerLoading] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const mainRef = useRef<HTMLElement | null>(null);
+  const previouslyFocusedElementRef = useRef<HTMLElement | null>(null);
+  const confirmDialogRef = useRef<HTMLDivElement | null>(null);
+  const confirmCancelButtonRef = useRef<HTMLButtonElement | null>(null);
+  const toastTimersRef = useRef<Map<string, number>>(new Map());
+  const toastsRef = useRef<ToastRecord[]>([]);
+  const studioUrlRef = useRef<string | null>(null);
+  const inlineDeleteTimerRef = useRef<number | null>(null);
+  const inlineDeleteActionRef = useRef<(() => void | Promise<void>) | null>(null);
+  const inlineDeleteIntervalRef = useRef<number | null>(null);
 
   const activeTab = activeTabByWorkspace[workspace] ?? 0;
   const setActiveTab = useCallback((index: number) => setActiveTabByWorkspace((prev) => ({ ...prev, [workspace]: index })), [workspace]);
@@ -933,16 +1008,354 @@ export function PlatformStudio({
     controlTowerFilters.fromDate !== "",
     controlTowerFilters.toDate !== "",
   ].filter(Boolean).length;
+  const visibleControlTowerApprovals = approvalTasks.filter((task) => task.status === "pending");
+
+  const dismissToast = useCallback((toastId: string, immediate = false) => {
+    const clearTimer = toastTimersRef.current.get(toastId);
+    if (clearTimer) {
+      window.clearTimeout(clearTimer);
+      toastTimersRef.current.delete(toastId);
+    }
+
+    setToasts((current) =>
+      current.map((toast) => (toast.id === toastId ? { ...toast, dismissed: true, paused: true } : toast)),
+    );
+
+    const remove = () => {
+      setToasts((current) => current.filter((toast) => toast.id !== toastId));
+    };
+
+    if (immediate) {
+      remove();
+      return;
+    }
+
+    window.setTimeout(remove, 220);
+  }, []);
+
+  const expireToast = useCallback(
+    async (toastId: string) => {
+      const toast = toastsRef.current.find((candidate) => candidate.id === toastId);
+      if (!toast) {
+        return;
+      }
+
+      try {
+        await toast.onExpire?.();
+      } catch (caughtError) {
+        const nextMessage = caughtError instanceof Error ? caughtError.message : "Action failed.";
+        const nextToastId = createClientId("toast");
+        setToasts((current) => [
+          ...current,
+          {
+            id: nextToastId,
+            kind: "error",
+            text: nextMessage,
+            createdAt: Date.now(),
+            dismissed: false,
+            paused: false,
+            durationMs: 6000,
+            remainingMs: 6000,
+            lastResumedAt: Date.now(),
+            cycle: 0,
+          },
+        ]);
+      } finally {
+        dismissToast(toastId);
+      }
+    },
+    [dismissToast],
+  );
+
+  const scheduleToastExpiry = useCallback(
+    (toastId: string, delay: number) => {
+      const existingTimer = toastTimersRef.current.get(toastId);
+      if (existingTimer) {
+        window.clearTimeout(existingTimer);
+      }
+
+      const nextTimer = window.setTimeout(() => {
+        void expireToast(toastId);
+      }, delay);
+      toastTimersRef.current.set(toastId, nextTimer);
+    },
+    [expireToast],
+  );
+
+  const addToast = useCallback(
+    (kind: ToastKind, text: string, options?: { durationMs?: number; action?: ToastAction; onExpire?: () => Promise<void> | void }) => {
+      const toastId = createClientId("toast");
+      const durationMs = options?.durationMs ?? 6000;
+      const now = Date.now();
+      setToasts((current) => [
+        ...current,
+        {
+          id: toastId,
+          kind,
+          text,
+          createdAt: now,
+          dismissed: false,
+          paused: false,
+          durationMs,
+          remainingMs: durationMs,
+          lastResumedAt: now,
+          cycle: 0,
+          action: options?.action,
+          onExpire: options?.onExpire,
+        },
+      ]);
+      scheduleToastExpiry(toastId, durationMs);
+      return toastId;
+    },
+    [scheduleToastExpiry],
+  );
+
+  const pauseToast = useCallback((toastId: string) => {
+    const toast = toastsRef.current.find((candidate) => candidate.id === toastId);
+    if (!toast || toast.paused || toast.dismissed) {
+      return;
+    }
+
+    const elapsed = Date.now() - toast.lastResumedAt;
+    const remainingMs = Math.max(0, toast.remainingMs - elapsed);
+    const existingTimer = toastTimersRef.current.get(toastId);
+    if (existingTimer) {
+      window.clearTimeout(existingTimer);
+      toastTimersRef.current.delete(toastId);
+    }
+
+    setToasts((current) =>
+      current.map((candidate) =>
+        candidate.id === toastId
+          ? {
+              ...candidate,
+              paused: true,
+              remainingMs,
+            }
+          : candidate,
+      ),
+    );
+  }, []);
+
+  const resumeToast = useCallback(
+    (toastId: string) => {
+      const toast = toastsRef.current.find((candidate) => candidate.id === toastId);
+      if (!toast || !toast.paused || toast.dismissed) {
+        return;
+      }
+
+      const now = Date.now();
+      setToasts((current) =>
+        current.map((candidate) =>
+          candidate.id === toastId
+            ? {
+                ...candidate,
+                paused: false,
+                lastResumedAt: now,
+                cycle: candidate.cycle + 1,
+              }
+            : candidate,
+        ),
+      );
+      scheduleToastExpiry(toastId, toast.remainingMs);
+    },
+    [scheduleToastExpiry],
+  );
+
+  const setMessage = useCallback(
+    (text: string | null) => {
+      if (text) {
+        addToast("success", text);
+      }
+    },
+    [addToast],
+  );
+
+  const setError = useCallback(
+    (text: string | null) => {
+      if (text) {
+        addToast("error", text);
+      }
+    },
+    [addToast],
+  );
+
+  const applyStudioUrlState = useEffectEvent((searchParams: URLSearchParams): void => {
+    const nextWorkspaceParam = searchParams.get("workspace");
+    const nextWorkspace = WORKSPACES.some((entry) => entry.key === nextWorkspaceParam)
+      ? (nextWorkspaceParam as WorkspaceKey)
+      : workspace;
+    setWorkspace(nextWorkspace);
+
+    const nextTabKey = searchParams.get("tab");
+    if (nextTabKey) {
+      setActiveTabByWorkspace((current) => ({
+        ...current,
+        [nextWorkspace]: getTabLabelFromKey(nextWorkspace, nextTabKey),
+      }));
+    }
+
+    const objectId = searchParams.get("objectId");
+    const pageId = searchParams.get("pageId");
+    const formId = searchParams.get("formId");
+    const workflowId = searchParams.get("workflowId");
+    const agentId = searchParams.get("agentId");
+    const sectionId = searchParams.get("sectionId");
+    const componentId = searchParams.get("componentId");
+    const device = searchParams.get("device");
+    const detailType = searchParams.get("detailType");
+    const detailId = searchParams.get("detailId");
+
+    const nextObject = manifest.objects.find((candidate) => candidate.id === objectId);
+    if (nextObject) {
+      setSelectedObjectId(nextObject.id);
+      setObjectDraft(createObjectDraftFromDefinition(nextObject));
+    }
+
+    const nextPage = manifest.pages.find((candidate) => candidate.id === pageId);
+    if (nextPage) {
+      const nextLayout = structuredClone(manifest.layouts.find((candidate) => candidate.key === nextPage.layoutKey) ?? createBlankLayout(nextPage.key, nextPage.title));
+      setSelectedPageId(nextPage.id);
+      setPageDraft(createPageDraftFromDefinition(nextPage));
+      setLayoutDraft(nextLayout);
+      setSelectedSectionId(nextLayout.sections[0]?.id ?? sectionId ?? "");
+      setSelectedComponentId(nextLayout.sections[0]?.components[0]?.id ?? componentId ?? "");
+      setDesignerHistory([]);
+      setDesignerDirty(false);
+      setAutosaveStatus("idle");
+    }
+
+    const nextForm = manifest.forms.find((candidate) => candidate.id === formId);
+    if (nextForm) {
+      setSelectedFormId(nextForm.id);
+      setFormDraft(createFormDraftFromDefinition(nextForm));
+      void refreshFormSubmissions(nextForm.key);
+    }
+
+    const nextWorkflow = manifest.workflows.find((candidate) => candidate.id === workflowId);
+    if (nextWorkflow) {
+      setSelectedWorkflowId(nextWorkflow.id);
+      setSelectedWorkflowNodeId(nextWorkflow.nodes[0]?.id ?? "");
+      setWorkflowDraft(createWorkflowDraftFromDefinition(nextWorkflow));
+      setWorkflowEdgeDraft({
+        sourceId: nextWorkflow.nodes[0]?.id ?? "",
+        targetId: nextWorkflow.nodes[1]?.id ?? nextWorkflow.nodes[0]?.id ?? "",
+        label: "",
+      });
+    }
+
+    const nextAgent = manifest.agents.find((candidate) => candidate.id === agentId);
+    if (nextAgent) {
+      setSelectedAgentId(nextAgent.id);
+      setAgentDraft(createAgentDraftFromDefinition(nextAgent));
+      setAgentPreview(null);
+    }
+
+    if (sectionId) {
+      setSelectedSectionId(sectionId);
+    }
+
+    if (componentId) {
+      setSelectedComponentId(componentId);
+    }
+
+    if (device === "desktop" || device === "tablet" || device === "mobile") {
+      setPreviewDevice(device);
+    }
+
+    setControlTowerFilters({
+      status: searchParams.get("status") ?? "all",
+      workflowKey: searchParams.get("workflowKey") ?? "",
+      agentKey: searchParams.get("agentKey") ?? "",
+      severity: searchParams.get("severity") ?? "all",
+      fromDate: searchParams.get("fromDate") ?? "",
+      toDate: searchParams.get("toDate") ?? "",
+    });
+
+    if (
+      detailId &&
+      detailType &&
+      ["workflow-run", "agent-run", "delivery", "alert", "approval", "dead-letter"].includes(detailType)
+    ) {
+      setControlTowerSelection({ type: detailType as ControlTowerSelectionType, id: detailId });
+      setControlTowerDetail(null);
+    }
+  });
+
+  const buildStudioUrl = useEffectEvent((): string => {
+    const params = new URLSearchParams();
+    params.set("workspace", workspace);
+    params.set("tab", tabKeyFromLabel(WORKSPACE_TABS[workspace][activeTab] ?? WORKSPACE_TABS[workspace][0]));
+
+    if (selectedObjectId) params.set("objectId", selectedObjectId);
+    if (selectedPageId) params.set("pageId", selectedPageId);
+    if (selectedFormId) params.set("formId", selectedFormId);
+    if (selectedWorkflowId) params.set("workflowId", selectedWorkflowId);
+    if (selectedAgentId) params.set("agentId", selectedAgentId);
+    if (selectedSectionId) params.set("sectionId", selectedSectionId);
+    if (selectedComponentId) params.set("componentId", selectedComponentId);
+    if (previewDevice !== "desktop") params.set("device", previewDevice);
+
+    if (controlTowerFilters.status !== "all") params.set("status", controlTowerFilters.status);
+    if (controlTowerFilters.workflowKey) params.set("workflowKey", controlTowerFilters.workflowKey);
+    if (controlTowerFilters.agentKey) params.set("agentKey", controlTowerFilters.agentKey);
+    if (controlTowerFilters.severity !== "all") params.set("severity", controlTowerFilters.severity);
+    if (controlTowerFilters.fromDate) params.set("fromDate", controlTowerFilters.fromDate);
+    if (controlTowerFilters.toDate) params.set("toDate", controlTowerFilters.toDate);
+
+    if (controlTowerSelection) {
+      params.set("detailType", controlTowerSelection.type);
+      params.set("detailId", controlTowerSelection.id);
+    }
+
+    const query = params.toString();
+    return `${window.location.pathname}${query ? `?${query}` : ""}`;
+  });
 
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
     }
 
-    const nextUrl = new URL(window.location.href);
-    nextUrl.searchParams.set("workspace", workspace);
-    window.history.replaceState({}, "", nextUrl);
-  }, [workspace]);
+    const handlePopState = () => {
+      applyStudioUrlState(new URLSearchParams(window.location.search));
+      studioUrlRef.current = `${window.location.pathname}${window.location.search}`;
+    };
+
+    applyStudioUrlState(new URLSearchParams(window.location.search));
+    studioUrlRef.current = `${window.location.pathname}${window.location.search}`;
+    setHasHydratedUrlState(true);
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [manifest.agents, manifest.forms, manifest.objects, manifest.pages, manifest.workflows]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !hasHydratedUrlState) {
+      return;
+    }
+
+    const nextUrl = buildStudioUrl();
+    if (studioUrlRef.current === nextUrl) {
+      return;
+    }
+
+    window.history.pushState({}, "", nextUrl);
+    studioUrlRef.current = nextUrl;
+  }, [
+    activeTab,
+    controlTowerFilters,
+    controlTowerSelection,
+    hasHydratedUrlState,
+    previewDevice,
+    selectedAgentId,
+    selectedComponentId,
+    selectedFormId,
+    selectedObjectId,
+    selectedPageId,
+    selectedSectionId,
+    selectedWorkflowId,
+    workspace,
+  ]);
 
   useEffect(() => {
     try {
@@ -966,67 +1379,183 @@ export function PlatformStudio({
     }
   }, [hasLoadedSidebarPreference, sidebarCollapsed]);
 
-  // Auto-dismiss success banners after 4s
   useEffect(() => {
-    if (!message) return;
-    const exitTimer = setTimeout(() => setMessageExiting(true), 3600);
-    const clearTimer = setTimeout(() => { setMessage(null); setMessageExiting(false); }, 4000);
-    return () => { clearTimeout(exitTimer); clearTimeout(clearTimer); };
-  }, [message]);
+    toastsRef.current = toasts;
+  }, [toasts]);
 
-  // Command palette keyboard listener
   useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      const meta = event.metaKey || event.ctrlKey;
-      const tag = (document.activeElement?.tagName ?? "").toLowerCase();
-      const isInput = tag === "input" || tag === "textarea" || tag === "select";
+    const timers = toastTimersRef.current;
+    return () => {
+      for (const timer of timers.values()) {
+        window.clearTimeout(timer);
+      }
+      if (inlineDeleteTimerRef.current) {
+        window.clearTimeout(inlineDeleteTimerRef.current);
+      }
+      if (inlineDeleteIntervalRef.current) {
+        window.clearInterval(inlineDeleteIntervalRef.current);
+      }
+    };
+  }, []);
 
-      // Cmd+K opens palette
-      if (meta && event.key === "k") {
-        event.preventDefault();
-        setCommandPaletteOpen((prev) => !prev);
-        setCommandPaletteQuery("");
-        setCommandPaletteIndex(0);
+  useEffect(() => {
+    if (!confirmDialog) {
+      return;
+    }
+
+    window.setTimeout(() => {
+      confirmCancelButtonRef.current?.focus();
+    }, 0);
+  }, [confirmDialog]);
+
+  useEffect(() => {
+    if (!confirmDialog || !confirmDialogRef.current) {
+      return;
+    }
+
+    function handleFocusTrap(event: KeyboardEvent) {
+      if (event.key !== "Tab" || !confirmDialogRef.current) {
         return;
       }
 
-      // Escape closes palette
-      if (event.key === "Escape" && commandPaletteOpen) {
-        event.preventDefault();
-        setCommandPaletteOpen(false);
+      const focusable = [...confirmDialogRef.current.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+        .filter((candidate) => !candidate.hasAttribute("disabled"));
+
+      if (focusable.length === 0) {
         return;
       }
 
-      // Escape closes confirm dialog
-      if (event.key === "Escape" && confirmDialog) {
-        event.preventDefault();
-        setConfirmDialog(null);
-        return;
-      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const activeElement = document.activeElement as HTMLElement | null;
 
-      // Keyboard shortcuts (only when no input focused and palette closed)
-      if (!isInput && !commandPaletteOpen && meta) {
-        const digitMatch = event.key.match(/^([1-9])$/);
-        if (digitMatch) {
-          const index = Number(digitMatch[1]) - 1;
-          if (index < WORKSPACES.length) {
-            event.preventDefault();
-            setWorkspace(WORKSPACES[index].key);
-            setWorkspaceTransitionKey((prev) => prev + 1);
-          }
-        }
+      if (event.shiftKey && activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && activeElement === last) {
+        event.preventDefault();
+        first.focus();
       }
     }
 
+    document.addEventListener("keydown", handleFocusTrap);
+    return () => document.removeEventListener("keydown", handleFocusTrap);
+  }, [confirmDialog]);
+
+  useEffect(() => {
+    if (!sectionActionMenuId) {
+      return;
+    }
+
+    function handlePointerDown(event: MouseEvent) {
+      const target = event.target;
+      if (!(target instanceof HTMLElement) || !target.closest("[data-section-menu-root]")) {
+        setSectionActionMenuId(null);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [sectionActionMenuId]);
+
+  useEffect(() => {
+    function handleScroll() {
+      setScrolledPast(window.scrollY > 100);
+    }
+
+    handleScroll();
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  const handleGlobalKeyDown = useEffectEvent((event: KeyboardEvent) => {
+    const meta = event.metaKey || event.ctrlKey;
+    const tag = (document.activeElement?.tagName ?? "").toLowerCase();
+    const isInput = tag === "input" || tag === "textarea" || tag === "select";
+
+    if (meta && event.key === "k") {
+      event.preventDefault();
+      setCommandPaletteOpen((prev) => !prev);
+      setCommandPaletteQuery("");
+      setCommandPaletteIndex(0);
+      return;
+    }
+
+    if (meta && event.key === "s") {
+      event.preventDefault();
+      handleSaveShortcut();
+      return;
+    }
+
+    if (meta && event.key === "\\") {
+      event.preventDefault();
+      setSidebarCollapsed((current) => !current);
+      return;
+    }
+
+    if (meta && event.key === ".") {
+      event.preventDefault();
+      cycleWorkspaceTab();
+      return;
+    }
+
+    if (event.key === "Escape" && commandPaletteOpen) {
+      event.preventDefault();
+      closeCommandPalette();
+      return;
+    }
+
+    if (event.key === "Escape" && confirmDialog) {
+      event.preventDefault();
+      closeConfirmDialog();
+      return;
+    }
+
+    if (event.key === "Escape" && shortcutsOpen) {
+      event.preventDefault();
+      setShortcutsOpen(false);
+      previouslyFocusedElementRef.current?.focus();
+      return;
+    }
+
+    if (event.key === "Escape" && sectionActionMenuId) {
+      event.preventDefault();
+      setSectionActionMenuId(null);
+      return;
+    }
+
+    if (event.key === "Escape" && !isInput) {
+      deselectCurrentSelection();
+    }
+
+    if (!isInput && !commandPaletteOpen && meta) {
+      const digitMatch = event.key.match(/^([1-9])$/);
+      if (digitMatch) {
+        const index = Number(digitMatch[1]) - 1;
+        if (index < WORKSPACES.length) {
+          event.preventDefault();
+          selectWorkspace(WORKSPACES[index].key);
+        }
+      }
+    }
+  });
+
+  // Command palette keyboard listener
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => handleGlobalKeyDown(event);
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [commandPaletteOpen, confirmDialog]);
+  }, []);
 
   // Load collapsed groups from localStorage
   useEffect(() => {
     try {
       const stored = window.localStorage.getItem("ta-platform-collapsed-groups");
       if (stored) setCollapsedGroups(new Set(JSON.parse(stored) as string[]));
+      const storedRecents = window.localStorage.getItem("ta-platform-command-recents");
+      if (storedRecents) {
+        setCommandPaletteRecentIds(JSON.parse(storedRecents) as string[]);
+      }
     } catch { /* optional */ }
   }, []);
 
@@ -1034,15 +1563,19 @@ export function PlatformStudio({
   useEffect(() => {
     try {
       window.localStorage.setItem("ta-platform-collapsed-groups", JSON.stringify([...collapsedGroups]));
+      window.localStorage.setItem("ta-platform-command-recents", JSON.stringify(commandPaletteRecentIds));
     } catch { /* optional */ }
-  }, [collapsedGroups]);
+  }, [collapsedGroups, commandPaletteRecentIds]);
 
   const refreshPublishPreview = useCallback(async (): Promise<void> => {
+    setIsPublishPreviewLoading(true);
     try {
       const payload = await fetchJson<{ preview: PlatformPublishPreview }>(`/api/platform/tenants/${bootstrap.tenant.slug}/publish/preview`);
       setPublishPreview(payload.preview);
     } catch {
       setPublishPreview(null);
+    } finally {
+      setIsPublishPreviewLoading(false);
     }
   }, [bootstrap.tenant.slug]);
 
@@ -1069,6 +1602,7 @@ export function PlatformStudio({
   }, [bootstrap.tenant.slug]);
 
   const refreshControlTower = useCallback(async (): Promise<void> => {
+    setIsControlTowerLoading(true);
     try {
       const [workflowRunsPayload, runsPayload, costsPayload, alertsPayload, deliveriesPayload, approvalsPayload, deadLettersPayload] = await Promise.all([
         fetchJson<{ runs: PlatformWorkflowRunRecord[] }>(`/api/platform/tenants/${bootstrap.tenant.slug}/workflow-runs`),
@@ -1096,6 +1630,8 @@ export function PlatformStudio({
       setNotificationDeliveries([]);
       setApprovalTasks([]);
       setDeadLetters([]);
+    } finally {
+      setIsControlTowerLoading(false);
     }
   }, [bootstrap.tenant.slug]);
 
@@ -2191,6 +2727,54 @@ export function PlatformStudio({
     setSelectedComponentId("");
   }
 
+  function clearInlineDelete(showCancelledToast = false): void {
+    if (inlineDeleteTimerRef.current) {
+      window.clearTimeout(inlineDeleteTimerRef.current);
+      inlineDeleteTimerRef.current = null;
+    }
+    if (inlineDeleteIntervalRef.current) {
+      window.clearInterval(inlineDeleteIntervalRef.current);
+      inlineDeleteIntervalRef.current = null;
+    }
+    inlineDeleteActionRef.current = null;
+    setPendingInlineDelete(null);
+    if (showCancelledToast) {
+      addToast("info", "Delete cancelled.");
+    }
+  }
+
+  function scheduleInlineDelete(key: string, label: string, action: () => void | Promise<void>): void {
+    clearInlineDelete(false);
+    const expiresAt = Date.now() + 5000;
+    inlineDeleteActionRef.current = action;
+    setPendingInlineDelete({ key, expiresAt });
+    inlineDeleteIntervalRef.current = window.setInterval(() => {
+      setPendingInlineDelete((current) => (current ? { ...current } : current));
+    }, 250);
+    inlineDeleteTimerRef.current = window.setTimeout(() => {
+      const nextAction = inlineDeleteActionRef.current;
+      clearInlineDelete(false);
+      void Promise.resolve(nextAction?.()).catch((caughtError) => {
+        setError(caughtError instanceof Error ? caughtError.message : "Delete failed.");
+      });
+    }, 5000);
+    addToast("info", `${label} queued for deletion.`, {
+      durationMs: 5000,
+      action: {
+        label: "Undo",
+        onClick: () => clearInlineDelete(true),
+      },
+    });
+  }
+
+  function inlineDeleteCountdown(key: string): number | null {
+    if (!pendingInlineDelete || pendingInlineDelete.key !== key) {
+      return null;
+    }
+
+    return Math.max(1, Math.ceil((pendingInlineDelete.expiresAt - Date.now()) / 1000));
+  }
+
   function duplicateComponent(sectionId: string, componentId: string): void {
     updateLayoutSection(sectionId, (section) => {
       const source = section.components.find((component) => component.id === componentId);
@@ -2306,6 +2890,23 @@ export function PlatformStudio({
     });
   }
 
+  function selectObject(objectDefinition?: ObjectDefinition): void {
+    const nextObject = objectDefinition ?? manifest.objects[0];
+    setSelectedObjectId(nextObject?.id ?? "");
+    setObjectDraft(createObjectDraftFromDefinition(nextObject));
+  }
+
+  function selectForm(form?: FormDefinition): void {
+    const nextForm = form ?? manifest.forms[0];
+    setSelectedFormId(nextForm?.id ?? "");
+    setFormDraft(createFormDraftFromDefinition(nextForm));
+    if (nextForm?.key) {
+      void refreshFormSubmissions(nextForm.key);
+    } else {
+      setFormSubmissions([]);
+    }
+  }
+
   function selectWorkflow(workflow?: WorkflowDefinition): void {
     if (!workflow) {
       setSelectedWorkflowId("");
@@ -2336,6 +2937,116 @@ export function PlatformStudio({
     setSelectedAgentId(agent.id);
     setAgentDraft(createAgentDraftFromDefinition(agent));
     setAgentPreview(null);
+  }
+
+  function selectWorkspace(nextWorkspace: WorkspaceKey): void {
+    setWorkspace(nextWorkspace);
+    setWorkspaceTransitionKey((prev) => prev + 1);
+  }
+
+  function cycleWorkspaceTab(): void {
+    const nextTabIndex = (activeTab + 1) % WORKSPACE_TABS[workspace].length;
+    setActiveTab(nextTabIndex);
+  }
+
+  function deselectCurrentSelection(): void {
+    if (workspace === "data-model") {
+      selectObject(undefined);
+      return;
+    }
+
+    if (workspace === "pages") {
+      applySelectedPage(undefined);
+      return;
+    }
+
+    if (workspace === "forms") {
+      selectForm(undefined);
+      return;
+    }
+
+    if (workspace === "workflows") {
+      selectWorkflow(undefined);
+      return;
+    }
+
+    if (workspace === "agents") {
+      selectAgent(undefined);
+      return;
+    }
+
+    if (workspace === "control-tower") {
+      setControlTowerSelection(null);
+      setControlTowerDetail(null);
+    }
+  }
+
+  function handleSaveShortcut(): void {
+    if (workspace === "data-model") {
+      void handleObjectSave();
+      return;
+    }
+
+    if (workspace === "pages") {
+      void handleLayoutSave();
+      return;
+    }
+
+    if (workspace === "forms") {
+      void handleFormSave();
+      return;
+    }
+
+    if (workspace === "branding") {
+      void handleBrandingSave();
+      return;
+    }
+
+    if (workspace === "profiles") {
+      void handleProfileSave();
+      return;
+    }
+
+    if (workspace === "navigation") {
+      if (activeTab === 0) {
+        void handleMenuSave();
+      } else if (activeTab === 1) {
+        void handleAppShellSave();
+      } else {
+        void handleNotificationsSave();
+      }
+      return;
+    }
+
+    if (workspace === "workflows") {
+      void handleWorkflowSave();
+      return;
+    }
+
+    if (workspace === "agents") {
+      void handleAgentSave();
+      return;
+    }
+
+    if (workspace === "models") {
+      void handleProviderSave();
+      return;
+    }
+
+    if (workspace === "security") {
+      void handleSecuritySave();
+    }
+  }
+
+  function recordPaletteAction(itemId: string): void {
+    setCommandPaletteRecentIds((current) => [itemId, ...current.filter((candidate) => candidate !== itemId)].slice(0, 5));
+  }
+
+  function closeCommandPalette(): void {
+    setCommandPaletteOpen(false);
+    window.setTimeout(() => {
+      previouslyFocusedElementRef.current?.focus();
+    }, 0);
   }
 
   function updateWorkflowNode(nodeId: string, updater: (node: WorkflowNodeDefinition) => WorkflowNodeDefinition): void {
@@ -2485,19 +3196,54 @@ export function PlatformStudio({
 
   // ── Confirm dialog helper ──
   function requestConfirmation(title: string, msg: string, confirmLabel: string, onConfirm: () => void) {
+    if (typeof document !== "undefined" && document.activeElement instanceof HTMLElement) {
+      previouslyFocusedElementRef.current = document.activeElement;
+    }
     setConfirmDialog({ title, message: msg, confirmLabel, onConfirm });
+  }
+
+  function closeConfirmDialog(): void {
+    setConfirmDialog(null);
+    window.setTimeout(() => {
+      previouslyFocusedElementRef.current?.focus();
+    }, 0);
   }
 
   function renderConfirmDialog() {
     if (!confirmDialog) return null;
     return (
-      <div className={styles.confirmOverlay} onClick={() => setConfirmDialog(null)} role="presentation">
-        <div className={styles.confirmDialog} onClick={(event) => event.stopPropagation()} role="dialog" aria-label={confirmDialog.title}>
+      <div className={styles.confirmOverlay} onClick={closeConfirmDialog} role="presentation">
+        <div
+          aria-label={confirmDialog.title}
+          aria-modal="true"
+          className={styles.confirmDialog}
+          onClick={(event) => event.stopPropagation()}
+          ref={confirmDialogRef}
+          role="alertdialog"
+        >
+          <div className={styles.confirmIconDanger} aria-hidden="true">
+            <svg fill="none" viewBox="0 0 20 20">
+              <path d="M10 2.2 18 17H2L10 2.2Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
+              <path d="M10 7v4.2" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6" />
+              <circle cx="10" cy="13.8" fill="currentColor" r="1" />
+            </svg>
+          </div>
           <h3>{confirmDialog.title}</h3>
           <p>{confirmDialog.message}</p>
           <div className={styles.confirmActions}>
-            <button className={styles.confirmCancelButton} onClick={() => setConfirmDialog(null)} type="button">Cancel</button>
-            <button className={styles.confirmDangerButton} onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(null); }} type="button">{confirmDialog.confirmLabel}</button>
+            <button className={styles.confirmCancelButton} onClick={closeConfirmDialog} ref={confirmCancelButtonRef} type="button">
+              Cancel
+            </button>
+            <button
+              className={styles.confirmDangerButton}
+              onClick={() => {
+                confirmDialog.onConfirm();
+                closeConfirmDialog();
+              }}
+              type="button"
+            >
+              {confirmDialog.confirmLabel}
+            </button>
           </div>
         </div>
       </div>
@@ -2505,127 +3251,265 @@ export function PlatformStudio({
   }
 
   // ── Command palette ──
-  const commandPaletteItems = useMemo(() => {
-    type PaletteItem = { label: string; hint: string; code: string; action: () => void };
+  const commandPaletteItems = (() => {
+    type PaletteItem = { id: string; label: string; hint: string; code: string; category: string; action: () => void };
     const items: PaletteItem[] = [];
 
-    // Workspaces
     for (const entry of WORKSPACES) {
       items.push({
+        id: `workspace:${entry.key}`,
         label: entry.label,
         hint: `Workspace · ${entry.note}`,
         code: entry.code,
-        action: () => { setWorkspace(entry.key); setWorkspaceTransitionKey((prev) => prev + 1); },
+        category: "Workspaces",
+        action: () => selectWorkspace(entry.key),
       });
     }
 
-    // Sub-tabs
     for (const entry of WORKSPACES) {
       const tabs = WORKSPACE_TABS[entry.key];
-      for (let i = 0; i < tabs.length; i++) {
+      for (let index = 0; index < tabs.length; index += 1) {
         items.push({
-          label: `${entry.label} > ${tabs[i]}`,
+          id: `tab:${entry.key}:${tabKeyFromLabel(tabs[index])}`,
+          label: `${entry.label} > ${tabs[index]}`,
           hint: `Tab in ${entry.label}`,
           code: entry.code,
-          action: () => { setWorkspace(entry.key); setActiveTab(i); setWorkspaceTransitionKey((prev) => prev + 1); },
+          category: "Sections",
+          action: () => {
+            selectWorkspace(entry.key);
+            setActiveTab(index);
+          },
         });
       }
     }
 
-    // Objects
-    for (const obj of manifest.objects) {
+    for (const objectDefinition of manifest.objects) {
       items.push({
-        label: obj.label,
-        hint: `Object · ${obj.fields.length} fields`,
+        id: `object:${objectDefinition.id}`,
+        label: objectDefinition.label,
+        hint: `Object · ${objectDefinition.fields.length} fields`,
         code: "DM",
-        action: () => { setWorkspace("data-model"); setSelectedObjectId(obj.id); setWorkspaceTransitionKey((prev) => prev + 1); },
+        category: "Objects",
+        action: () => {
+          selectWorkspace("data-model");
+          selectObject(objectDefinition);
+        },
       });
     }
 
-    // Pages
     for (const page of manifest.pages) {
       items.push({
+        id: `page:${page.id}`,
         label: page.title,
         hint: `Page · /${page.route}`,
         code: "PG",
-        action: () => { setWorkspace("pages"); setSelectedPageId(page.id); setWorkspaceTransitionKey((prev) => prev + 1); },
+        category: "Pages",
+        action: () => {
+          selectWorkspace("pages");
+          applySelectedPage(page);
+        },
       });
     }
 
-    // Forms
-    for (const form of manifest.forms) {
+    for (const workflow of manifest.workflows) {
       items.push({
-        label: form.title,
-        hint: `Form · /${form.route}`,
-        code: "FM",
-        action: () => { setWorkspace("forms"); setSelectedFormId(form.id); setWorkspaceTransitionKey((prev) => prev + 1); },
-      });
-    }
-
-    // Workflows
-    for (const wf of manifest.workflows) {
-      items.push({
-        label: wf.name,
-        hint: `Workflow · ${wf.nodes.length} nodes`,
+        id: `workflow:${workflow.id}`,
+        label: workflow.name,
+        hint: `Workflow · ${workflow.nodes.length} nodes`,
         code: "WF",
-        action: () => { setWorkspace("workflows"); setSelectedWorkflowId(wf.id); setWorkspaceTransitionKey((prev) => prev + 1); },
+        category: "Workflows",
+        action: () => {
+          selectWorkspace("workflows");
+          selectWorkflow(workflow);
+        },
       });
     }
 
-    // Agents
     for (const agent of manifest.agents) {
       items.push({
+        id: `agent:${agent.id}`,
         label: agent.name,
         hint: `Agent · ${agent.scope}`,
         code: "AG",
-        action: () => { setWorkspace("agents"); setSelectedAgentId(agent.id); setWorkspaceTransitionKey((prev) => prev + 1); },
+        category: "Agents",
+        action: () => {
+          selectWorkspace("agents");
+          selectAgent(agent);
+        },
       });
     }
 
     return items;
-  }, [manifest.objects, manifest.pages, manifest.forms, manifest.workflows, manifest.agents, setActiveTab]);
+  })();
+
+  const recentPaletteItems = useMemo(() => {
+    return commandPaletteRecentIds
+      .map((itemId) => commandPaletteItems.find((item) => item.id === itemId))
+      .filter((item): item is NonNullable<typeof item> => Boolean(item));
+  }, [commandPaletteItems, commandPaletteRecentIds]);
 
   const filteredPaletteItems = useMemo(() => {
-    if (!commandPaletteQuery.trim()) return commandPaletteItems.slice(0, 20);
+    if (!commandPaletteQuery.trim()) {
+      return commandPaletteItems.slice(0, 18);
+    }
+
     const q = commandPaletteQuery.toLowerCase();
-    return commandPaletteItems.filter((item) => item.label.toLowerCase().includes(q) || item.hint.toLowerCase().includes(q)).slice(0, 15);
+    return commandPaletteItems
+      .filter((item) => item.label.toLowerCase().includes(q) || item.hint.toLowerCase().includes(q))
+      .slice(0, 20);
   }, [commandPaletteItems, commandPaletteQuery]);
 
-  function renderCommandPalette() {
-    if (!commandPaletteOpen) return null;
+  const groupedPaletteItems = useMemo(() => {
+    const groups = new Map<string, typeof filteredPaletteItems>();
+    for (const item of filteredPaletteItems) {
+      groups.set(item.category, [...(groups.get(item.category) ?? []), item]);
+    }
+    return [...groups.entries()];
+  }, [filteredPaletteItems]);
+
+  function renderShortcutsDialog() {
+    if (!shortcutsOpen) {
+      return null;
+    }
+
     return (
-      <div className={styles.commandPaletteOverlay} onClick={() => setCommandPaletteOpen(false)} role="presentation">
+      <div
+        className={styles.confirmOverlay}
+        onClick={() => {
+          setShortcutsOpen(false);
+          previouslyFocusedElementRef.current?.focus();
+        }}
+        role="presentation"
+      >
+        <div aria-label="Keyboard shortcuts" aria-modal="true" className={styles.confirmDialog} onClick={(event) => event.stopPropagation()} role="dialog">
+          <h3>Keyboard Shortcuts</h3>
+          <div className={styles.listStack}>
+            {[
+              ["⌘ K", "Open the command palette"],
+              ["⌘ S", "Save the active draft"],
+              ["⌘ \\", "Toggle the sidebar"],
+              ["⌘ .", "Cycle to the next tab"],
+              ["Esc", "Deselect the current item or close overlays"],
+            ].map(([key, meaning]) => (
+              <div className={styles.sidebarMeta} key={key}>
+                <span>{meaning}</span>
+                <strong>{key}</strong>
+              </div>
+            ))}
+          </div>
+          <div className={styles.confirmActions}>
+            <button
+              className={styles.confirmCancelButton}
+              onClick={() => {
+                setShortcutsOpen(false);
+                previouslyFocusedElementRef.current?.focus();
+              }}
+              type="button"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderCommandPalette() {
+    if (!commandPaletteOpen) {
+      return null;
+    }
+
+    return (
+      <div className={styles.commandPaletteOverlay} onClick={closeCommandPalette} role="presentation">
         <div className={styles.commandPaletteDialog} onClick={(event) => event.stopPropagation()} role="dialog" aria-label="Command palette">
           <input
             autoFocus
             className={styles.commandPaletteInput}
-            onChange={(event) => { setCommandPaletteQuery(event.target.value); setCommandPaletteIndex(0); }}
-            onKeyDown={(event) => {
-              if (event.key === "ArrowDown") { event.preventDefault(); setCommandPaletteIndex((prev) => Math.min(prev + 1, filteredPaletteItems.length - 1)); }
-              else if (event.key === "ArrowUp") { event.preventDefault(); setCommandPaletteIndex((prev) => Math.max(prev - 1, 0)); }
-              else if (event.key === "Enter" && filteredPaletteItems[commandPaletteIndex]) { event.preventDefault(); filteredPaletteItems[commandPaletteIndex].action(); setCommandPaletteOpen(false); }
+            onChange={(event) => {
+              setCommandPaletteQuery(event.target.value);
+              setCommandPaletteIndex(0);
             }}
-            placeholder="Jump to workspace, object, page, workflow, agent..."
+            onKeyDown={(event) => {
+              const flatItems = commandPaletteQuery.trim()
+                ? filteredPaletteItems
+                : [...recentPaletteItems, ...filteredPaletteItems.filter((item) => !recentPaletteItems.some((recent) => recent.id === item.id))];
+              if (event.key === "ArrowDown") {
+                event.preventDefault();
+                setCommandPaletteIndex((prev) => Math.min(prev + 1, Math.max(0, flatItems.length - 1)));
+              } else if (event.key === "ArrowUp") {
+                event.preventDefault();
+                setCommandPaletteIndex((prev) => Math.max(prev - 1, 0));
+              } else if (event.key === "Enter" && flatItems[commandPaletteIndex]) {
+                event.preventDefault();
+                recordPaletteAction(flatItems[commandPaletteIndex].id);
+                flatItems[commandPaletteIndex].action();
+                closeCommandPalette();
+              }
+            }}
+            placeholder="Search workspaces, pages, workflows, and agents…"
             value={commandPaletteQuery}
           />
           <div className={styles.commandPaletteResults}>
-            {filteredPaletteItems.length === 0 ? (
+            {!commandPaletteQuery.trim() && recentPaletteItems.length > 0 ? (
+              <>
+                <div className={styles.commandPaletteSectionHeader}>Recent</div>
+                {recentPaletteItems.map((item, index) => (
+                  <button
+                    className={index === commandPaletteIndex ? styles.commandPaletteResultActive : styles.commandPaletteResult}
+                    key={`recent-${item.id}`}
+                    onClick={() => {
+                      recordPaletteAction(item.id);
+                      item.action();
+                      closeCommandPalette();
+                    }}
+                    onMouseEnter={() => setCommandPaletteIndex(index)}
+                    type="button"
+                  >
+                    <span className={styles.commandPaletteRecent}>Recent</span>
+                    <span className={styles.commandPaletteResultIcon}>{item.code}</span>
+                    <div className={styles.commandPaletteResultCopy}>
+                      <span>{item.label}</span>
+                      <small>{item.hint}</small>
+                    </div>
+                  </button>
+                ))}
+              </>
+            ) : null}
+
+            {groupedPaletteItems.length === 0 ? (
               <div className={styles.commandPaletteEmpty}>No results found.</div>
             ) : (
-              filteredPaletteItems.map((item, index) => (
-                <div
-                  className={index === commandPaletteIndex ? styles.commandPaletteResultActive : styles.commandPaletteResult}
-                  key={`${item.code}-${item.label}`}
-                  onClick={() => { item.action(); setCommandPaletteOpen(false); }}
-                  onMouseEnter={() => setCommandPaletteIndex(index)}
-                  role="option"
-                  aria-selected={index === commandPaletteIndex}
-                >
-                  <span className={styles.commandPaletteResultIcon}>{item.code}</span>
-                  <div className={styles.commandPaletteResultCopy}>
-                    <span>{item.label}</span>
-                    <small>{item.hint}</small>
-                  </div>
+              groupedPaletteItems.map(([category, items], groupIndex) => (
+                <div key={category}>
+                  <div className={styles.commandPaletteSectionHeader}>{category}</div>
+                  {items.map((item, itemIndex) => {
+                    const absoluteIndex =
+                      (!commandPaletteQuery.trim() ? recentPaletteItems.length : 0) +
+                      groupedPaletteItems
+                        .slice(0, groupIndex)
+                        .reduce((count, [, previousItems]) => count + previousItems.length, 0) +
+                      itemIndex;
+
+                    return (
+                      <button
+                        className={absoluteIndex === commandPaletteIndex ? styles.commandPaletteResultActive : styles.commandPaletteResult}
+                        key={item.id}
+                        onClick={() => {
+                          recordPaletteAction(item.id);
+                          item.action();
+                          closeCommandPalette();
+                        }}
+                        onMouseEnter={() => setCommandPaletteIndex(absoluteIndex)}
+                        type="button"
+                      >
+                        <span className={styles.commandPaletteResultIcon}>{item.code}</span>
+                        <div className={styles.commandPaletteResultCopy}>
+                          <span>{item.label}</span>
+                          <small>{item.hint}</small>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               ))
             )}
@@ -2633,38 +3517,167 @@ export function PlatformStudio({
           <div className={styles.commandPaletteFooter}>
             <span><kbd>↑↓</kbd> navigate</span>
             <span><kbd>↵</kbd> select</span>
-            <span><kbd>esc</kbd> close</span>
+            <button
+              className={styles.commandPaletteFooterButton}
+              onClick={() => {
+                if (typeof document !== "undefined" && document.activeElement instanceof HTMLElement) {
+                  previouslyFocusedElementRef.current = document.activeElement;
+                }
+                setShortcutsOpen(true);
+              }}
+              type="button"
+            >
+              Keyboard shortcuts
+            </button>
           </div>
         </div>
       </div>
     );
   }
 
-  // ── Loading skeleton helper ──
-  function renderSkeleton(rows: number) {
-    return Array.from({ length: rows }, (_, i) => (
-      <div className={styles.skeletonRow} key={i}>
+  function renderToastStack() {
+    if (toasts.length === 0) {
+      return null;
+    }
+
+    return (
+      <div aria-live="polite" className={styles.toastStack}>
+        {toasts.map((toast) => (
+          <article
+            className={[
+              styles.toast,
+              toast.kind === "success" ? styles.toastSuccess : toast.kind === "error" ? styles.toastError : styles.toastInfo,
+              toast.dismissed ? styles.toastExit : styles.toastEnter,
+            ].join(" ")}
+            key={toast.id}
+            onMouseEnter={() => pauseToast(toast.id)}
+            onMouseLeave={() => resumeToast(toast.id)}
+          >
+            <div className={styles.toastCopy}>
+              <strong>{toast.kind === "success" ? "Success" : toast.kind === "error" ? "Error" : "Heads up"}</strong>
+              <p>{toast.text}</p>
+            </div>
+            <div className={styles.toastActions}>
+              {toast.action ? (
+                <button
+                  className={styles.toastUndoButton}
+                  onClick={() => {
+                    toast.action?.onClick();
+                    dismissToast(toast.id, true);
+                  }}
+                  type="button"
+                >
+                  {toast.action.label}
+                </button>
+              ) : null}
+              <button aria-label="Dismiss notification" className={styles.toastDismiss} onClick={() => dismissToast(toast.id, Boolean(toast.onExpire))} type="button">
+                <svg fill="none" viewBox="0 0 16 16">
+                  <path d="m4 4 8 8M12 4 4 12" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />
+                </svg>
+              </button>
+            </div>
+            <div
+              className={styles.toastProgressBar}
+              key={`${toast.id}-${toast.cycle}`}
+              style={{
+                animationDuration: `${toast.remainingMs}ms`,
+                animationPlayState: toast.paused ? "paused" : "running",
+              }}
+            />
+          </article>
+        ))}
+      </div>
+    );
+  }
+
+  function renderSkeleton(rows: number, asCard = false) {
+    return Array.from({ length: rows }, (_, index) => (
+      <div className={asCard ? styles.skeletonCard : styles.skeletonRow} key={index}>
         <div className={`${styles.skeleton} ${styles.skeletonWide}`} />
         <div className={`${styles.skeleton} ${styles.skeletonNarrow}`} />
       </div>
     ));
   }
 
+  function renderEmptyState(
+    icon: "database" | "workflow" | "agent" | "shield" | "inbox",
+    title: string,
+    hint: string,
+    ctaLabel?: string,
+    ctaAction?: () => void,
+  ) {
+    const iconMarkup =
+      icon === "workflow" ? (
+        <svg fill="none" viewBox="0 0 24 24">
+          <path d="M6 6h4v4H6zM14 14h4v4h-4zM14 6h4v4h-4zM10 8h4M16 10v4" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
+        </svg>
+      ) : icon === "agent" ? (
+        <svg fill="none" viewBox="0 0 24 24">
+          <path d="M9 18h6M8 6h8M7 9h10v6H7zM12 4v2M9 13h.01M15 13h.01" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
+        </svg>
+      ) : icon === "shield" ? (
+        <svg fill="none" viewBox="0 0 24 24">
+          <path d="m12 3 7 3v5c0 4.3-2.6 7.3-7 10-4.4-2.7-7-5.7-7-10V6l7-3Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
+        </svg>
+      ) : icon === "inbox" ? (
+        <svg fill="none" viewBox="0 0 24 24">
+          <path d="M4 6h16v10H15l-2 3-2-3H4z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
+        </svg>
+      ) : (
+        <svg fill="none" viewBox="0 0 24 24">
+          <path d="M5 6h14v12H5zM9 10h6M9 14h4" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
+        </svg>
+      );
+
+    return (
+      <div className={styles.emptyState}>
+        <div className={styles.emptyStateIcon} aria-hidden="true">
+          {iconMarkup}
+        </div>
+        <p>{title}</p>
+        <p className={styles.emptyStateHint}>{hint}</p>
+        {ctaLabel && ctaAction ? (
+          <button className={styles.emptyStateCta} onClick={ctaAction} type="button">
+            {ctaLabel}
+          </button>
+        ) : null}
+      </div>
+    );
+  }
+
+  function getTabBadge(workspaceKey: WorkspaceKey, index: number): { value: string; danger?: boolean } | null {
+    if (workspaceKey === "control-tower" && index === 1 && filteredAlerts.length > 0) {
+      return { value: String(filteredAlerts.length) };
+    }
+    if (workspaceKey === "control-tower" && index === 2 && deadLetters.length > 0) {
+      return { value: String(deadLetters.length), danger: true };
+    }
+    if (workspaceKey === "agents" && index === 2 && agentRuns.filter((run) => run.agentId === agentDraft.id).length > 0) {
+      return { value: String(agentRuns.filter((run) => run.agentId === agentDraft.id).length) };
+    }
+    return null;
+  }
+
   function renderTabBar() {
     const tabs = WORKSPACE_TABS[workspace];
     return (
-      <div className={styles.tabBar}>
-        {tabs.map((tabLabel, index) => (
-          <button
-            className={index === activeTab ? styles.activeTab : styles.tab}
-            key={tabLabel}
-            onClick={() => setActiveTab(index)}
-            type="button"
-          >
-            {tabLabel}
-            {workspace === "pages" && index === 0 && designerDirty ? <span className={styles.unsavedDot} title="Unsaved changes" /> : null}
-          </button>
-        ))}
+      <div className={[styles.tabBar, styles.tabBarSticky, scrolledPast ? styles.tabBarCompact : ""].join(" ")}>
+        {tabs.map((tabLabel, index) => {
+          const badge = getTabBadge(workspace, index);
+          return (
+            <button
+              className={index === activeTab ? styles.activeTab : styles.tab}
+              data-tooltip={tabLabel}
+              key={tabLabel}
+              onClick={() => setActiveTab(index)}
+              type="button"
+            >
+              {tabLabel}
+              {workspace === "pages" && index === 0 && designerDirty ? <span className={styles.unsavedDot} data-tooltip="Unsaved changes" /> : null}
+              {badge ? <span className={badge.danger ? styles.tabBadgeDanger : styles.tabBadge}>{badge.value}</span> : null}
+            </button>
+          );
+        })}
       </div>
     );
   }
@@ -2700,6 +3713,7 @@ export function PlatformStudio({
               manifest.objects.map((objectDefinition) => (
                 <button
                   className={`${objectDefinition.id === selectedObject?.id ? styles.activeListItem : styles.listItem} ${styles.staggerChild}`}
+                  data-object-list-id={objectDefinition.id}
                   key={objectDefinition.id}
                   onClick={() => {
                     setSelectedObjectId(objectDefinition.id);
@@ -2798,8 +3812,21 @@ export function PlatformStudio({
                         {field.key} · {field.type} · {field.sensitivity}
                       </p>
                     </div>
-                    <button className={styles.ghostButtonDanger} onClick={() => requestConfirmation("Delete field", `Remove "${field.label}" from this object? This cannot be undone.`, "Delete", () => void handleFieldDelete(field.id))} type="button">
-                      Delete
+                    <button
+                      className={inlineDeleteCountdown(`object-field-${field.id}`) ? styles.ghostButton : styles.ghostButtonDanger}
+                      onClick={() => {
+                        if (inlineDeleteCountdown(`object-field-${field.id}`)) {
+                          clearInlineDelete(true);
+                          return;
+                        }
+
+                        scheduleInlineDelete(`object-field-${field.id}`, `${field.label} field`, () => handleFieldDelete(field.id));
+                      }}
+                      type="button"
+                    >
+                      {inlineDeleteCountdown(`object-field-${field.id}`)
+                        ? `Undo (${inlineDeleteCountdown(`object-field-${field.id}`)}s)`
+                        : "Delete"}
                     </button>
                   </div>
                 ))}
@@ -3026,24 +4053,36 @@ export function PlatformStudio({
           </div>
 
           <div className={styles.listStack}>
-            {manifest.pages.map((page) => {
-              const pageLayout = manifest.layouts.find((l) => l.key === page.layoutKey);
-              return (
-                <button
-                  className={`${page.id === selectedPage?.id ? styles.activeListItem : styles.listItem} ${styles.staggerChild}`}
-                  key={page.id}
-                  onClick={() => applySelectedPage(page)}
-                  type="button"
-                >
-                  <span>{page.title}</span>
-                  <div className={styles.listItemMeta}>
-                    <span className={styles.metaBadge}>/{page.route}</span>
-                    {pageLayout ? <span className={styles.metaBadge}>{pageLayout.sections.length} sections</span> : null}
-                    {page.isHome ? <span className={styles.metaBadge}>Home</span> : null}
-                  </div>
-                </button>
-              );
-            })}
+            {manifest.pages.length === 0
+              ? renderEmptyState("database", "No pages yet.", "Create your first page to start shaping the runtime navigation and layout.", "New page", () => {
+                  pushDesignerHistory();
+                  setSelectedPageId("");
+                  setPageDraft(createBlankPageDraft());
+                  const blankLayout = createBlankLayout(createClientId("page"), "New page");
+                  setLayoutDraft(blankLayout);
+                  setSelectedSectionId(blankLayout.sections[0]?.id ?? "");
+                  setSelectedComponentId(blankLayout.sections[0]?.components[0]?.id ?? "");
+                  markDesignerDirty();
+                })
+              : manifest.pages.map((page) => {
+                  const pageLayout = manifest.layouts.find((l) => l.key === page.layoutKey);
+                  return (
+                    <button
+                      className={`${page.id === selectedPage?.id ? styles.activeListItem : styles.listItem} ${styles.staggerChild}`}
+                      data-page-tree-id={page.id}
+                      key={page.id}
+                      onClick={() => applySelectedPage(page)}
+                      type="button"
+                    >
+                      <span>{page.title}</span>
+                      <div className={styles.listItemMeta}>
+                        <span className={styles.metaBadge}>/{page.route}</span>
+                        {pageLayout ? <span className={styles.metaBadge}>{pageLayout.sections.length} sections</span> : null}
+                        {page.isHome ? <span className={styles.metaBadge}>Home</span> : null}
+                      </div>
+                    </button>
+                  );
+                })}
           </div>
 
           <div className={styles.sidebarSection}>
@@ -3127,21 +4166,76 @@ export function PlatformStudio({
                       </p>
                     </div>
                     <div className={styles.inlineList}>
-                      <button className={styles.ghostButton} onClick={() => { setSelectedSectionId(section.id); setSelectedComponentId(""); }} type="button">
-                        Inspect
-                      </button>
-                      <button className={styles.ghostButton} onClick={() => duplicateSection(section.id)} type="button">
-                        Duplicate
-                      </button>
-                      <button className={styles.ghostButton} onClick={() => { setSelectedSectionId(section.id); void handleSaveSectionTemplate(section.id); }} type="button">
-                        Save as template
-                      </button>
-                      <button className={styles.ghostButton} onClick={() => addComponentToSection(section.id)} type="button">
+                      <button className={styles.secondaryButton} onClick={() => addComponentToSection(section.id)} type="button">
                         Add component
                       </button>
-                      <button className={styles.ghostButton} onClick={() => removeSection(section.id)} type="button">
-                        Remove
-                      </button>
+                      <div className={styles.overflowMenuWrap} data-section-menu-root="">
+                        <button
+                          aria-expanded={sectionActionMenuId === section.id}
+                          className={styles.overflowMenuTrigger}
+                          data-tooltip="More section actions"
+                          onClick={() => setSectionActionMenuId((current) => (current === section.id ? null : section.id))}
+                          type="button"
+                        >
+                          <span>•••</span>
+                        </button>
+                        {sectionActionMenuId === section.id ? (
+                          <div className={styles.overflowMenu} role="menu">
+                            <button
+                              className={styles.overflowMenuItem}
+                              onClick={() => {
+                                setSelectedSectionId(section.id);
+                                setSelectedComponentId("");
+                                setSectionActionMenuId(null);
+                              }}
+                              role="menuitem"
+                              type="button"
+                            >
+                              Inspect
+                            </button>
+                            <button
+                              className={styles.overflowMenuItem}
+                              onClick={() => {
+                                duplicateSection(section.id);
+                                setSectionActionMenuId(null);
+                              }}
+                              role="menuitem"
+                              type="button"
+                            >
+                              Duplicate
+                            </button>
+                            <button
+                              className={styles.overflowMenuItem}
+                              onClick={() => {
+                                setSelectedSectionId(section.id);
+                                void handleSaveSectionTemplate(section.id);
+                                setSectionActionMenuId(null);
+                              }}
+                              role="menuitem"
+                              type="button"
+                            >
+                              Save as template
+                            </button>
+                            <button
+                              className={inlineDeleteCountdown(`section-${section.id}`) ? styles.overflowMenuItem : styles.overflowMenuItemDanger}
+                              onClick={() => {
+                                if (inlineDeleteCountdown(`section-${section.id}`)) {
+                                  clearInlineDelete(true);
+                                } else {
+                                  scheduleInlineDelete(`section-${section.id}`, `${section.title} section`, () => removeSection(section.id));
+                                }
+                                setSectionActionMenuId(null);
+                              }}
+                              role="menuitem"
+                              type="button"
+                            >
+                              {inlineDeleteCountdown(`section-${section.id}`)
+                                ? `Undo (${inlineDeleteCountdown(`section-${section.id}`)}s)`
+                                : "Remove"}
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                   <div className={styles.designerCanvasGrid}>
@@ -3187,7 +4281,7 @@ export function PlatformStudio({
                 </article>
               ))
             ) : (
-              <div className={styles.emptyState}>Select a page or create a new one to start designing.</div>
+              renderEmptyState("database", "Select a page to begin.", "Choose a page from the tree or create a new one to start composing the runtime.")
             )}
           </div>
         </section>
@@ -3282,8 +4376,21 @@ export function PlatformStudio({
                   <button className={styles.ghostButton} onClick={() => duplicateComponent(selectedSection!.id, selectedComponent.id)} type="button">
                     Duplicate
                   </button>
-                  <button className={styles.ghostButton} onClick={() => removeComponent(selectedSection!.id, selectedComponent.id)} type="button">
-                    Remove
+                  <button
+                    className={inlineDeleteCountdown(`component-${selectedComponent.id}`) ? styles.ghostButton : styles.ghostButtonDanger}
+                    onClick={() => {
+                      if (inlineDeleteCountdown(`component-${selectedComponent.id}`)) {
+                        clearInlineDelete(true);
+                        return;
+                      }
+
+                      scheduleInlineDelete(`component-${selectedComponent.id}`, `${selectedComponent.title} component`, () => removeComponent(selectedSection!.id, selectedComponent.id));
+                    }}
+                    type="button"
+                  >
+                    {inlineDeleteCountdown(`component-${selectedComponent.id}`)
+                      ? `Undo (${inlineDeleteCountdown(`component-${selectedComponent.id}`)}s)`
+                      : "Remove"}
                   </button>
                 </div>
               </div>
@@ -3438,6 +4545,7 @@ export function PlatformStudio({
             {manifest.forms.map((form) => (
               <button
                 className={`${form.id === selectedForm?.id ? styles.activeListItem : styles.listItem} ${styles.staggerChild}`}
+                data-form-list-id={form.id}
                 key={form.id}
                 onClick={() => {
                   setSelectedFormId(form.id);
@@ -3583,8 +4691,21 @@ export function PlatformStudio({
                           <p className={styles.cardEyebrow}>Field</p>
                           <h3>{field.label}</h3>
                         </div>
-                        <button className={styles.ghostButtonDanger} onClick={() => requestConfirmation("Remove field", `Remove "${field.label}" from this form?`, "Remove", () => removeFormField(field.id))} type="button">
-                          Remove
+                        <button
+                          className={inlineDeleteCountdown(`form-field-${field.id}`) ? styles.ghostButton : styles.ghostButtonDanger}
+                          onClick={() => {
+                            if (inlineDeleteCountdown(`form-field-${field.id}`)) {
+                              clearInlineDelete(true);
+                              return;
+                            }
+
+                            scheduleInlineDelete(`form-field-${field.id}`, `${field.label} field`, () => removeFormField(field.id));
+                          }}
+                          type="button"
+                        >
+                          {inlineDeleteCountdown(`form-field-${field.id}`)
+                            ? `Undo (${inlineDeleteCountdown(`form-field-${field.id}`)}s)`
+                            : "Remove"}
                         </button>
                       </div>
                       <div className={styles.formGridTight}>
@@ -3890,7 +5011,24 @@ export function PlatformStudio({
                 ].map(([key, label]) => (
                   <label className={styles.formField} key={key}>
                     <span>{label}</span>
-                    <input className={styles.input} onChange={(event) => setBrandingDraft((current) => ({ ...current, [key]: event.target.value }))} value={String(brandingDraft[key as keyof TenantBrandingDefinition] ?? "")} />
+                    <div className={styles.colorFieldRow}>
+                      <span
+                        className={styles.colorSwatch}
+                        style={{ background: isValidCssColor(String(brandingDraft[key as keyof TenantBrandingDefinition] ?? "")) ? String(brandingDraft[key as keyof TenantBrandingDefinition]) : "transparent" }}
+                      />
+                      <input
+                        className={isValidCssColor(String(brandingDraft[key as keyof TenantBrandingDefinition] ?? "")) ? styles.input : `${styles.input} ${styles.inputError}`}
+                        onChange={(event) => setBrandingDraft((current) => ({ ...current, [key]: event.target.value }))}
+                        value={String(brandingDraft[key as keyof TenantBrandingDefinition] ?? "")}
+                      />
+                      <input
+                        aria-label={`${label} color picker`}
+                        className={styles.colorPicker}
+                        onChange={(event) => setBrandingDraft((current) => ({ ...current, [key]: event.target.value }))}
+                        type="color"
+                        value={isValidCssColor(String(brandingDraft[key as keyof TenantBrandingDefinition] ?? "")) ? String(brandingDraft[key as keyof TenantBrandingDefinition]) : "#005292"}
+                      />
+                    </div>
                   </label>
                 ))}
                 <label className={styles.formFieldSpan}>
@@ -4097,12 +5235,26 @@ export function PlatformStudio({
                   <input className={styles.input} onChange={(event) => setProfileDraft((current) => ({ ...current, pageTitle: event.target.value }))} value={profileDraft.pageTitle} />
                 </label>
                 <label className={styles.formField}>
-                  <span>Profile page key</span>
-                  <input className={styles.input} onChange={(event) => setProfileDraft((current) => ({ ...current, profilePageKey: event.target.value }))} value={profileDraft.profilePageKey} />
+                  <span>Profile page</span>
+                  <select className={styles.select} onChange={(event) => setProfileDraft((current) => ({ ...current, profilePageKey: event.target.value }))} value={profileDraft.profilePageKey}>
+                    <option value="">Choose page</option>
+                    {manifest.pages.map((page) => (
+                      <option key={page.id} value={page.key}>
+                        {page.title} ({page.key})
+                      </option>
+                    ))}
+                  </select>
                 </label>
                 <label className={styles.formField}>
-                  <span>Settings page key</span>
-                  <input className={styles.input} onChange={(event) => setProfileDraft((current) => ({ ...current, settingsPageKey: event.target.value }))} value={profileDraft.settingsPageKey} />
+                  <span>Settings page</span>
+                  <select className={styles.select} onChange={(event) => setProfileDraft((current) => ({ ...current, settingsPageKey: event.target.value }))} value={profileDraft.settingsPageKey}>
+                    <option value="">Choose page</option>
+                    {manifest.pages.map((page) => (
+                      <option key={page.id} value={page.key}>
+                        {page.title} ({page.key})
+                      </option>
+                    ))}
+                  </select>
                 </label>
                 <label className={styles.formFieldSpan}>
                   <span>Visible field keys</span>
@@ -4313,6 +5465,9 @@ export function PlatformStudio({
                   Save shell
                 </button>
               </div>
+              <div className={styles.sidebarPanel}>
+                Route ownership stays metadata-driven through pages. Keep menu structure and landing rules here, then confirm page-level routes in the Pages workspace.
+              </div>
             </section>
             <section className={styles.panelWide}>
               <div className={styles.sectionHeader}>
@@ -4447,12 +5602,6 @@ export function PlatformStudio({
               </div>
             </section>
           </>
-        ) : null}
-
-        {activeTab === 3 ? (
-          <section className={styles.panelWide}>
-            <div className={styles.emptyState}>Route ownership stays metadata-driven through pages. This tab is reserved for route diagnostics and impact review.</div>
-          </section>
         ) : null}
       </div>
     );
@@ -4612,6 +5761,7 @@ export function PlatformStudio({
             {manifest.workflows.map((workflow) => (
               <button
                 className={`${workflow.id === selectedWorkflow?.id ? styles.activeListItem : styles.listItem} ${styles.staggerChild}`}
+                data-workflow-list-id={workflow.id}
                 key={workflow.id}
                 onClick={() => selectWorkflow(workflow)}
                 type="button"
@@ -5239,6 +6389,7 @@ export function PlatformStudio({
             {manifest.agents.map((agent) => (
               <button
                 className={`${agent.id === selectedAgent?.id ? styles.activeListItem : styles.listItem} ${styles.staggerChild}`}
+                data-agent-list-id={agent.id}
                 key={agent.id}
                 onClick={() => selectAgent(agent)}
                 type="button"
@@ -5471,57 +6622,52 @@ export function PlatformStudio({
                     <div className={styles.emptyState}>Run a preview to inspect masked records before wiring this agent into runtime flows.</div>
                   )}
                 </article>
+                <article className={styles.scopeCard}>
+                  <div className={styles.sectionHeader}>
+                    <div>
+                      <p className={styles.cardEyebrow}>Object scope</p>
+                      <h3>Access envelope</h3>
+                    </div>
+                  </div>
+                  <div className={styles.listStack}>
+                    {manifest.objects.map((objectDefinition) => (
+                      <label className={styles.checkboxField} key={objectDefinition.id}>
+                        <input checked={agentDraft.objectKeys.includes(objectDefinition.key)} onChange={() => toggleAgentObject(objectDefinition.key)} type="checkbox" />
+                        <span>
+                          {objectDefinition.label} · {objectDefinition.fields.length} fields
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </article>
+                <article className={styles.scopeCard}>
+                  <div className={styles.sectionHeader}>
+                    <div>
+                      <p className={styles.cardEyebrow}>Recent usage</p>
+                      <h3>Operator visibility</h3>
+                    </div>
+                  </div>
+                  {agentActivity.length === 0 ? (
+                    renderEmptyState("agent", "No activity yet.", "Agent previews and future runtime calls will appear here.")
+                  ) : (
+                    <div className={styles.listStack}>
+                      {agentActivity.map((event) => (
+                        <article className={styles.auditRow} key={event.id}>
+                          <div>
+                            <strong>{event.summary}</strong>
+                            <p>{event.actorEmail ?? "system"}</p>
+                          </div>
+                          <span>{formatPlatformDateTime(event.createdAt)}</span>
+                        </article>
+                      ))}
+                    </div>
+                  )}
+                </article>
               </div>
             </>
           ) : null}
 
           {activeTab === 2 ? (
-            <div className={styles.scopeGrid}>
-              <article className={styles.scopeCard}>
-                <div className={styles.sectionHeader}>
-                  <div>
-                    <p className={styles.cardEyebrow}>Object scope</p>
-                    <h3>Access envelope</h3>
-                  </div>
-                </div>
-                <div className={styles.listStack}>
-                  {manifest.objects.map((objectDefinition) => (
-                    <label className={styles.checkboxField} key={objectDefinition.id}>
-                      <input checked={agentDraft.objectKeys.includes(objectDefinition.key)} onChange={() => toggleAgentObject(objectDefinition.key)} type="checkbox" />
-                      <span>
-                        {objectDefinition.label} · {objectDefinition.fields.length} fields
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </article>
-              <article className={styles.scopeCard}>
-                <div className={styles.sectionHeader}>
-                  <div>
-                    <p className={styles.cardEyebrow}>Recent usage</p>
-                    <h3>Operator visibility</h3>
-                  </div>
-                </div>
-                {agentActivity.length === 0 ? (
-                  <div className={styles.emptyState}>No activity yet. Agent previews and future runtime calls will appear here.</div>
-                ) : (
-                  <div className={styles.listStack}>
-                    {agentActivity.map((event) => (
-                      <article className={styles.auditRow} key={event.id}>
-                        <div>
-                          <strong>{event.summary}</strong>
-                          <p>{event.actorEmail ?? "system"}</p>
-                        </div>
-                        <span>{formatPlatformDateTime(event.createdAt)}</span>
-                      </article>
-                    ))}
-                  </div>
-                )}
-              </article>
-            </div>
-          ) : null}
-
-          {activeTab === 3 ? (
             <div className={styles.scopeGrid}>
               <article className={styles.scopeCard}>
                 <div className={styles.sectionHeader}>
@@ -6270,12 +7416,10 @@ export function PlatformStudio({
                 </button>
               </div>
               <div className={styles.listStack}>
-                {filteredWorkflowRuns.length === 0 ? (
-                  <div className={styles.emptyState}>
-                    <p>No workflow runs yet.</p>
-                    <p className={styles.emptyStateHint}>Publish a workflow and queue a run to see execution data here.</p>
-                    <button className={styles.emptyStateCta} onClick={() => void refreshControlTower()} type="button">Refresh</button>
-                  </div>
+                {isControlTowerLoading ? (
+                  renderSkeleton(4)
+                ) : filteredWorkflowRuns.length === 0 ? (
+                  renderEmptyState("workflow", "No workflow runs yet.", "Publish a workflow and queue a run to see execution data here.", "Refresh", () => void refreshControlTower())
                 ) : (
                   filteredWorkflowRuns.slice(0, controlTowerListLimits.workflowRuns).map((run) => (
                     <article className={`${styles.auditRow} ${styles.staggerChild}`} key={run.id}>
@@ -6313,7 +7457,7 @@ export function PlatformStudio({
                 </div>
               </div>
               <div className={styles.listStack}>
-                {filteredAgentRuns.slice(0, 6).map((run) => (
+                {isControlTowerLoading ? renderSkeleton(3, true) : filteredAgentRuns.slice(0, 6).map((run) => (
                   <article className={styles.workflowCard} key={`detail-${run.id}`}>
                     <strong>{run.agentKey}</strong>
                     <p>{run.logs[0]?.message ? String(run.logs[0].message) : "Simulation completed."}</p>
@@ -6335,225 +7479,222 @@ export function PlatformStudio({
                 ))}
               </div>
             </section>
+            <section className={styles.panelWide}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <p className={styles.cardEyebrow}>Cost ledger</p>
+                  <h2>Usage and spend</h2>
+                </div>
+              </div>
+              <div className={styles.tableWrap}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>Category</th>
+                      <th>Reference</th>
+                      <th>Provider</th>
+                      <th>Amount</th>
+                      <th>Created</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {isControlTowerLoading ? (
+                      Array.from({ length: 4 }, (_, index) => (
+                        <tr key={`cost-skeleton-${index}`}>
+                          <td colSpan={5}>
+                            <div className={styles.skeletonCard}>
+                              <div className={`${styles.skeleton} ${styles.skeletonWide}`} />
+                              <div className={`${styles.skeleton} ${styles.skeletonNarrow}`} />
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    ) : costLedger.length > 0 ? (
+                      costLedger.slice(0, controlTowerListLimits.costs).map((entry) => (
+                        <tr key={entry.id}>
+                          <td>{entry.category}</td>
+                          <td>{entry.referenceId}</td>
+                          <td>{entry.providerKey ?? "—"}</td>
+                          <td>${entry.amountUsd.toFixed(4)}</td>
+                          <td>{formatPlatformDateTime(entry.createdAt)}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={5}>
+                          {renderEmptyState("inbox", "No cost data yet.", "Costs appear after provider-backed runs or evaluations.")}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
             {renderControlTowerDetailPanel()}
           </>
         ) : null}
 
         {activeTab === 1 ? (
-          <section className={styles.panelWide}>
-            <div className={styles.sectionHeader}>
-              <div>
-                <p className={styles.cardEyebrow}>Cost ledger</p>
-                <h2>Usage and spend</h2>
+          <>
+            <section className={styles.panelWide}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <p className={styles.cardEyebrow}>Alerts</p>
+                  <h2>Budget, delivery, and runtime warnings</h2>
+                </div>
               </div>
-            </div>
-            <div className={styles.tableWrap}>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <th>Category</th>
-                    <th>Reference</th>
-                    <th>Provider</th>
-                    <th>Amount</th>
-                    <th>Created</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {costLedger.length > 0 ? (
-                    costLedger.slice(0, controlTowerListLimits.costs).map((entry) => (
-                      <tr key={entry.id}>
-                        <td>{entry.category}</td>
-                        <td>{entry.referenceId}</td>
-                        <td>{entry.providerKey ?? "—"}</td>
-                        <td>${entry.amountUsd.toFixed(4)}</td>
-                        <td>{formatPlatformDateTime(entry.createdAt)}</td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={5}>
-                        <div className={styles.emptyState}>No cost data yet.</div>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
+              <div className={styles.listStack}>
+                {filteredAlerts.length === 0 ? (
+                  renderEmptyState("inbox", "No alerts triggered.", "Alerts appear when budgets, deliveries, or runtime thresholds are breached.")
+                ) : (
+                  filteredAlerts.slice(0, controlTowerListLimits.alerts).map((alert) => (
+                    <article className={styles.auditRow} key={alert.id}>
+                      <div>
+                        <strong>{alert.title}</strong>
+                        <p>{alert.summary}</p>
+                      </div>
+                      <div className={styles.inlineList}>
+                        <span className={styles.inlineTag}>{alert.category}</span>
+                        <span className={styles.inlineTag}>{alert.severity}</span>
+                        <button className={styles.ghostButton} onClick={() => void handleInspectControlTowerDetail("alert", alert.id)} type="button">
+                          Inspect
+                        </button>
+                        <button className={styles.ghostButton} disabled={Boolean(alert.acknowledgedAt)} onClick={() => void handleAcknowledgeAlert(alert.id)} type="button">
+                          {alert.acknowledgedAt ? "Acknowledged" : "Acknowledge"}
+                        </button>
+                      </div>
+                    </article>
+                  ))
+                )}
+                {filteredAlerts.length > controlTowerListLimits.alerts ? (
+                  <button className={styles.showMoreButton} onClick={() => setControlTowerListLimits((prev) => ({ ...prev, alerts: prev.alerts + 24 }))} type="button">
+                    Show more ({filteredAlerts.length - controlTowerListLimits.alerts} remaining)
+                  </button>
+                ) : null}
+              </div>
+            </section>
+            <section className={styles.panelWide}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <p className={styles.cardEyebrow}>Approvals</p>
+                  <h2>Pending human checkpoints</h2>
+                </div>
+                {visibleControlTowerApprovals.length > 0 ? <span className={styles.badge}>{visibleControlTowerApprovals.length} pending</span> : null}
+              </div>
+              <div className={styles.listStack}>
+                {approvalTasks.length === 0 ? (
+                  renderEmptyState("workflow", "No approval tasks pending.", "Approvals appear when workflows or agents require human sign-off before continuing.")
+                ) : (
+                  approvalTasks.map((task) => (
+                    <article className={styles.workflowCard} key={task.id}>
+                      <strong>{task.nodeLabel}</strong>
+                      <p>
+                        {task.workflowKey} · {task.status} · {task.approverRole}
+                      </p>
+                      {task.instructions ? <div className={styles.sidebarPanel}>{task.instructions}</div> : null}
+                      <div className={styles.inlineList}>
+                        <button className={styles.ghostButton} onClick={() => void handleInspectControlTowerDetail("approval", task.id)} type="button">
+                          Inspect
+                        </button>
+                        <button className={styles.secondaryButton} disabled={task.status !== "pending"} onClick={() => void handleResolveApprovalTask(task.id, "approved")} type="button">
+                          Approve
+                        </button>
+                        <button className={styles.ghostButtonDanger} disabled={task.status !== "pending"} onClick={() => void handleResolveApprovalTask(task.id, "rejected")} type="button">
+                          Reject
+                        </button>
+                      </div>
+                    </article>
+                  ))
+                )}
+              </div>
+            </section>
+            {renderControlTowerDetailPanel()}
+          </>
         ) : null}
 
         {activeTab === 2 ? (
-          <section className={styles.panelWide}>
-            <div className={styles.sectionHeader}>
-              <div>
-                <p className={styles.cardEyebrow}>Alerts</p>
-                <h2>Budget, delivery, and runtime warnings</h2>
+          <>
+            <section className={styles.panelWide}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <p className={styles.cardEyebrow}>Deliveries</p>
+                  <h2>Notification history</h2>
+                </div>
               </div>
-            </div>
-            <div className={styles.listStack}>
-              {filteredAlerts.length === 0 ? (
-                <div className={styles.emptyState}>
-                    <p>No alerts triggered.</p>
-                    <p className={styles.emptyStateHint}>Alerts appear when budgets, deliveries, or runtime thresholds are breached.</p>
-                  </div>
-              ) : (
-                filteredAlerts.slice(0, controlTowerListLimits.alerts).map((alert) => (
-                  <article className={styles.auditRow} key={alert.id}>
-                    <div>
-                      <strong>{alert.title}</strong>
-                      <p>{alert.summary}</p>
-                    </div>
-                    <div className={styles.inlineList}>
-                      <span className={styles.inlineTag}>{alert.category}</span>
-                      <span className={styles.inlineTag}>{alert.severity}</span>
-                      <button className={styles.ghostButton} onClick={() => void handleInspectControlTowerDetail("alert", alert.id)} type="button">
-                        Inspect
-                      </button>
-                      <button className={styles.ghostButton} disabled={Boolean(alert.acknowledgedAt)} onClick={() => void handleAcknowledgeAlert(alert.id)} type="button">
-                        {alert.acknowledgedAt ? "Acknowledged" : "Acknowledge"}
-                      </button>
-                    </div>
-                  </article>
-                ))
-              )}
-              {filteredAlerts.length > controlTowerListLimits.alerts ? (
-                <button className={styles.showMoreButton} onClick={() => setControlTowerListLimits((prev) => ({ ...prev, alerts: prev.alerts + 24 }))} type="button">
-                  Show more ({filteredAlerts.length - controlTowerListLimits.alerts} remaining)
-                </button>
-              ) : null}
-            </div>
-            {renderControlTowerDetailPanel()}
-          </section>
-        ) : null}
-
-        {activeTab === 3 ? (
-          <section className={styles.panelWide}>
-            <div className={styles.sectionHeader}>
-              <div>
-                <p className={styles.cardEyebrow}>Deliveries</p>
-                <h2>Notification history</h2>
-              </div>
-            </div>
-            <div className={styles.tableWrap}>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <th>Rule</th>
-                    <th>Channel</th>
-                    <th>Status</th>
-                    <th>Severity</th>
-                    <th>Delivered</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredDeliveries.length > 0 ? (
-                    filteredDeliveries.slice(0, controlTowerListLimits.deliveries).map((delivery) => (
-                      <tr key={delivery.id}>
-                        <td>{delivery.ruleKey}</td>
-                        <td>{delivery.channelKey}</td>
-                        <td>{delivery.status}</td>
-                        <td>{delivery.severity}</td>
-                        <td>
-                          <div className={styles.inlineList}>
-                            <span>{formatPlatformDateTime(delivery.deliveredAt ?? delivery.createdAt)}</span>
-                            <button className={styles.ghostButton} onClick={() => void handleInspectControlTowerDetail("delivery", delivery.id)} type="button">
-                              Inspect
-                            </button>
-                            <button className={styles.ghostButton} disabled={delivery.status === "sent"} onClick={() => void handleRetryDelivery(delivery.id)} type="button">
-                              Retry
-                            </button>
-                          </div>
+              <div className={styles.tableWrap}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>Rule</th>
+                      <th>Channel</th>
+                      <th>Status</th>
+                      <th>Severity</th>
+                      <th>Delivered</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredDeliveries.length > 0 ? (
+                      filteredDeliveries.slice(0, controlTowerListLimits.deliveries).map((delivery) => (
+                        <tr key={delivery.id}>
+                          <td>{delivery.ruleKey}</td>
+                          <td>{delivery.channelKey}</td>
+                          <td>{delivery.status}</td>
+                          <td>{delivery.severity}</td>
+                          <td>
+                            <div className={styles.inlineList}>
+                              <span>{formatPlatformDateTime(delivery.deliveredAt ?? delivery.createdAt)}</span>
+                              <button className={styles.ghostButton} onClick={() => void handleInspectControlTowerDetail("delivery", delivery.id)} type="button">
+                                Inspect
+                              </button>
+                              <button className={styles.ghostButton} disabled={delivery.status === "sent"} onClick={() => void handleRetryDelivery(delivery.id)} type="button">
+                                Retry
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={5}>
+                          {renderEmptyState("inbox", "No deliveries yet.", "Notification deliveries will appear here after alerts or workflows fan out to channels.")}
                         </td>
                       </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={5}>
-                        <div className={styles.emptyState}>No deliveries yet.</div>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-            {renderControlTowerDetailPanel()}
-          </section>
-        ) : null}
-
-        {activeTab === 4 ? (
-          <section className={styles.panelWide}>
-            <div className={styles.sectionHeader}>
-              <div>
-                <p className={styles.cardEyebrow}>Approvals</p>
-                <h2>Pending human checkpoints</h2>
+                    )}
+                  </tbody>
+                </table>
               </div>
-            </div>
-            <div className={styles.listStack}>
-              {approvalTasks.length === 0 ? (
-                <div className={styles.emptyState}>
-                    <p>No approval tasks pending.</p>
-                    <p className={styles.emptyStateHint}>Approvals appear when workflows or agents require human sign-off before continuing.</p>
-                  </div>
-              ) : (
-                approvalTasks.map((task) => (
-                  <article className={styles.workflowCard} key={task.id}>
-                    <strong>{task.nodeLabel}</strong>
-                    <p>
-                      {task.workflowKey} · {task.status} · {task.approverRole}
-                    </p>
-                    {task.instructions ? <div className={styles.sidebarPanel}>{task.instructions}</div> : null}
-                    <div className={styles.inlineList}>
-                      <button className={styles.ghostButton} onClick={() => void handleInspectControlTowerDetail("approval", task.id)} type="button">
-                        Inspect
-                      </button>
-                      <button className={styles.secondaryButton} disabled={task.status !== "pending"} onClick={() => void handleResolveApprovalTask(task.id, "approved")} type="button">
-                        Approve
-                      </button>
-                      <button className={styles.ghostButtonDanger} disabled={task.status !== "pending"} onClick={() => void handleResolveApprovalTask(task.id, "rejected")} type="button">
-                        Reject
-                      </button>
-                    </div>
-                  </article>
-                ))
-              )}
-            </div>
-            {renderControlTowerDetailPanel()}
-          </section>
-        ) : null}
-
-        {activeTab === 5 ? (
-          <section className={styles.panelWide}>
-            <div className={styles.sectionHeader}>
-              <div>
-                <p className={styles.cardEyebrow}>Dead letters</p>
-                <h2>Escalated runtime failures</h2>
+            </section>
+            <section className={styles.panelWide}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <p className={styles.cardEyebrow}>Dead letters</p>
+                  <h2>Escalated runtime failures</h2>
+                </div>
+                {deadLetters.length > 0 ? <span className={styles.badge}>{deadLetters.length} blocked</span> : null}
               </div>
-            </div>
-            <div className={styles.listStack}>
-              {deadLetters.length === 0 ? (
-                <div className={styles.emptyState}>
-                    <p>No dead letters recorded.</p>
-                    <p className={styles.emptyStateHint}>Dead letters capture messages that could not be delivered or processed after all retries.</p>
-                  </div>
-              ) : (
-                deadLetters.map((entry) => (
-                  <article className={styles.auditRow} key={entry.id}>
-                    <div>
-                      <strong>{entry.type}</strong>
-                      <p>{entry.reason}</p>
-                    </div>
-                    <div className={styles.inlineList}>
-                      <span>{formatPlatformDateTime(entry.createdAt)}</span>
-                      <button className={styles.ghostButton} onClick={() => void handleInspectControlTowerDetail("dead-letter", entry.id)} type="button">
-                        Inspect
-                      </button>
-                    </div>
-                  </article>
-                ))
-              )}
-            </div>
+              <div className={styles.listStack}>
+                {deadLetters.length === 0 ? (
+                  renderEmptyState("inbox", "No dead letters recorded.", "Dead letters capture messages that could not be delivered or processed after all retries.")
+                ) : (
+                  deadLetters.map((entry) => (
+                    <article className={styles.auditRow} key={entry.id}>
+                      <div>
+                        <strong>{entry.type}</strong>
+                        <p>{entry.reason}</p>
+                      </div>
+                      <div className={styles.inlineList}>
+                        <span>{formatPlatformDateTime(entry.createdAt)}</span>
+                        <button className={styles.ghostButton} onClick={() => void handleInspectControlTowerDetail("dead-letter", entry.id)} type="button">
+                          Inspect
+                        </button>
+                      </div>
+                    </article>
+                  ))
+                )}
+              </div>
+            </section>
             {renderControlTowerDetailPanel()}
-          </section>
+          </>
         ) : null}
       </div>
     );
@@ -6895,6 +8036,7 @@ export function PlatformStudio({
           <button
             aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             className={styles.sidebarToggleButton}
+            data-tooltip={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             onClick={() => setSidebarCollapsed((current) => !current)}
             type="button"
           >
@@ -6966,7 +8108,7 @@ export function PlatformStudio({
                       <button
                         className={`${entry.key === workspace ? styles.activeNavItem : styles.navItem} ${styles.staggerChild}`}
                         key={entry.key}
-                        onClick={() => { setWorkspace(entry.key); setWorkspaceTransitionKey((prev) => prev + 1); }}
+                        onClick={() => selectWorkspace(entry.key)}
                         type="button"
                       >
                         <span className={styles.navIcon}>{entry.code}</span>
@@ -6986,7 +8128,11 @@ export function PlatformStudio({
         <div className={styles.sidebarSection}>
           <p className={styles.sidebarLabel}>Publish</p>
           <div className={styles.sidebarPanel}>
-            Draft definitions stay private until publish. Publishing freezes a runtime version and writes a manifest back into code.
+            <ul className={styles.compactBulletList}>
+              <li>Draft changes stay private until publish.</li>
+              <li>Publishing freezes a versioned runtime manifest.</li>
+              <li>Use preview links before shipping live.</li>
+            </ul>
           </div>
         </div>
         <div className={styles.sidebarSection}>
@@ -7013,11 +8159,25 @@ export function PlatformStudio({
         </div>
       </aside>
 
-      <main className={styles.studioMain}>
-        <nav className={styles.breadcrumb}>
-          <button type="button" className={styles.breadcrumbLink} onClick={() => { setActiveTab(0); window.scrollTo({ top: 0, behavior: "smooth" }); }}>Studio</button>
+      <main className={styles.studioMain} ref={mainRef}>
+        <nav className={[styles.breadcrumb, styles.breadcrumbSticky].join(" ")}>
+          <button
+            aria-label="Studio home"
+            className={styles.breadcrumbIcon}
+            onClick={() => {
+              deselectCurrentSelection();
+              setActiveTab(0);
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            type="button"
+          >
+            <svg fill="none" viewBox="0 0 16 16">
+              <path d="M2 7.2 8 2l6 5.2V14H9.6V9.8H6.4V14H2V7.2Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.4" />
+            </svg>
+          </button>
+          <button type="button" className={styles.breadcrumbLink} onClick={() => { deselectCurrentSelection(); setActiveTab(0); window.scrollTo({ top: 0, behavior: "smooth" }); }}>Studio</button>
           <span className={styles.breadcrumbSep}>/</span>
-          <button type="button" className={styles.breadcrumbLink} onClick={() => setActiveTab(0)}>{activeWorkspace.label}</button>
+          <button type="button" className={styles.breadcrumbLink} onClick={() => { deselectCurrentSelection(); setActiveTab(0); }}>{activeWorkspace.label}</button>
           <span className={styles.breadcrumbSep}>/</span>
           <span className={styles.breadcrumbActive}>{WORKSPACE_TABS[workspace][activeTab]}</span>
           {(() => {
@@ -7031,16 +8191,56 @@ export function PlatformStudio({
             return entityLabel ? (
               <>
                 <span className={styles.breadcrumbSep}>/</span>
-                <span className={styles.breadcrumbEntity}>{entityLabel}</span>
+                <button
+                  className={styles.breadcrumbEntity}
+                  onClick={() => {
+                    if (workspace === "pages" && selectedPage?.id) {
+                      document.querySelector<HTMLElement>(`[data-page-tree-id="${selectedPage.id}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+                    }
+                    if (workspace === "data-model" && selectedObject?.id) {
+                      document.querySelector<HTMLElement>(`[data-object-list-id="${selectedObject.id}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+                    }
+                    if (workspace === "forms" && selectedForm?.id) {
+                      document.querySelector<HTMLElement>(`[data-form-list-id="${selectedForm.id}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+                    }
+                    if (workspace === "workflows" && selectedWorkflow?.id) {
+                      document.querySelector<HTMLElement>(`[data-workflow-list-id="${selectedWorkflow.id}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+                    }
+                    if (workspace === "agents" && selectedAgent?.id) {
+                      document.querySelector<HTMLElement>(`[data-agent-list-id="${selectedAgent.id}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+                    }
+                  }}
+                  type="button"
+                >
+                  {entityLabel}
+                </button>
               </>
             ) : null;
           })()}
-          <button type="button" className={styles.commandPaletteHint} onClick={() => { setCommandPaletteOpen(true); setCommandPaletteQuery(""); setCommandPaletteIndex(0); }} style={{ marginLeft: "auto" }}>
-            <kbd style={{ border: 0, background: "transparent", padding: 0, font: "inherit", color: "inherit" }}>⌘K</kbd> Jump to...
+          <button
+            className={styles.commandPaletteTrigger}
+            onClick={() => {
+              if (typeof document !== "undefined" && document.activeElement instanceof HTMLElement) {
+                previouslyFocusedElementRef.current = document.activeElement;
+              }
+              setCommandPaletteOpen(true);
+              setCommandPaletteQuery("");
+              setCommandPaletteIndex(0);
+            }}
+            type="button"
+          >
+            <span className={styles.commandPaletteTriggerCopy}>
+              <svg fill="none" viewBox="0 0 16 16">
+                <circle cx="7" cy="7" r="4.75" stroke="currentColor" strokeWidth="1.5" />
+                <path d="M10.5 10.5 14 14" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />
+              </svg>
+              <span>Search workspaces, pages, workflows, and agents</span>
+            </span>
+            <span className={styles.kbdBadge}>⌘K</span>
           </button>
         </nav>
 
-        <header className={styles.studioHeader}>
+        <header className={[styles.studioHeader, scrolledPast ? styles.headerCompact : ""].join(" ")}>
           <div className={styles.headerLead}>
             <p className={styles.eyebrow}>TeacherActive adaptive platform</p>
             <h1>{activeWorkspace.label}</h1>
@@ -7069,23 +8269,6 @@ export function PlatformStudio({
           </div>
         </header>
 
-        {message ? (
-          <div className={`${styles.successBanner} ${messageExiting ? styles.bannerExiting : ""}`}>
-            <div className={styles.bannerWrap}>
-              {message}
-              <button className={styles.bannerDismiss} onClick={() => { setMessage(null); setMessageExiting(false); }} type="button">Dismiss</button>
-            </div>
-          </div>
-        ) : null}
-        {error ? (
-          <div className={styles.errorBanner}>
-            <div className={styles.bannerWrap}>
-              {error}
-              <button className={styles.bannerDismiss} onClick={() => setError(null)} type="button">Dismiss</button>
-            </div>
-          </div>
-        ) : null}
-
         {renderTabBar()}
 
         <div className={styles.workspaceEnter} key={workspaceTransitionKey}>
@@ -7103,7 +8286,11 @@ export function PlatformStudio({
           {workspace === "audit" ? renderAuditWorkspace() : null}
         </div>
 
-        {publishPreview ? (
+        {isPublishPreviewLoading ? (
+          <section className={styles.publishPreviewStrip}>
+            {renderSkeleton(3, true)}
+          </section>
+        ) : publishPreview ? (
           <section className={styles.publishPreviewStrip}>
             <div>
               <p className={styles.cardEyebrow}>Publish preview</p>
@@ -7168,7 +8355,9 @@ export function PlatformStudio({
         ) : null}
       </main>
       {renderConfirmDialog()}
+      {renderShortcutsDialog()}
       {renderCommandPalette()}
+      {renderToastStack()}
     </div>
   );
 }
