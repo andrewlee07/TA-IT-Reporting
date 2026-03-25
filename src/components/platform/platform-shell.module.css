@@ -2455,7 +2455,11 @@
 
 /* ── Workspace enter animation ── */
 .workspaceEnter {
-  animation: fadeIn 0.22s var(--ease-out) both;
+  animation: slideUpFadeIn 0.22s var(--ease-out) both;
+}
+
+.runtimePageEnter {
+  animation: slideUpFadeIn 0.24s var(--ease-out) both;
 }
 
 /* ── Focus ring enhancement ── */
@@ -2493,6 +2497,15 @@
   border-radius: var(--radius-md);
 }
 
+.skeletonCard {
+  display: grid;
+  gap: 10px;
+  padding: 18px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, var(--surface-alt) 0%, #fff 100%);
+}
+
 .skeletonWide {
   height: 14px;
   width: 70%;
@@ -2501,6 +2514,654 @@
 .skeletonNarrow {
   height: 10px;
   width: 45%;
+}
+
+.emptyStateIcon {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--blue);
+}
+
+.emptyStateIcon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.emptyState::before {
+  content: none;
+}
+
+.compactBulletList {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+}
+
+.breadcrumbSticky {
+  position: sticky;
+  top: 0;
+  z-index: 22;
+  padding: 14px 16px;
+  border: 1px solid rgba(17, 24, 39, 0.06);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: var(--shadow-xs);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+}
+
+.breadcrumbIcon {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--blue);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease-out), background 0.15s var(--ease-out), transform 0.15s var(--ease-out);
+}
+
+.breadcrumbIcon:hover {
+  border-color: rgba(0, 82, 146, 0.24);
+  background: var(--blue-soft);
+  transform: translateY(-1px);
+}
+
+.breadcrumbIcon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.breadcrumbEntity {
+  border: 0;
+  background: transparent;
+  padding: 3px 0;
+  cursor: pointer;
+  color: var(--text);
+  font-weight: 600;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.commandPaletteTrigger {
+  margin-left: auto;
+  min-width: min(420px, 42vw);
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 14px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--text-soft);
+  cursor: pointer;
+  box-shadow: var(--shadow-xs);
+  transition: border-color 0.15s var(--ease-out), background 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out), transform 0.15s var(--ease-out);
+}
+
+.commandPaletteTrigger:hover {
+  border-color: rgba(0, 82, 146, 0.2);
+  background: #fff;
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.commandPaletteTriggerCopy {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.commandPaletteTriggerCopy svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.commandPaletteTriggerCopy span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kbdBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 42px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--rule);
+  background: var(--surface-alt);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.commandPaletteSectionHeader {
+  padding: 12px 12px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.commandPaletteRecent {
+  align-self: flex-start;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(0, 82, 146, 0.08);
+  color: var(--blue);
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.commandPaletteFooterButton {
+  border: 0;
+  background: transparent;
+  color: var(--blue);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+}
+
+.headerCompact {
+  position: sticky;
+  top: 60px;
+  z-index: 21;
+  padding: 18px 24px;
+  transition: padding var(--duration-normal) var(--ease-out), transform var(--duration-normal) var(--ease-out);
+}
+
+.headerCompact .headerCopy,
+.headerCompact .headerNote p,
+.headerCompact .headerNote span {
+  display: none;
+}
+
+.headerCompact h1 {
+  font-size: clamp(22px, 3vw, 30px);
+}
+
+.tabBarSticky {
+  position: sticky;
+  top: 154px;
+  z-index: 20;
+}
+
+.tabBarCompact {
+  box-shadow: var(--shadow-md);
+}
+
+.tabBadge,
+.tabBadgeDanger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  margin-left: 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.tabBadge {
+  background: rgba(0, 82, 146, 0.08);
+  color: var(--blue);
+}
+
+.tabBadgeDanger {
+  background: rgba(159, 45, 34, 0.12);
+  color: var(--danger);
+}
+
+.toastStack {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 9800;
+  display: grid;
+  gap: 12px;
+  width: min(360px, calc(100vw - 32px));
+}
+
+.toast {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  gap: 14px;
+  padding: 16px 18px 14px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--rule);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--shadow-xl);
+  backdrop-filter: blur(16px);
+}
+
+.toastEnter {
+  animation: slideInRight 0.24s var(--ease-spring) both;
+}
+
+.toastExit {
+  animation: slideOutRight 0.2s var(--ease-out) both;
+}
+
+.toastSuccess {
+  border-color: #c7eadf;
+}
+
+.toastError {
+  border-color: #f0cbc8;
+}
+
+.toastInfo {
+  border-color: rgba(0, 82, 146, 0.14);
+}
+
+.toastCopy {
+  display: grid;
+  gap: 6px;
+}
+
+.toastCopy strong {
+  font-size: 12px;
+  letter-spacing: -0.01em;
+}
+
+.toastCopy p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-soft);
+}
+
+.toastActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.toastDismiss,
+.toastUndoButton {
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.toastDismiss {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--rule);
+  background: var(--surface);
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.toastDismiss svg {
+  width: 14px;
+  height: 14px;
+}
+
+.toastUndoButton {
+  border: 1px solid rgba(0, 82, 146, 0.18);
+  background: var(--blue-soft);
+  color: var(--blue);
+  padding: 7px 10px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.toastProgressBar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--orange) 0%, var(--blue) 100%);
+  transform-origin: left center;
+  animation-name: shrinkX;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+}
+
+.overflowMenuWrap {
+  position: relative;
+}
+
+.overflowMenuTrigger {
+  min-width: 40px;
+  height: 40px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-soft);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out), transform 0.15s var(--ease-out);
+}
+
+.overflowMenuTrigger:hover {
+  border-color: rgba(0, 82, 146, 0.22);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
+}
+
+.overflowMenu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 210px;
+  padding: 8px;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: var(--shadow-lg);
+  z-index: 30;
+  display: grid;
+  gap: 4px;
+  animation: fadeIn 0.12s var(--ease-out) both;
+}
+
+.overflowMenuItem,
+.overflowMenuItemDanger {
+  width: 100%;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  text-align: left;
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.overflowMenuItem:hover {
+  background: var(--surface-alt);
+}
+
+.overflowMenuItemDanger {
+  color: var(--danger);
+}
+
+.overflowMenuItemDanger:hover {
+  background: rgba(159, 45, 34, 0.06);
+}
+
+.colorFieldRow {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 36px;
+  gap: 10px;
+  align-items: center;
+}
+
+.colorSwatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  border: 1px solid var(--rule);
+  background-image:
+    linear-gradient(45deg, rgba(17, 24, 39, 0.05) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(17, 24, 39, 0.05) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(17, 24, 39, 0.05) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(17, 24, 39, 0.05) 75%);
+  background-size: 10px 10px;
+  background-position: 0 0, 0 5px, 5px -5px, -5px 0;
+}
+
+.colorPicker {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.sidebarSectionCollapsible {
+  gap: 8px;
+}
+
+.sidebarSectionToggle {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.32);
+}
+
+.sidebarSectionToggle[aria-expanded="true"] .navGroupChevron {
+  transform: rotate(90deg);
+}
+
+.sidebarMetaCompactRow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.sidebarMetaCompact {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.06);
+  display: grid;
+  gap: 4px;
+}
+
+.sidebarMetaCompact span {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 10px;
+}
+
+.sidebarMetaCompact strong {
+  color: #fff;
+  font-size: 11px;
+}
+
+.tableToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.tableSearchBar {
+  max-width: 320px;
+}
+
+.columnPickerWrap {
+  position: relative;
+}
+
+.columnPickerTrigger {
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text-soft);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.columnPickerDropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 220px;
+  padding: 10px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-lg);
+  background: #fff;
+  box-shadow: var(--shadow-lg);
+  display: grid;
+  gap: 8px;
+  z-index: 24;
+}
+
+.sortableHeader {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-transform: inherit;
+}
+
+.sortIndicator {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.studioShell [data-tooltip],
+.runtimeShell [data-tooltip] {
+  position: relative;
+}
+
+.studioShell [data-tooltip]::after,
+.runtimeShell [data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  transform: translateX(-50%) translateY(4px);
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: rgba(17, 24, 39, 0.94);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-fast) var(--ease-out), transform var(--duration-fast) var(--ease-out);
+}
+
+.studioShell [data-tooltip]:hover::after,
+.studioShell [data-tooltip]:focus-visible::after,
+.runtimeShell [data-tooltip]:hover::after,
+.runtimeShell [data-tooltip]:focus-visible::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.45;
+    transform: scale(0.86);
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes slideUpFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideOutRight {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+}
+
+@keyframes shrinkX {
+  from {
+    transform: scaleX(1);
+  }
+
+  to {
+    transform: scaleX(0);
+  }
 }
 
 /* ── Reduced motion ── */
