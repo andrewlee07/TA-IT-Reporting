@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 
 import { getSampleFieldValue } from "@/lib/platform/designer";
 import { formatPlatformDateTime } from "@/lib/platform/format";
@@ -22,6 +22,33 @@ import type {
 } from "@/lib/platform/types";
 
 import styles from "./platform-shell.module.css";
+
+type ToastKind = "success" | "error" | "info";
+
+interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
+interface ToastRecord {
+  id: string;
+  kind: ToastKind;
+  text: string;
+  createdAt: number;
+  dismissed: boolean;
+  paused: boolean;
+  durationMs: number;
+  remainingMs: number;
+  lastResumedAt: number;
+  cycle: number;
+  action?: ToastAction;
+  onExpire?: () => Promise<void> | void;
+}
+
+interface RuntimeTableSort {
+  fieldKey: string;
+  direction: "asc" | "desc";
+}
 
 interface PublishedRuntimeProps {
   manifest: PlatformManifest;
@@ -135,9 +162,26 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
   const [draftsByObject, setDraftsByObject] = useState<Record<string, Record<string, unknown>>>(() =>
     getInitialDrafts(manifest.objects.map((objectDefinition) => objectDefinition.key)),
   );
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [toasts, setToasts] = useState<ToastRecord[]>([]);
+  const [collapsedRuntimeSections, setCollapsedRuntimeSections] = useState<Record<string, boolean>>({
+    announcements: false,
+    navigation: false,
+    status: false,
+    manifest: true,
+    actions: false,
+  });
+  const [scrolledPast, setScrolledPast] = useState(false);
+  const [loadingRecordObjectKeys, setLoadingRecordObjectKeys] = useState<string[]>([]);
+  const [loadingWorkflowKeys, setLoadingWorkflowKeys] = useState<string[]>([]);
+  const [recordQueryByObject, setRecordQueryByObject] = useState<Record<string, string>>({});
+  const [visibleColumnsByObject, setVisibleColumnsByObject] = useState<Record<string, string[]>>({});
+  const [sortByObject, setSortByObject] = useState<Record<string, RuntimeTableSort>>({});
+  const [openColumnPickerObjectKey, setOpenColumnPickerObjectKey] = useState<string | null>(null);
+  const [pendingDeleteRecordIds, setPendingDeleteRecordIds] = useState<Record<string, string>>({});
   const [isPending, startTransition] = useTransition();
+  const toastTimersRef = useRef<Map<string, number>>(new Map());
+  const toastsRef = useRef<ToastRecord[]>([]);
+  const runtimeUrlRef = useRef<string | null>(null);
 
   const activePage = manifest.pages.find((page) => page.key === activePageKey) ?? manifest.pages[0];
   const activeLayout = activePage ? findLayoutForPage(manifest, activePage) : undefined;
@@ -216,6 +260,226 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
     window.location.reload();
   }
 
+  const runtimeBasePath = mode === "published" ? `/platform/runtime/${tenantSlug}` : mode === "admin-preview" ? `/platform/admin-preview/${tenantSlug}` : `/platform/preview/${tenantSlug}`;
+
+  const buildRuntimeUrl = useCallback(
+    (pageKey: string): string => {
+      const page = findPageDefinition(manifest, pageKey);
+      const route = page?.route ? `/${page.route}` : "";
+      return `${runtimeBasePath}${route}`;
+    },
+    [manifest, runtimeBasePath],
+  );
+
+  function dismissToast(toastId: string, immediate = false) {
+    const clearTimer = toastTimersRef.current.get(toastId);
+    if (clearTimer) {
+      window.clearTimeout(clearTimer);
+      toastTimersRef.current.delete(toastId);
+    }
+
+    setToasts((current) => current.map((toast) => (toast.id === toastId ? { ...toast, dismissed: true, paused: true } : toast)));
+
+    const removeToast = () => {
+      setToasts((current) => current.filter((toast) => toast.id !== toastId));
+    };
+
+    if (immediate) {
+      removeToast();
+      return;
+    }
+
+    window.setTimeout(removeToast, 220);
+  }
+
+  async function expireToast(toastId: string): Promise<void> {
+    const toast = toastsRef.current.find((candidate) => candidate.id === toastId);
+    if (!toast) {
+      return;
+    }
+
+    try {
+      await toast.onExpire?.();
+    } catch (caughtError) {
+      addToast("error", caughtError instanceof Error ? caughtError.message : "Action failed.");
+    } finally {
+      dismissToast(toastId);
+    }
+  }
+
+  function scheduleToastExpiry(toastId: string, delay: number): void {
+    const existingTimer = toastTimersRef.current.get(toastId);
+    if (existingTimer) {
+      window.clearTimeout(existingTimer);
+    }
+
+    const nextTimer = window.setTimeout(() => {
+      void expireToast(toastId);
+    }, delay);
+    toastTimersRef.current.set(toastId, nextTimer);
+  }
+
+  function addToast(kind: ToastKind, text: string, options?: { durationMs?: number; action?: ToastAction; onExpire?: () => Promise<void> | void }) {
+    const toastId = `runtime-toast-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const durationMs = options?.durationMs ?? 6000;
+    const now = Date.now();
+    setToasts((current) => [
+      ...current,
+      {
+        id: toastId,
+        kind,
+        text,
+        createdAt: now,
+        dismissed: false,
+        paused: false,
+        durationMs,
+        remainingMs: durationMs,
+        lastResumedAt: now,
+        cycle: 0,
+        action: options?.action,
+        onExpire: options?.onExpire,
+      },
+    ]);
+    scheduleToastExpiry(toastId, durationMs);
+    return toastId;
+  }
+
+  function pauseToast(toastId: string): void {
+    const toast = toastsRef.current.find((candidate) => candidate.id === toastId);
+    if (!toast || toast.paused || toast.dismissed) {
+      return;
+    }
+
+    const elapsed = Date.now() - toast.lastResumedAt;
+    const remainingMs = Math.max(0, toast.remainingMs - elapsed);
+    const existingTimer = toastTimersRef.current.get(toastId);
+    if (existingTimer) {
+      window.clearTimeout(existingTimer);
+      toastTimersRef.current.delete(toastId);
+    }
+
+    setToasts((current) =>
+      current.map((candidate) => (candidate.id === toastId ? { ...candidate, paused: true, remainingMs } : candidate)),
+    );
+  }
+
+  function resumeToast(toastId: string): void {
+    const toast = toastsRef.current.find((candidate) => candidate.id === toastId);
+    if (!toast || !toast.paused || toast.dismissed) {
+      return;
+    }
+
+    const now = Date.now();
+    setToasts((current) =>
+      current.map((candidate) =>
+        candidate.id === toastId
+          ? {
+              ...candidate,
+              paused: false,
+              lastResumedAt: now,
+              cycle: candidate.cycle + 1,
+            }
+          : candidate,
+      ),
+    );
+    scheduleToastExpiry(toastId, toast.remainingMs);
+  }
+
+  function setMessage(text: string | null) {
+    if (text) {
+      addToast("success", text);
+    }
+  }
+
+  function setError(text: string | null) {
+    if (text) {
+      addToast("error", text);
+    }
+  }
+
+  function setPageAndSync(pageKey: string): void {
+    setActivePageKey(pageKey);
+  }
+
+  const reportRuntimeError = useEffectEvent((text: string) => {
+    addToast("error", text);
+  });
+
+  useEffect(() => {
+    toastsRef.current = toasts;
+  }, [toasts]);
+
+  useEffect(() => {
+    const timers = toastTimersRef.current;
+    return () => {
+      for (const timer of timers.values()) {
+        window.clearTimeout(timer);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    function handleScroll() {
+      setScrolledPast(window.scrollY > 100);
+    }
+
+    handleScroll();
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const applyPageFromLocation = () => {
+      const pathname = window.location.pathname;
+      const locatedPage =
+        manifest.pages.find((page) => pathname === buildRuntimeUrl(page.key)) ??
+        manifest.pages.find((page) => pathname.endsWith(`/${page.route}`));
+      if (locatedPage) {
+        setActivePageKey(locatedPage.key);
+      }
+      runtimeUrlRef.current = `${window.location.pathname}${window.location.search}`;
+    };
+
+    applyPageFromLocation();
+    const handlePopState = () => applyPageFromLocation();
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [buildRuntimeUrl, manifest.pages, mode, tenantSlug]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const nextUrl = buildRuntimeUrl(activePageKey);
+    if (runtimeUrlRef.current === nextUrl) {
+      return;
+    }
+
+    window.history.pushState({}, "", nextUrl);
+    runtimeUrlRef.current = nextUrl;
+  }, [activePageKey, buildRuntimeUrl, mode, tenantSlug]);
+
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      const target = event.target;
+      if (!(target instanceof HTMLElement) || !target.closest("[data-column-picker-root]")) {
+        setOpenColumnPickerObjectKey(null);
+      }
+    }
+
+    if (!openColumnPickerObjectKey) {
+      return;
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [openColumnPickerObjectKey]);
+
   useEffect(() => {
     if (mode !== "published") {
       return;
@@ -225,6 +489,7 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
 
     async function loadRecords(): Promise<void> {
       try {
+        setLoadingRecordObjectKeys(pageObjectKeys);
         const entries = await Promise.all(
           pageObjectKeys.map(async (objectKey) => {
             const payload = await fetchJson<{ records: PlatformRecord[] }>(`/api/platform/tenants/${tenantSlug}/records/${objectKey}`);
@@ -240,7 +505,11 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
         }
       } catch (caughtError) {
         if (!cancelled) {
-          setError(caughtError instanceof Error ? caughtError.message : "Failed to load runtime records.");
+          reportRuntimeError(caughtError instanceof Error ? caughtError.message : "Failed to load runtime records.");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingRecordObjectKeys([]);
         }
       }
     }
@@ -263,6 +532,7 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
 
     async function loadWorkflowRuns(): Promise<void> {
       try {
+        setLoadingWorkflowKeys(pageWorkflowIds);
         const entries = await Promise.all(
           pageWorkflowIds.map(async (workflowId) => {
             const payload = await fetchJson<{ runs: PlatformWorkflowRunRecord[] }>(
@@ -280,7 +550,11 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
         }
       } catch (caughtError) {
         if (!cancelled) {
-          setError(caughtError instanceof Error ? caughtError.message : "Failed to load workflow runs.");
+          reportRuntimeError(caughtError instanceof Error ? caughtError.message : "Failed to load workflow runs.");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingWorkflowKeys([]);
         }
       }
     }
@@ -295,11 +569,16 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
   }, [mode, pageWorkflowIds, tenantSlug]);
 
   async function refreshRecords(objectKey: string): Promise<void> {
-    const payload = await fetchJson<{ records: PlatformRecord[] }>(`/api/platform/tenants/${tenantSlug}/records/${objectKey}`);
-    setRecordsByObject((current) => ({
-      ...current,
-      [objectKey]: payload.records,
-    }));
+    setLoadingRecordObjectKeys((current) => Array.from(new Set([...current, objectKey])));
+    try {
+      const payload = await fetchJson<{ records: PlatformRecord[] }>(`/api/platform/tenants/${tenantSlug}/records/${objectKey}`);
+      setRecordsByObject((current) => ({
+        ...current,
+        [objectKey]: payload.records,
+      }));
+    } finally {
+      setLoadingRecordObjectKeys((current) => current.filter((candidate) => candidate !== objectKey));
+    }
   }
 
   async function handleCreateRecord(objectDefinition: ObjectDefinition): Promise<void> {
@@ -340,25 +619,58 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
       return;
     }
 
-    try {
-      setError(null);
-      setMessage(null);
-      await fetchJson<{ ok: true }>(`/api/platform/tenants/${tenantSlug}/records/${objectKey}/${recordId}`, {
-        method: "DELETE",
-      });
-      await refreshRecords(objectKey);
-      setMessage("Record deleted.");
-    } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : "Failed to delete record.");
-    }
+    const pendingKey = `${objectKey}:${recordId}`;
+    setPendingDeleteRecordIds((current) => ({
+      ...current,
+      [pendingKey]: recordId,
+    }));
+
+    addToast("info", "Record deleted.", {
+      durationMs: 5000,
+      action: {
+        label: "Undo",
+        onClick: () => {
+          setPendingDeleteRecordIds((current) => {
+            const next = { ...current };
+            delete next[pendingKey];
+            return next;
+          });
+        },
+      },
+      onExpire: async () => {
+        try {
+          await fetchJson<{ ok: true }>(`/api/platform/tenants/${tenantSlug}/records/${objectKey}/${recordId}`, {
+            method: "DELETE",
+          });
+          await refreshRecords(objectKey);
+          setPendingDeleteRecordIds((current) => {
+            const next = { ...current };
+            delete next[pendingKey];
+            return next;
+          });
+        } catch (caughtError) {
+          setPendingDeleteRecordIds((current) => {
+            const next = { ...current };
+            delete next[pendingKey];
+            return next;
+          });
+          throw caughtError;
+        }
+      },
+    });
   }
 
   async function refreshWorkflowRuns(workflowId: string): Promise<void> {
-    const payload = await fetchJson<{ runs: PlatformWorkflowRunRecord[] }>(`/api/platform/tenants/${tenantSlug}/workflows/${workflowId}/runs`);
-    setWorkflowRunsByWorkflow((current) => ({
-      ...current,
-      [workflowId]: payload.runs,
-    }));
+    setLoadingWorkflowKeys((current) => Array.from(new Set([...current, workflowId])));
+    try {
+      const payload = await fetchJson<{ runs: PlatformWorkflowRunRecord[] }>(`/api/platform/tenants/${tenantSlug}/workflows/${workflowId}/runs`);
+      setWorkflowRunsByWorkflow((current) => ({
+        ...current,
+        [workflowId]: payload.runs,
+      }));
+    } finally {
+      setLoadingWorkflowKeys((current) => current.filter((candidate) => candidate !== workflowId));
+    }
   }
 
   async function handleQueueWorkflow(workflowId: string): Promise<void> {
@@ -471,6 +783,80 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
     );
   }
 
+  function renderEmptyState(title: string, hint: string, ctaLabel?: string, ctaAction?: () => void) {
+    return (
+      <div className={styles.emptyState}>
+        <div className={styles.emptyStateIcon} aria-hidden="true">
+          <svg fill="none" viewBox="0 0 24 24">
+            <path d="M4 6h16v10H15l-2 3-2-3H4z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
+          </svg>
+        </div>
+        <p>{title}</p>
+        <p className={styles.emptyStateHint}>{hint}</p>
+        {ctaLabel && ctaAction ? (
+          <button className={styles.emptyStateCta} onClick={ctaAction} type="button">
+            {ctaLabel}
+          </button>
+        ) : null}
+      </div>
+    );
+  }
+
+  function renderToastStack() {
+    if (toasts.length === 0) {
+      return null;
+    }
+
+    return (
+      <div aria-live="polite" className={styles.toastStack}>
+        {toasts.map((toast) => (
+          <article
+            className={[
+              styles.toast,
+              toast.kind === "success" ? styles.toastSuccess : toast.kind === "error" ? styles.toastError : styles.toastInfo,
+              toast.dismissed ? styles.toastExit : styles.toastEnter,
+            ].join(" ")}
+            key={toast.id}
+            onMouseEnter={() => pauseToast(toast.id)}
+            onMouseLeave={() => resumeToast(toast.id)}
+          >
+            <div className={styles.toastCopy}>
+              <strong>{toast.kind === "success" ? "Success" : toast.kind === "error" ? "Error" : "Heads up"}</strong>
+              <p>{toast.text}</p>
+            </div>
+            <div className={styles.toastActions}>
+              {toast.action ? (
+                <button
+                  className={styles.toastUndoButton}
+                  onClick={() => {
+                    toast.action?.onClick();
+                    dismissToast(toast.id, true);
+                  }}
+                  type="button"
+                >
+                  {toast.action.label}
+                </button>
+              ) : null}
+              <button aria-label="Dismiss notification" className={styles.toastDismiss} onClick={() => dismissToast(toast.id, Boolean(toast.onExpire))} type="button">
+                <svg fill="none" viewBox="0 0 16 16">
+                  <path d="m4 4 8 8M12 4 4 12" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />
+                </svg>
+              </button>
+            </div>
+            <div
+              className={styles.toastProgressBar}
+              key={`${toast.id}-${toast.cycle}`}
+              style={{
+                animationDuration: `${toast.remainingMs}ms`,
+                animationPlayState: toast.paused ? "paused" : "running",
+              }}
+            />
+          </article>
+        ))}
+      </div>
+    );
+  }
+
   function renderComponent(component: LayoutComponentDefinition) {
     if (component.kind === "hero") {
       return (
@@ -524,8 +910,28 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
       }
 
       const view = objectDefinition.views[0];
-      const visibleKeys = view?.visibleFieldKeys ?? objectDefinition.fields.slice(0, 4).map((field) => field.key);
-      const records = resolvedRecordsByObject[objectDefinition.key] ?? [];
+      const defaultVisibleKeys = view?.visibleFieldKeys ?? objectDefinition.fields.slice(0, 4).map((field) => field.key);
+      const visibleKeys = visibleColumnsByObject[objectDefinition.key] ?? defaultVisibleKeys;
+      const rawRecords = resolvedRecordsByObject[objectDefinition.key] ?? [];
+      const isLoading = loadingRecordObjectKeys.includes(objectDefinition.key);
+      const query = recordQueryByObject[objectDefinition.key]?.trim().toLowerCase() ?? "";
+      const activeSort = sortByObject[objectDefinition.key];
+      const records = rawRecords
+        .filter((record) => !pendingDeleteRecordIds[`${objectDefinition.key}:${record.id}`])
+        .filter((record) =>
+          !query
+            ? true
+            : visibleKeys.some((fieldKey) => renderFieldValue(record.data[fieldKey]).toLowerCase().includes(query)),
+        )
+        .sort((left, right) => {
+          if (!activeSort) {
+            return 0;
+          }
+
+          const leftValue = renderFieldValue(left.data[activeSort.fieldKey]).toLowerCase();
+          const rightValue = renderFieldValue(right.data[activeSort.fieldKey]).toLowerCase();
+          return activeSort.direction === "asc" ? leftValue.localeCompare(rightValue) : rightValue.localeCompare(leftValue);
+        });
 
       return (
         <section className={styles.runtimeCard} key={component.id} style={componentStyle(component)}>
@@ -536,18 +942,96 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
             </div>
             <span className={styles.badge}>{records.length} records</span>
           </div>
+          <div className={styles.tableToolbar}>
+            <input
+              className={`${styles.input} ${styles.tableSearchBar}`}
+              onChange={(event) => setRecordQueryByObject((current) => ({ ...current, [objectDefinition.key]: event.target.value }))}
+              placeholder="Search visible fields"
+              value={recordQueryByObject[objectDefinition.key] ?? ""}
+            />
+            <div className={styles.columnPickerWrap} data-column-picker-root="">
+              <button
+                className={styles.columnPickerTrigger}
+                onClick={() => setOpenColumnPickerObjectKey((current) => (current === objectDefinition.key ? null : objectDefinition.key))}
+                type="button"
+              >
+                Columns
+              </button>
+              {openColumnPickerObjectKey === objectDefinition.key ? (
+                <div className={styles.columnPickerDropdown}>
+                  {objectDefinition.fields.map((field) => {
+                    const isVisible = visibleKeys.includes(field.key);
+                    return (
+                      <label className={styles.checkboxField} key={field.id}>
+                        <input
+                          checked={isVisible}
+                          onChange={(event) =>
+                            setVisibleColumnsByObject((current) => {
+                              const next = current[objectDefinition.key] ?? defaultVisibleKeys;
+                              return {
+                                ...current,
+                                [objectDefinition.key]: event.target.checked
+                                  ? Array.from(new Set([...next, field.key]))
+                                  : next.filter((candidate) => candidate !== field.key),
+                              };
+                            })
+                          }
+                          type="checkbox"
+                        />
+                        <span>{field.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+          </div>
           <div className={styles.tableWrap}>
             <table className={styles.table}>
               <thead>
                 <tr>
                   {visibleKeys.map((fieldKey) => (
-                    <th key={fieldKey}>{objectDefinition.fields.find((field) => field.key === fieldKey)?.label ?? fieldKey}</th>
+                    <th key={fieldKey}>
+                      <button
+                        className={styles.sortableHeader}
+                        onClick={() =>
+                          setSortByObject((current) => {
+                            const currentSort = current[objectDefinition.key];
+                            if (!currentSort || currentSort.fieldKey !== fieldKey) {
+                              return { ...current, [objectDefinition.key]: { fieldKey, direction: "asc" } };
+                            }
+
+                            return {
+                              ...current,
+                              [objectDefinition.key]: { fieldKey, direction: currentSort.direction === "asc" ? "desc" : "asc" },
+                            };
+                          })
+                        }
+                        type="button"
+                      >
+                        {objectDefinition.fields.find((field) => field.key === fieldKey)?.label ?? fieldKey}
+                        <span className={styles.sortIndicator}>
+                          {activeSort?.fieldKey === fieldKey ? (activeSort.direction === "asc" ? "↑" : "↓") : "↕"}
+                        </span>
+                      </button>
+                    </th>
                   ))}
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {records.length > 0 ? (
+                {isLoading ? (
+                  Array.from({ length: 4 }, (_, index) => (
+                    <tr key={`runtime-record-skeleton-${index}`}>
+                      <td colSpan={visibleKeys.length + 1}>
+                        <div className={styles.skeletonCard}>
+                          <div className={`${styles.skeleton} ${styles.skeletonWide}`} />
+                          <div className={`${styles.skeleton} ${styles.skeletonNarrow}`} />
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : records.length > 0 ? (
                   records.map((record) => (
                     <tr key={record.id}>
                       {visibleKeys.map((fieldKey) => (
@@ -563,11 +1047,12 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
                 ) : (
                   <tr>
                     <td colSpan={visibleKeys.length + 1}>
-                      <div className={styles.emptyState}>
-                        {mode === "published"
-                          ? "No records yet. Create one from the form beside this table."
-                          : "Draft preview uses sample records until a published runtime is active."}
-                      </div>
+                      {renderEmptyState(
+                        mode === "published" ? "No records yet." : "Preview records only.",
+                        mode === "published"
+                          ? "Create one from the form beside this table."
+                          : "Draft preview uses sample records until a published runtime is active.",
+                      )}
                     </td>
                   </tr>
                 )}
@@ -687,12 +1172,19 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
                     </span>
                   ))}
                 </div>
-                {(workflowRunsByWorkflow[workflow.id] ?? []).slice(0, 3).map((run) => (
-                  <div className={styles.logRow} key={run.id}>
-                    <strong>{run.status}</strong>
-                    <span>{formatPlatformDateTime(run.createdAt)}</span>
+                {loadingWorkflowKeys.includes(workflow.id) ? (
+                  <div className={styles.skeletonRow}>
+                    <div className={`${styles.skeleton} ${styles.skeletonWide}`} />
+                    <div className={`${styles.skeleton} ${styles.skeletonNarrow}`} />
                   </div>
-                ))}
+                ) : (
+                  (workflowRunsByWorkflow[workflow.id] ?? []).slice(0, 3).map((run) => (
+                    <div className={styles.logRow} key={run.id}>
+                      <strong>{run.status}</strong>
+                      <span>{formatPlatformDateTime(run.createdAt)}</span>
+                    </div>
+                  ))
+                )}
               </article>
             ))}
           </div>
@@ -789,6 +1281,26 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
     return null;
   }
 
+  function renderSidebarSection(sectionKey: string, label: string, content: ReactNode) {
+    const isCollapsed = collapsedRuntimeSections[sectionKey];
+    return (
+      <div className={`${styles.sidebarSection} ${styles.sidebarSectionCollapsible}`}>
+        <button
+          aria-expanded={!isCollapsed}
+          className={styles.sidebarSectionToggle}
+          onClick={() => setCollapsedRuntimeSections((current) => ({ ...current, [sectionKey]: !current[sectionKey] }))}
+          type="button"
+        >
+          <span>{label}</span>
+          <svg className={styles.navGroupChevron} fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 10 10">
+            <path d="M3 1l4 4-4 4" />
+          </svg>
+        </button>
+        {!isCollapsed ? content : null}
+      </div>
+    );
+  }
+
   return (
     <div className={styles.runtimeShell} style={getThemeCssVariables(manifest)}>
       <aside className={styles.runtimeSidebar}>
@@ -822,8 +1334,9 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
           </div>
         </div>
         {manifest.appShell.announcementSlots.some((slot) => slot.active) ? (
-          <div className={styles.sidebarSection}>
-            <p className={styles.sidebarLabel}>Announcements</p>
+          renderSidebarSection(
+            "announcements",
+            "Announcements",
             <div className={styles.listStack}>
               {manifest.appShell.announcementSlots
                 .filter((slot) => slot.active)
@@ -833,11 +1346,12 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
                     <p>{slot.message}</p>
                   </div>
                 ))}
-            </div>
-          </div>
+            </div>,
+          )
         ) : null}
-        <div className={styles.sidebarSection}>
-          <p className={styles.sidebarLabel}>Navigation</p>
+        {renderSidebarSection(
+          "navigation",
+          "Navigation",
           <nav className={styles.navStack}>
             {(groupedMenus.length > 0
               ? groupedMenus.flatMap((group) => [
@@ -849,57 +1363,62 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
                 ])
               : orderedMenus
             ).map((menuOrNode) => {
-                if (!("id" in menuOrNode)) {
-                  return menuOrNode;
-                }
-                const menu = menuOrNode;
-                const page = findPageDefinition(manifest, menu.pageKey);
-                if (!page) {
-                  return null;
-                }
-                const badgeValue = resolveBadgeValue(menu);
+              if (!("id" in menuOrNode)) {
+                return menuOrNode;
+              }
+              const menu = menuOrNode;
+              const page = findPageDefinition(manifest, menu.pageKey);
+              if (!page) {
+                return null;
+              }
+              const badgeValue = resolveBadgeValue(menu);
 
-                return (
-                  <button
-                    className={menu.pageKey === activePageKey ? styles.activeNavItem : styles.navItem}
-                    key={menu.id}
-                    onClick={() => setActivePageKey(menu.pageKey)}
-                    type="button"
-                  >
-                    <span className={styles.navIcon}>{glyphLabel(menu.label)}</span>
-                    <span className={styles.navCopy}>
-                      <span>{menu.label}</span>
-                      <small>{menu.description ?? menu.group}</small>
-                    </span>
-                    {badgeValue ? <span className={styles.inlineTag}>{badgeValue}</span> : null}
-                  </button>
-                );
-              })}
-          </nav>
-        </div>
-        <div className={styles.sidebarSection}>
-          <p className={styles.sidebarLabel}>Status</p>
-          <div className={styles.sidebarMeta}>
-            <span>Environment</span>
-            <strong>{manifest.environment.name}</strong>
-          </div>
-          <div className={styles.sidebarMeta}>
-            <span>Published</span>
-            <strong>{mode === "published" ? publishedLabel : mode === "admin-preview" ? "Admin preview" : "Draft preview"}</strong>
-          </div>
-        </div>
-        <div className={styles.sidebarSection}>
-          <p className={styles.sidebarLabel}>Manifest</p>
+              return (
+                <button
+                  className={menu.pageKey === activePageKey ? styles.activeNavItem : styles.navItem}
+                  key={menu.id}
+                  onClick={() => setPageAndSync(menu.pageKey)}
+                  type="button"
+                >
+                  <span className={styles.navIcon}>{glyphLabel(menu.label)}</span>
+                  <span className={styles.navCopy}>
+                    <span>{menu.label}</span>
+                    <small>{menu.description ?? menu.group}</small>
+                  </span>
+                  {badgeValue ? <span className={styles.inlineTag}>{badgeValue}</span> : null}
+                </button>
+              );
+            })}
+          </nav>,
+        )}
+        {renderSidebarSection(
+          "status",
+          "Status",
+          <div className={styles.sidebarMetaCompactRow}>
+            <div className={styles.sidebarMetaCompact}>
+              <span>Environment</span>
+              <strong>{manifest.environment.name}</strong>
+            </div>
+            <div className={styles.sidebarMetaCompact}>
+              <span>Published</span>
+              <strong>{mode === "published" ? publishedLabel : mode === "admin-preview" ? "Admin preview" : "Draft preview"}</strong>
+            </div>
+          </div>,
+        )}
+        {renderSidebarSection(
+          "manifest",
+          "Manifest",
           <div className={styles.sidebarPanel}>
             {mode === "published"
               ? "This runtime only reflects published metadata. Draft changes stay hidden until the next activated version."
               : mode === "admin-preview"
                 ? "This admin lens renders draft metadata with diagnostics, while user-facing runtime remains unchanged until publish."
                 : "This view renders the current draft manifest for builders only. Data mutations stay disabled until publish."}
-          </div>
-        </div>
-        <div className={styles.sidebarSection}>
-          <p className={styles.sidebarLabel}>Quick actions</p>
+          </div>,
+        )}
+        {renderSidebarSection(
+          "actions",
+          "Quick actions",
           <div className={styles.sidebarActions}>
             {manifest.appShell.quickActions.map((action) => {
               const targetPageKey = action.pageKey;
@@ -912,7 +1431,7 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
                   key={action.key}
                   onClick={() => {
                     if (targetPageKey) {
-                      setActivePageKey(targetPageKey);
+                      setPageAndSync(targetPageKey);
                     } else if (workflow) {
                       void handleQueueWorkflow(workflow.id);
                     }
@@ -923,8 +1442,8 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
                 </button>
               );
             })}
-          </div>
-        </div>
+          </div>,
+        )}
         <div className={styles.sidebarSection}>
           <Link className={styles.secondaryLink} href={`/platform/${tenantSlug}`}>
             Open builder
@@ -943,7 +1462,7 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
             <strong>{manifest.appShell.productName}</strong>
             <div className={styles.inlineList}>
               {orderedMenus.map((menu) => (
-                <button className={menu.pageKey === activePageKey ? styles.secondaryButton : styles.ghostButton} key={`topbar-${menu.id}`} onClick={() => setActivePageKey(menu.pageKey)} type="button">
+                <button className={menu.pageKey === activePageKey ? styles.secondaryButton : styles.ghostButton} key={`topbar-${menu.id}`} onClick={() => setPageAndSync(menu.pageKey)} type="button">
                   {menu.label}
                 </button>
               ))}
@@ -965,9 +1484,7 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
             </button>
           </div>
         ) : null}
-        {message ? <div className={styles.successBanner}>{message}</div> : null}
-        {error ? <div className={styles.errorBanner}>{error}</div> : null}
-        <header className={styles.runtimeHeader}>
+        <header className={[styles.runtimeHeader, scrolledPast ? styles.headerCompact : ""].join(" ")}>
           <div className={styles.headerLead}>
             <p className={styles.eyebrow}>
               {mode === "published" ? manifest.environment.name : mode === "admin-preview" ? "Admin preview" : "Draft preview"}
@@ -1004,6 +1521,7 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
             </div>
           </div>
         </header>
+        <div className={styles.runtimePageEnter} key={activePageKey}>
         {activeLayout ? (
           activeLayout.sections.map((section) => (
             <section className={styles.runtimeSection} key={section.id}>
@@ -1019,9 +1537,11 @@ export function PublishedRuntime({ manifest, requestedRoute, tenantSlug, mode = 
             </section>
           ))
         ) : (
-          <div className={styles.emptyState}>This page has no published layout.</div>
+          renderEmptyState("This page has no published layout.", "Add sections in the platform studio, then publish to make them available here.")
         )}
+        </div>
       </main>
+      {renderToastStack()}
     </div>
   );
 }
