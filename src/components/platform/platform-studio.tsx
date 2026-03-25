@@ -87,6 +87,12 @@ const WORKSPACES: Array<{ key: WorkspaceKey; label: string; note: string; code: 
   { key: "audit", label: "Audit", note: "Publish history and admin activity", code: "AU" },
 ];
 
+const WORKSPACE_GROUPS: Array<{ label: string; key: string; workspaces: WorkspaceKey[] }> = [
+  { label: "Build", key: "build", workspaces: ["data-model", "pages", "forms", "branding"] },
+  { label: "Configure", key: "configure", workspaces: ["profiles", "navigation", "workflows", "agents"] },
+  { label: "Operate", key: "operate", workspaces: ["control-tower", "models", "security", "audit"] },
+];
+
 const WORKSPACE_TABS: Record<WorkspaceKey, string[]> = {
   "data-model": ["Objects", "Fields", "Validation"],
   pages: ["Designer", "Pages", "Templates"],
@@ -634,9 +640,18 @@ export function PlatformStudio({
   const [draggedComponentId, setDraggedComponentId] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [hasLoadedSidebarPreference, setHasLoadedSidebarPreference] = useState(false);
-  const [activeTab, setActiveTab] = useState(0);
+  const [activeTabByWorkspace, setActiveTabByWorkspace] = useState<Partial<Record<WorkspaceKey, number>>>({});
   const [message, setMessage] = useState<string | null>(null);
+  const [messageExiting, setMessageExiting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{ title: string; message: string; confirmLabel: string; onConfirm: () => void } | null>(null);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [commandPaletteQuery, setCommandPaletteQuery] = useState("");
+  const [commandPaletteIndex, setCommandPaletteIndex] = useState(0);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [controlTowerFiltersExpanded, setControlTowerFiltersExpanded] = useState(false);
+  const [controlTowerListLimits, setControlTowerListLimits] = useState({ workflowRuns: 12, costs: 12, alerts: 12, deliveries: 12, approvals: 12, deadLetters: 12 });
+  const [workspaceTransitionKey, setWorkspaceTransitionKey] = useState(0);
   const [controlTowerSelection, setControlTowerSelection] = useState<{ type: ControlTowerSelectionType; id: string } | null>(null);
   const [controlTowerDetail, setControlTowerDetail] = useState<Record<string, unknown> | null>(null);
   const [controlTowerFilters, setControlTowerFilters] = useState({
@@ -648,6 +663,9 @@ export function PlatformStudio({
     toDate: "",
   });
   const [isPending, startTransition] = useTransition();
+
+  const activeTab = activeTabByWorkspace[workspace] ?? 0;
+  const setActiveTab = useCallback((index: number) => setActiveTabByWorkspace((prev) => ({ ...prev, [workspace]: index })), [workspace]);
 
   const manifest = bootstrap.draftManifest;
   const actor = bootstrap.actor;
@@ -907,6 +925,14 @@ export function PlatformStudio({
       return true;
     });
   }, [controlTowerFilters.fromDate, controlTowerFilters.severity, controlTowerFilters.status, controlTowerFilters.toDate, notificationDeliveries]);
+  const activeFilterCount = [
+    controlTowerFilters.status !== "all",
+    controlTowerFilters.workflowKey !== "",
+    controlTowerFilters.agentKey !== "",
+    controlTowerFilters.severity !== "all",
+    controlTowerFilters.fromDate !== "",
+    controlTowerFilters.toDate !== "",
+  ].filter(Boolean).length;
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -939,6 +965,77 @@ export function PlatformStudio({
       // localStorage access is optional
     }
   }, [hasLoadedSidebarPreference, sidebarCollapsed]);
+
+  // Auto-dismiss success banners after 4s
+  useEffect(() => {
+    if (!message) return;
+    const exitTimer = setTimeout(() => setMessageExiting(true), 3600);
+    const clearTimer = setTimeout(() => { setMessage(null); setMessageExiting(false); }, 4000);
+    return () => { clearTimeout(exitTimer); clearTimeout(clearTimer); };
+  }, [message]);
+
+  // Command palette keyboard listener
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      const meta = event.metaKey || event.ctrlKey;
+      const tag = (document.activeElement?.tagName ?? "").toLowerCase();
+      const isInput = tag === "input" || tag === "textarea" || tag === "select";
+
+      // Cmd+K opens palette
+      if (meta && event.key === "k") {
+        event.preventDefault();
+        setCommandPaletteOpen((prev) => !prev);
+        setCommandPaletteQuery("");
+        setCommandPaletteIndex(0);
+        return;
+      }
+
+      // Escape closes palette
+      if (event.key === "Escape" && commandPaletteOpen) {
+        event.preventDefault();
+        setCommandPaletteOpen(false);
+        return;
+      }
+
+      // Escape closes confirm dialog
+      if (event.key === "Escape" && confirmDialog) {
+        event.preventDefault();
+        setConfirmDialog(null);
+        return;
+      }
+
+      // Keyboard shortcuts (only when no input focused and palette closed)
+      if (!isInput && !commandPaletteOpen && meta) {
+        const digitMatch = event.key.match(/^([1-9])$/);
+        if (digitMatch) {
+          const index = Number(digitMatch[1]) - 1;
+          if (index < WORKSPACES.length) {
+            event.preventDefault();
+            setWorkspace(WORKSPACES[index].key);
+            setWorkspaceTransitionKey((prev) => prev + 1);
+          }
+        }
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [commandPaletteOpen, confirmDialog]);
+
+  // Load collapsed groups from localStorage
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem("ta-platform-collapsed-groups");
+      if (stored) setCollapsedGroups(new Set(JSON.parse(stored) as string[]));
+    } catch { /* optional */ }
+  }, []);
+
+  // Persist collapsed groups
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("ta-platform-collapsed-groups", JSON.stringify([...collapsedGroups]));
+    } catch { /* optional */ }
+  }, [collapsedGroups]);
 
   const refreshPublishPreview = useCallback(async (): Promise<void> => {
     try {
@@ -1224,6 +1321,14 @@ export function PlatformStudio({
 
     return () => window.clearTimeout(timer);
   }, [designerDirty, layoutDraft, pageDraft, workspace]);
+
+  // Unsaved changes guard — warn on browser close/navigate
+  useEffect(() => {
+    if (!designerDirty) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [designerDirty]);
 
   async function handlePublish(): Promise<void> {
     await executeAction(
@@ -2378,6 +2483,173 @@ export function PlatformStudio({
     }));
   }
 
+  // ── Confirm dialog helper ──
+  function requestConfirmation(title: string, msg: string, confirmLabel: string, onConfirm: () => void) {
+    setConfirmDialog({ title, message: msg, confirmLabel, onConfirm });
+  }
+
+  function renderConfirmDialog() {
+    if (!confirmDialog) return null;
+    return (
+      <div className={styles.confirmOverlay} onClick={() => setConfirmDialog(null)} role="presentation">
+        <div className={styles.confirmDialog} onClick={(event) => event.stopPropagation()} role="dialog" aria-label={confirmDialog.title}>
+          <h3>{confirmDialog.title}</h3>
+          <p>{confirmDialog.message}</p>
+          <div className={styles.confirmActions}>
+            <button className={styles.confirmCancelButton} onClick={() => setConfirmDialog(null)} type="button">Cancel</button>
+            <button className={styles.confirmDangerButton} onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(null); }} type="button">{confirmDialog.confirmLabel}</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Command palette ──
+  const commandPaletteItems = useMemo(() => {
+    type PaletteItem = { label: string; hint: string; code: string; action: () => void };
+    const items: PaletteItem[] = [];
+
+    // Workspaces
+    for (const entry of WORKSPACES) {
+      items.push({
+        label: entry.label,
+        hint: `Workspace · ${entry.note}`,
+        code: entry.code,
+        action: () => { setWorkspace(entry.key); setWorkspaceTransitionKey((prev) => prev + 1); },
+      });
+    }
+
+    // Sub-tabs
+    for (const entry of WORKSPACES) {
+      const tabs = WORKSPACE_TABS[entry.key];
+      for (let i = 0; i < tabs.length; i++) {
+        items.push({
+          label: `${entry.label} > ${tabs[i]}`,
+          hint: `Tab in ${entry.label}`,
+          code: entry.code,
+          action: () => { setWorkspace(entry.key); setActiveTab(i); setWorkspaceTransitionKey((prev) => prev + 1); },
+        });
+      }
+    }
+
+    // Objects
+    for (const obj of manifest.objects) {
+      items.push({
+        label: obj.label,
+        hint: `Object · ${obj.fields.length} fields`,
+        code: "DM",
+        action: () => { setWorkspace("data-model"); setSelectedObjectId(obj.id); setWorkspaceTransitionKey((prev) => prev + 1); },
+      });
+    }
+
+    // Pages
+    for (const page of manifest.pages) {
+      items.push({
+        label: page.title,
+        hint: `Page · /${page.route}`,
+        code: "PG",
+        action: () => { setWorkspace("pages"); setSelectedPageId(page.id); setWorkspaceTransitionKey((prev) => prev + 1); },
+      });
+    }
+
+    // Forms
+    for (const form of manifest.forms) {
+      items.push({
+        label: form.title,
+        hint: `Form · /${form.route}`,
+        code: "FM",
+        action: () => { setWorkspace("forms"); setSelectedFormId(form.id); setWorkspaceTransitionKey((prev) => prev + 1); },
+      });
+    }
+
+    // Workflows
+    for (const wf of manifest.workflows) {
+      items.push({
+        label: wf.name,
+        hint: `Workflow · ${wf.nodes.length} nodes`,
+        code: "WF",
+        action: () => { setWorkspace("workflows"); setSelectedWorkflowId(wf.id); setWorkspaceTransitionKey((prev) => prev + 1); },
+      });
+    }
+
+    // Agents
+    for (const agent of manifest.agents) {
+      items.push({
+        label: agent.name,
+        hint: `Agent · ${agent.scope}`,
+        code: "AG",
+        action: () => { setWorkspace("agents"); setSelectedAgentId(agent.id); setWorkspaceTransitionKey((prev) => prev + 1); },
+      });
+    }
+
+    return items;
+  }, [manifest.objects, manifest.pages, manifest.forms, manifest.workflows, manifest.agents, setActiveTab]);
+
+  const filteredPaletteItems = useMemo(() => {
+    if (!commandPaletteQuery.trim()) return commandPaletteItems.slice(0, 20);
+    const q = commandPaletteQuery.toLowerCase();
+    return commandPaletteItems.filter((item) => item.label.toLowerCase().includes(q) || item.hint.toLowerCase().includes(q)).slice(0, 15);
+  }, [commandPaletteItems, commandPaletteQuery]);
+
+  function renderCommandPalette() {
+    if (!commandPaletteOpen) return null;
+    return (
+      <div className={styles.commandPaletteOverlay} onClick={() => setCommandPaletteOpen(false)} role="presentation">
+        <div className={styles.commandPaletteDialog} onClick={(event) => event.stopPropagation()} role="dialog" aria-label="Command palette">
+          <input
+            autoFocus
+            className={styles.commandPaletteInput}
+            onChange={(event) => { setCommandPaletteQuery(event.target.value); setCommandPaletteIndex(0); }}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowDown") { event.preventDefault(); setCommandPaletteIndex((prev) => Math.min(prev + 1, filteredPaletteItems.length - 1)); }
+              else if (event.key === "ArrowUp") { event.preventDefault(); setCommandPaletteIndex((prev) => Math.max(prev - 1, 0)); }
+              else if (event.key === "Enter" && filteredPaletteItems[commandPaletteIndex]) { event.preventDefault(); filteredPaletteItems[commandPaletteIndex].action(); setCommandPaletteOpen(false); }
+            }}
+            placeholder="Jump to workspace, object, page, workflow, agent..."
+            value={commandPaletteQuery}
+          />
+          <div className={styles.commandPaletteResults}>
+            {filteredPaletteItems.length === 0 ? (
+              <div className={styles.commandPaletteEmpty}>No results found.</div>
+            ) : (
+              filteredPaletteItems.map((item, index) => (
+                <div
+                  className={index === commandPaletteIndex ? styles.commandPaletteResultActive : styles.commandPaletteResult}
+                  key={`${item.code}-${item.label}`}
+                  onClick={() => { item.action(); setCommandPaletteOpen(false); }}
+                  onMouseEnter={() => setCommandPaletteIndex(index)}
+                  role="option"
+                  aria-selected={index === commandPaletteIndex}
+                >
+                  <span className={styles.commandPaletteResultIcon}>{item.code}</span>
+                  <div className={styles.commandPaletteResultCopy}>
+                    <span>{item.label}</span>
+                    <small>{item.hint}</small>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          <div className={styles.commandPaletteFooter}>
+            <span><kbd>↑↓</kbd> navigate</span>
+            <span><kbd>↵</kbd> select</span>
+            <span><kbd>esc</kbd> close</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Loading skeleton helper ──
+  function renderSkeleton(rows: number) {
+    return Array.from({ length: rows }, (_, i) => (
+      <div className={styles.skeletonRow} key={i}>
+        <div className={`${styles.skeleton} ${styles.skeletonWide}`} />
+        <div className={`${styles.skeleton} ${styles.skeletonNarrow}`} />
+      </div>
+    ));
+  }
+
   function renderTabBar() {
     const tabs = WORKSPACE_TABS[workspace];
     return (
@@ -2390,6 +2662,7 @@ export function PlatformStudio({
             type="button"
           >
             {tabLabel}
+            {workspace === "pages" && index === 0 && designerDirty ? <span className={styles.unsavedDot} title="Unsaved changes" /> : null}
           </button>
         ))}
       </div>
@@ -2417,20 +2690,31 @@ export function PlatformStudio({
             </button>
           </div>
           <div className={styles.listStack}>
-            {manifest.objects.map((objectDefinition) => (
-              <button
-                className={objectDefinition.id === selectedObject?.id ? styles.activeListItem : styles.listItem}
-                key={objectDefinition.id}
-                onClick={() => {
-                  setSelectedObjectId(objectDefinition.id);
-                  setObjectDraft(createObjectDraftFromDefinition(objectDefinition));
-                }}
-                type="button"
-              >
-                <span>{objectDefinition.label}</span>
-                <small>{objectDefinition.fields.length} fields</small>
-              </button>
-            ))}
+            {manifest.objects.length === 0 ? (
+              <div className={styles.emptyState}>
+                <p>No objects defined yet.</p>
+                <p className={styles.emptyStateHint}>Objects are the core data building blocks. Start by defining your first data model.</p>
+                <button className={styles.emptyStateCta} onClick={() => { setSelectedObjectId(""); setObjectDraft(createBlankObjectDraft()); }} type="button">Create your first object</button>
+              </div>
+            ) : (
+              manifest.objects.map((objectDefinition) => (
+                <button
+                  className={`${objectDefinition.id === selectedObject?.id ? styles.activeListItem : styles.listItem} ${styles.staggerChild}`}
+                  key={objectDefinition.id}
+                  onClick={() => {
+                    setSelectedObjectId(objectDefinition.id);
+                    setObjectDraft(createObjectDraftFromDefinition(objectDefinition));
+                  }}
+                  type="button"
+                >
+                  <span>{objectDefinition.label}</span>
+                  <div className={styles.listItemMeta}>
+                    <span className={styles.metaBadge}>{objectDefinition.fields.length} fields</span>
+                    {objectDefinition.primaryFieldKey ? <span className={styles.metaBadge}>{objectDefinition.primaryFieldKey}</span> : null}
+                  </div>
+                </button>
+              ))
+            )}
           </div>
         </section>
 
@@ -2443,7 +2727,7 @@ export function PlatformStudio({
                   <h2>{selectedObject ? selectedObject.label : "Create object"}</h2>
                 </div>
                 {selectedObject ? (
-                  <button className={styles.ghostButtonDanger} onClick={() => void handleObjectDelete(selectedObject.id)} type="button">
+                  <button className={styles.ghostButtonDanger} onClick={() => requestConfirmation("Delete object", `Are you sure you want to delete "${selectedObject.label}"? This action cannot be undone.`, "Delete", () => void handleObjectDelete(selectedObject.id))} type="button">
                     Delete
                   </button>
                 ) : null}
@@ -2460,6 +2744,7 @@ export function PlatformStudio({
                 <label className={styles.formField}>
                   <span>Key</span>
                   <input className={styles.input} onChange={(event) => setObjectDraft((current) => ({ ...current, key: event.target.value }))} value={objectDraft.key} />
+                  <small className={styles.formFieldHelp}>Unique lowercase_snake_case identifier</small>
                 </label>
                 <label className={styles.formField}>
                   <span>Primary field key</span>
@@ -2513,7 +2798,7 @@ export function PlatformStudio({
                         {field.key} · {field.type} · {field.sensitivity}
                       </p>
                     </div>
-                    <button className={styles.ghostButtonDanger} onClick={() => void handleFieldDelete(field.id)} type="button">
+                    <button className={styles.ghostButtonDanger} onClick={() => requestConfirmation("Delete field", `Remove "${field.label}" from this object? This cannot be undone.`, "Delete", () => void handleFieldDelete(field.id))} type="button">
                       Delete
                     </button>
                   </div>
@@ -2550,6 +2835,7 @@ export function PlatformStudio({
                     <option value="pii">PII</option>
                     <option value="sensitive">Sensitive</option>
                   </select>
+                  <small className={styles.formFieldHelp}>Controls masking in agent context. PII fields are redacted by default.</small>
                 </label>
                 <label className={styles.formFieldSpan}>
                   <span>Placeholder</span>
@@ -2560,10 +2846,12 @@ export function PlatformStudio({
                 <label className={styles.checkboxField}>
                   <input checked={fieldDraft.required} onChange={(event) => setFieldDraft((current) => ({ ...current, required: event.target.checked }))} type="checkbox" />
                   <span>Required</span>
+                  <small className={styles.formFieldHelp}>Must have a value before save</small>
                 </label>
                 <label className={styles.checkboxField}>
                   <input checked={fieldDraft.unique} onChange={(event) => setFieldDraft((current) => ({ ...current, unique: event.target.checked }))} type="checkbox" />
                   <span>Unique</span>
+                  <small className={styles.formFieldHelp}>No duplicate values across records</small>
                 </label>
               </div>
               <div className={styles.actionsRow}>
@@ -2738,17 +3026,24 @@ export function PlatformStudio({
           </div>
 
           <div className={styles.listStack}>
-            {manifest.pages.map((page) => (
-              <button
-                className={`${page.id === selectedPage?.id ? styles.activeListItem : styles.listItem} ${styles.staggerChild}`}
-                key={page.id}
-                onClick={() => applySelectedPage(page)}
-                type="button"
-              >
-                <span>{page.title}</span>
-                <small>/{page.route}</small>
-              </button>
-            ))}
+            {manifest.pages.map((page) => {
+              const pageLayout = manifest.layouts.find((l) => l.key === page.layoutKey);
+              return (
+                <button
+                  className={`${page.id === selectedPage?.id ? styles.activeListItem : styles.listItem} ${styles.staggerChild}`}
+                  key={page.id}
+                  onClick={() => applySelectedPage(page)}
+                  type="button"
+                >
+                  <span>{page.title}</span>
+                  <div className={styles.listItemMeta}>
+                    <span className={styles.metaBadge}>/{page.route}</span>
+                    {pageLayout ? <span className={styles.metaBadge}>{pageLayout.sections.length} sections</span> : null}
+                    {page.isHome ? <span className={styles.metaBadge}>Home</span> : null}
+                  </div>
+                </button>
+              );
+            })}
           </div>
 
           <div className={styles.sidebarSection}>
@@ -3152,7 +3447,12 @@ export function PlatformStudio({
                 type="button"
               >
                 <span>{form.title}</span>
-                <small>/{form.route} · {form.deliveryMode}</small>
+                <div className={styles.listItemMeta}>
+                  <span className={styles.metaBadge}>/{form.route}</span>
+                  <span className={styles.metaBadge}>{form.deliveryMode}</span>
+                  <span className={styles.metaBadge}>{form.fields.length} fields</span>
+                  <span className={styles.metaBadge}>{form.steps.length} steps</span>
+                </div>
               </button>
             ))}
           </div>
@@ -3283,7 +3583,7 @@ export function PlatformStudio({
                           <p className={styles.cardEyebrow}>Field</p>
                           <h3>{field.label}</h3>
                         </div>
-                        <button className={styles.ghostButtonDanger} onClick={() => removeFormField(field.id)} type="button">
+                        <button className={styles.ghostButtonDanger} onClick={() => requestConfirmation("Remove field", `Remove "${field.label}" from this form?`, "Remove", () => removeFormField(field.id))} type="button">
                           Remove
                         </button>
                       </div>
@@ -4317,9 +4617,11 @@ export function PlatformStudio({
                 type="button"
               >
                 <span>{workflow.name}</span>
-                <small>
-                  {workflow.nodes.length} nodes · {workflow.edges.length} edges · {workflow.status}
-                </small>
+                <div className={styles.listItemMeta}>
+                  <span className={styles.metaBadge}>{workflow.nodes.length} nodes</span>
+                  <span className={styles.metaBadge}>{workflow.edges.length} edges</span>
+                  <span className={styles.metaBadge}>{workflow.status}</span>
+                </div>
               </button>
             ))}
           </div>
@@ -4936,15 +5238,17 @@ export function PlatformStudio({
           <div className={styles.listStack}>
             {manifest.agents.map((agent) => (
               <button
-                className={agent.id === selectedAgent?.id ? styles.activeListItem : styles.listItem}
+                className={`${agent.id === selectedAgent?.id ? styles.activeListItem : styles.listItem} ${styles.staggerChild}`}
                 key={agent.id}
                 onClick={() => selectAgent(agent)}
                 type="button"
               >
                 <span>{agent.name}</span>
-                <small>
-                  {agent.scope} · {agent.zeroRetentionRequired ? "zero retention" : "standard retention"}
-                </small>
+                <div className={styles.listItemMeta}>
+                  <span className={styles.metaBadge}>{agent.scope}</span>
+                  <span className={styles.metaBadge}>{agent.zeroRetentionRequired ? "zero retention" : "standard"}</span>
+                  {agent.modelProviderId ? <span className={styles.metaBadge}>{manifest.modelProviders.find((p) => p.id === agent.modelProviderId)?.name ?? "provider"}</span> : null}
+                </div>
               </button>
             ))}
           </div>
@@ -4958,60 +5262,91 @@ export function PlatformStudio({
                   <h2>{selectedAgent ? selectedAgent.name : "AI control plane"}</h2>
                 </div>
               </div>
-              <div className={styles.formGrid}>
-                <label className={styles.formField}>
-                  <span>Name</span>
-                  <input className={styles.input} onChange={(event) => setAgentDraft((current) => ({ ...current, name: event.target.value }))} value={agentDraft.name} />
-                </label>
-                <label className={styles.formField}>
-                  <span>Key</span>
-                  <input className={styles.input} onChange={(event) => setAgentDraft((current) => ({ ...current, key: event.target.value }))} value={agentDraft.key} />
-                </label>
-                <label className={styles.formField}>
-                  <span>Scope</span>
-                  <select className={styles.select} onChange={(event) => setAgentDraft((current) => ({ ...current, scope: event.target.value as AgentDefinition["scope"] }))} value={agentDraft.scope}>
-                    <option value="workspace">Workspace</option>
-                    <option value="node">Node</option>
-                  </select>
-                </label>
-                <label className={styles.formField}>
-                  <span>Model provider</span>
-                  <select className={styles.select} onChange={(event) => setAgentDraft((current) => ({ ...current, modelProviderId: event.target.value }))} value={agentDraft.modelProviderId}>
-                    <option value="">Choose provider</option>
-                    {manifest.modelProviders.map((provider) => (
-                      <option key={provider.id} value={provider.id}>
-                        {provider.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className={styles.formFieldSpan}>
-                  <span>Description</span>
-                  <textarea className={styles.textarea} onChange={(event) => setAgentDraft((current) => ({ ...current, description: event.target.value }))} value={agentDraft.description ?? ""} />
-                </label>
-                <label className={styles.formFieldSpan}>
-                  <span>Prompt</span>
-                  <textarea className={styles.textarea} onChange={(event) => setAgentDraft((current) => ({ ...current, prompt: event.target.value }))} value={agentDraft.prompt} />
-                </label>
-                <label className={styles.formField}>
-                  <span>Output schema</span>
-                  <textarea className={styles.textarea} onChange={(event) => setAgentDraft((current) => ({ ...current, outputSchema: event.target.value }))} value={agentDraft.outputSchema ?? ""} />
-                </label>
-                <label className={styles.formField}>
-                  <span>Budget (USD)</span>
-                  <input className={styles.input} min="0" onChange={(event) => setAgentDraft((current) => ({ ...current, costBudgetUsd: Number(event.target.value) || 0 }))} step="0.01" type="number" value={agentDraft.costBudgetUsd ?? 0} />
-                </label>
-              </div>
-              <div className={styles.inlineList}>
-                <label className={styles.checkboxField}>
-                  <input checked={agentDraft.zeroRetentionRequired} onChange={(event) => setAgentDraft((current) => ({ ...current, zeroRetentionRequired: event.target.checked }))} type="checkbox" />
-                  <span>Zero retention required</span>
-                </label>
-                <label className={styles.checkboxField}>
-                  <input checked={agentDraft.approvalPolicy?.required ?? false} onChange={(event) => setAgentDraft((current) => ({ ...current, approvalPolicy: { ...(current.approvalPolicy ?? { approverRole: "BUILDER_ADMIN", notes: "" }), required: event.target.checked } }))} type="checkbox" />
-                  <span>Approval required</span>
-                </label>
-              </div>
+              <details className={styles.formSection} open>
+                <summary>
+                  <svg className={styles.formSectionChevron} fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 10 10"><path d="M3 1l4 4-4 4" /></svg>
+                  Identity
+                </summary>
+                <div className={styles.formSectionContent}>
+                  <div className={styles.formGrid}>
+                    <label className={styles.formField}>
+                      <span>Name</span>
+                      <input className={styles.input} onChange={(event) => setAgentDraft((current) => ({ ...current, name: event.target.value }))} value={agentDraft.name} />
+                    </label>
+                    <label className={styles.formField}>
+                      <span>Key</span>
+                      <input className={styles.input} onChange={(event) => setAgentDraft((current) => ({ ...current, key: event.target.value }))} value={agentDraft.key} />
+                      <small className={styles.formFieldHelp}>Unique lowercase_snake_case identifier</small>
+                    </label>
+                    <label className={styles.formField}>
+                      <span>Scope</span>
+                      <select className={styles.select} onChange={(event) => setAgentDraft((current) => ({ ...current, scope: event.target.value as AgentDefinition["scope"] }))} value={agentDraft.scope}>
+                        <option value="workspace">Workspace</option>
+                        <option value="node">Node</option>
+                      </select>
+                      <small className={styles.formFieldHelp}>Workspace agents operate across all objects. Node agents run at a single workflow step.</small>
+                    </label>
+                    <label className={styles.formFieldSpan}>
+                      <span>Description</span>
+                      <textarea className={styles.textarea} onChange={(event) => setAgentDraft((current) => ({ ...current, description: event.target.value }))} value={agentDraft.description ?? ""} />
+                    </label>
+                  </div>
+                </div>
+              </details>
+              <details className={styles.formSection} open>
+                <summary>
+                  <svg className={styles.formSectionChevron} fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 10 10"><path d="M3 1l4 4-4 4" /></svg>
+                  Model and prompt
+                </summary>
+                <div className={styles.formSectionContent}>
+                  <div className={styles.formGrid}>
+                    <label className={styles.formField}>
+                      <span>Model provider</span>
+                      <select className={styles.select} onChange={(event) => setAgentDraft((current) => ({ ...current, modelProviderId: event.target.value }))} value={agentDraft.modelProviderId}>
+                        <option value="">Choose provider</option>
+                        {manifest.modelProviders.map((provider) => (
+                          <option key={provider.id} value={provider.id}>
+                            {provider.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className={styles.formField}>
+                      <span>Budget (USD)</span>
+                      <input className={styles.input} min="0" onChange={(event) => setAgentDraft((current) => ({ ...current, costBudgetUsd: Number(event.target.value) || 0 }))} step="0.01" type="number" value={agentDraft.costBudgetUsd ?? 0} />
+                      <small className={styles.formFieldHelp}>Maximum spend per execution before the agent is paused.</small>
+                    </label>
+                    <label className={styles.formFieldSpan}>
+                      <span>Prompt</span>
+                      <textarea className={styles.textarea} onChange={(event) => setAgentDraft((current) => ({ ...current, prompt: event.target.value }))} value={agentDraft.prompt} />
+                    </label>
+                    <label className={styles.formField}>
+                      <span>Output schema</span>
+                      <textarea className={styles.textarea} onChange={(event) => setAgentDraft((current) => ({ ...current, outputSchema: event.target.value }))} value={agentDraft.outputSchema ?? ""} />
+                    </label>
+                  </div>
+                </div>
+              </details>
+              <details className={styles.formSection} open>
+                <summary>
+                  <svg className={styles.formSectionChevron} fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 10 10"><path d="M3 1l4 4-4 4" /></svg>
+                  Policy and safety
+                </summary>
+                <div className={styles.formSectionContent}>
+                  <div className={styles.inlineList}>
+                    <label className={styles.checkboxField}>
+                      <input checked={agentDraft.zeroRetentionRequired} onChange={(event) => setAgentDraft((current) => ({ ...current, zeroRetentionRequired: event.target.checked }))} type="checkbox" />
+                      <span>Zero retention required</span>
+                      <small className={styles.formFieldHelp}>Provider must not store request or response data</small>
+                    </label>
+                    <label className={styles.checkboxField}>
+                      <input checked={agentDraft.approvalPolicy?.required ?? false} onChange={(event) => setAgentDraft((current) => ({ ...current, approvalPolicy: { ...(current.approvalPolicy ?? { approverRole: "BUILDER_ADMIN", notes: "" }), required: event.target.checked } }))} type="checkbox" />
+                      <span>Approval required</span>
+                      <small className={styles.formFieldHelp}>Human sign-off before each run</small>
+                    </label>
+                  </div>
+                </div>
+              </details>
               {selectedProvider ? (
                 <div className={styles.agentPolicyCard}>
                   <div>
@@ -5862,56 +6197,64 @@ export function PlatformStudio({
       <div className={styles.workspaceGrid}>
         <section className={styles.panelWide}>
           <div className={styles.sectionHeader}>
-            <div>
-              <p className={styles.cardEyebrow}>Filters</p>
-              <h2>Operator scope</h2>
-            </div>
+            <button className={styles.filterToggleRow} onClick={() => setControlTowerFiltersExpanded((prev) => !prev)} type="button">
+              <div>
+                <p className={styles.cardEyebrow}>Filters</p>
+                <h2>Operator scope{activeFilterCount > 0 ? <span className={styles.filterBadge} style={{ marginLeft: 10, verticalAlign: "middle" }}>{activeFilterCount}</span> : null}</h2>
+              </div>
+              <svg className={styles.navGroupChevron} fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 10 10" style={{ transform: controlTowerFiltersExpanded ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.2s" }}><path d="M3 1l4 4-4 4" /></svg>
+            </button>
+            {activeFilterCount > 0 ? (
+              <button className={styles.filterClearButton} onClick={() => setControlTowerFilters({ status: "all", workflowKey: "", agentKey: "", severity: "all", fromDate: "", toDate: "" })} type="button">Clear all</button>
+            ) : null}
           </div>
-          <div className={styles.formGrid}>
-            <label className={styles.formField}>
-              <span>Status</span>
-              <select className={styles.select} onChange={(event) => setControlTowerFilters((current) => ({ ...current, status: event.target.value }))} value={controlTowerFilters.status}>
-                <option value="all">All</option>
-                <option value="QUEUED">Queued</option>
-                <option value="RUNNING">Running</option>
-                <option value="PAUSED">Paused</option>
-                <option value="SUCCEEDED">Succeeded</option>
-                <option value="FAILED">Failed</option>
-                <option value="queued">Queued agent</option>
-                <option value="running">Running agent</option>
-                <option value="blocked">Blocked agent</option>
-                <option value="succeeded">Succeeded agent</option>
-                <option value="failed">Failed agent</option>
-                <option value="retrying">Retrying delivery</option>
-                <option value="exhausted">Exhausted delivery</option>
-              </select>
-            </label>
-            <label className={styles.formField}>
-              <span>Workflow key</span>
-              <input className={styles.input} onChange={(event) => setControlTowerFilters((current) => ({ ...current, workflowKey: event.target.value }))} value={controlTowerFilters.workflowKey} />
-            </label>
-            <label className={styles.formField}>
-              <span>Agent key</span>
-              <input className={styles.input} onChange={(event) => setControlTowerFilters((current) => ({ ...current, agentKey: event.target.value }))} value={controlTowerFilters.agentKey} />
-            </label>
-            <label className={styles.formField}>
-              <span>Severity</span>
-              <select className={styles.select} onChange={(event) => setControlTowerFilters((current) => ({ ...current, severity: event.target.value }))} value={controlTowerFilters.severity}>
-                <option value="all">All</option>
-                <option value="info">Info</option>
-                <option value="success">Success</option>
-                <option value="warning">Warning</option>
-                <option value="critical">Critical</option>
-              </select>
-            </label>
-            <label className={styles.formField}>
-              <span>From</span>
-              <input className={styles.input} onChange={(event) => setControlTowerFilters((current) => ({ ...current, fromDate: event.target.value }))} type="date" value={controlTowerFilters.fromDate} />
-            </label>
-            <label className={styles.formField}>
-              <span>To</span>
-              <input className={styles.input} onChange={(event) => setControlTowerFilters((current) => ({ ...current, toDate: event.target.value }))} type="date" value={controlTowerFilters.toDate} />
-            </label>
+          <div className={controlTowerFiltersExpanded ? styles.filterBody : `${styles.filterBody} ${styles.filterBodyCollapsed}`}>
+            <div className={styles.formGrid}>
+              <label className={styles.formField}>
+                <span>Status</span>
+                <select className={styles.select} onChange={(event) => setControlTowerFilters((current) => ({ ...current, status: event.target.value }))} value={controlTowerFilters.status}>
+                  <option value="all">All</option>
+                  <option value="QUEUED">Queued</option>
+                  <option value="RUNNING">Running</option>
+                  <option value="PAUSED">Paused</option>
+                  <option value="SUCCEEDED">Succeeded</option>
+                  <option value="FAILED">Failed</option>
+                  <option value="queued">Queued agent</option>
+                  <option value="running">Running agent</option>
+                  <option value="blocked">Blocked agent</option>
+                  <option value="succeeded">Succeeded agent</option>
+                  <option value="failed">Failed agent</option>
+                  <option value="retrying">Retrying delivery</option>
+                  <option value="exhausted">Exhausted delivery</option>
+                </select>
+              </label>
+              <label className={styles.formField}>
+                <span>Workflow key</span>
+                <input className={styles.input} onChange={(event) => setControlTowerFilters((current) => ({ ...current, workflowKey: event.target.value }))} value={controlTowerFilters.workflowKey} />
+              </label>
+              <label className={styles.formField}>
+                <span>Agent key</span>
+                <input className={styles.input} onChange={(event) => setControlTowerFilters((current) => ({ ...current, agentKey: event.target.value }))} value={controlTowerFilters.agentKey} />
+              </label>
+              <label className={styles.formField}>
+                <span>Severity</span>
+                <select className={styles.select} onChange={(event) => setControlTowerFilters((current) => ({ ...current, severity: event.target.value }))} value={controlTowerFilters.severity}>
+                  <option value="all">All</option>
+                  <option value="info">Info</option>
+                  <option value="success">Success</option>
+                  <option value="warning">Warning</option>
+                  <option value="critical">Critical</option>
+                </select>
+              </label>
+              <label className={styles.formField}>
+                <span>From</span>
+                <input className={styles.input} onChange={(event) => setControlTowerFilters((current) => ({ ...current, fromDate: event.target.value }))} type="date" value={controlTowerFilters.fromDate} />
+              </label>
+              <label className={styles.formField}>
+                <span>To</span>
+                <input className={styles.input} onChange={(event) => setControlTowerFilters((current) => ({ ...current, toDate: event.target.value }))} type="date" value={controlTowerFilters.toDate} />
+              </label>
+            </div>
           </div>
         </section>
         {activeTab === 0 ? (
@@ -5928,10 +6271,14 @@ export function PlatformStudio({
               </div>
               <div className={styles.listStack}>
                 {filteredWorkflowRuns.length === 0 ? (
-                  <div className={styles.emptyState}>No workflow runs yet.</div>
+                  <div className={styles.emptyState}>
+                    <p>No workflow runs yet.</p>
+                    <p className={styles.emptyStateHint}>Publish a workflow and queue a run to see execution data here.</p>
+                    <button className={styles.emptyStateCta} onClick={() => void refreshControlTower()} type="button">Refresh</button>
+                  </div>
                 ) : (
-                  filteredWorkflowRuns.slice(0, 12).map((run) => (
-                    <article className={styles.auditRow} key={run.id}>
+                  filteredWorkflowRuns.slice(0, controlTowerListLimits.workflowRuns).map((run) => (
+                    <article className={`${styles.auditRow} ${styles.staggerChild}`} key={run.id}>
                       <div>
                         <strong>{run.workflowKey}</strong>
                         <p>
@@ -5951,6 +6298,11 @@ export function PlatformStudio({
                     </article>
                   ))
                 )}
+                {filteredWorkflowRuns.length > controlTowerListLimits.workflowRuns ? (
+                  <button className={styles.showMoreButton} onClick={() => setControlTowerListLimits((prev) => ({ ...prev, workflowRuns: prev.workflowRuns + 24 }))} type="button">
+                    Show more ({filteredWorkflowRuns.length - controlTowerListLimits.workflowRuns} remaining)
+                  </button>
+                ) : null}
               </div>
             </section>
             <section className={styles.panelWide}>
@@ -6008,7 +6360,7 @@ export function PlatformStudio({
                 </thead>
                 <tbody>
                   {costLedger.length > 0 ? (
-                    costLedger.slice(0, 12).map((entry) => (
+                    costLedger.slice(0, controlTowerListLimits.costs).map((entry) => (
                       <tr key={entry.id}>
                         <td>{entry.category}</td>
                         <td>{entry.referenceId}</td>
@@ -6040,9 +6392,12 @@ export function PlatformStudio({
             </div>
             <div className={styles.listStack}>
               {filteredAlerts.length === 0 ? (
-                <div className={styles.emptyState}>No alerts triggered.</div>
+                <div className={styles.emptyState}>
+                    <p>No alerts triggered.</p>
+                    <p className={styles.emptyStateHint}>Alerts appear when budgets, deliveries, or runtime thresholds are breached.</p>
+                  </div>
               ) : (
-                filteredAlerts.slice(0, 12).map((alert) => (
+                filteredAlerts.slice(0, controlTowerListLimits.alerts).map((alert) => (
                   <article className={styles.auditRow} key={alert.id}>
                     <div>
                       <strong>{alert.title}</strong>
@@ -6061,6 +6416,11 @@ export function PlatformStudio({
                   </article>
                 ))
               )}
+              {filteredAlerts.length > controlTowerListLimits.alerts ? (
+                <button className={styles.showMoreButton} onClick={() => setControlTowerListLimits((prev) => ({ ...prev, alerts: prev.alerts + 24 }))} type="button">
+                  Show more ({filteredAlerts.length - controlTowerListLimits.alerts} remaining)
+                </button>
+              ) : null}
             </div>
             {renderControlTowerDetailPanel()}
           </section>
@@ -6087,7 +6447,7 @@ export function PlatformStudio({
                 </thead>
                 <tbody>
                   {filteredDeliveries.length > 0 ? (
-                    filteredDeliveries.slice(0, 12).map((delivery) => (
+                    filteredDeliveries.slice(0, controlTowerListLimits.deliveries).map((delivery) => (
                       <tr key={delivery.id}>
                         <td>{delivery.ruleKey}</td>
                         <td>{delivery.channelKey}</td>
@@ -6130,7 +6490,10 @@ export function PlatformStudio({
             </div>
             <div className={styles.listStack}>
               {approvalTasks.length === 0 ? (
-                <div className={styles.emptyState}>No approval tasks are pending.</div>
+                <div className={styles.emptyState}>
+                    <p>No approval tasks pending.</p>
+                    <p className={styles.emptyStateHint}>Approvals appear when workflows or agents require human sign-off before continuing.</p>
+                  </div>
               ) : (
                 approvalTasks.map((task) => (
                   <article className={styles.workflowCard} key={task.id}>
@@ -6168,7 +6531,10 @@ export function PlatformStudio({
             </div>
             <div className={styles.listStack}>
               {deadLetters.length === 0 ? (
-                <div className={styles.emptyState}>No dead letters recorded.</div>
+                <div className={styles.emptyState}>
+                    <p>No dead letters recorded.</p>
+                    <p className={styles.emptyStateHint}>Dead letters capture messages that could not be delivered or processed after all retries.</p>
+                  </div>
               ) : (
                 deadLetters.map((entry) => (
                   <article className={styles.auditRow} key={entry.id}>
@@ -6581,23 +6947,40 @@ export function PlatformStudio({
           ) : null}
         </div>
         <div className={`${styles.sidebarSection} ${styles.sidebarNavSection}`}>
-          <p className={styles.sidebarLabel}>Workspaces</p>
           <nav className={styles.navStack}>
-            {WORKSPACES.map((entry) => (
-              <button
-                className={`${entry.key === workspace ? styles.activeNavItem : styles.navItem} ${styles.staggerChild}`}
-                key={entry.key}
-                onClick={() => { setWorkspace(entry.key); setActiveTab(0); }}
-                type="button"
-              >
-                <span className={styles.navIcon}>{entry.code}</span>
-                <span className={styles.navCopy}>
-                  <span>{entry.label}</span>
-                  <small>{entry.note}</small>
-                </span>
-                <span className={styles.navTooltip}>{entry.label}</span>
-              </button>
-            ))}
+            {WORKSPACE_GROUPS.map((group) => {
+              const isCollapsed = collapsedGroups.has(group.key) && !group.workspaces.includes(workspace);
+              const groupEntries = WORKSPACES.filter((entry) => group.workspaces.includes(entry.key));
+              return (
+                <div className={`${styles.navGroup} ${isCollapsed ? styles.navGroupCollapsed : ""}`} key={group.key}>
+                  <button
+                    className={styles.navGroupHeader}
+                    onClick={() => setCollapsedGroups((prev) => { const next = new Set(prev); if (next.has(group.key)) next.delete(group.key); else next.add(group.key); return next; })}
+                    type="button"
+                  >
+                    {group.label}
+                    <svg className={styles.navGroupChevron} fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 10 10"><path d="M3 1l4 4-4 4" /></svg>
+                  </button>
+                  <div className={styles.navGroupBody}>
+                    {groupEntries.map((entry) => (
+                      <button
+                        className={`${entry.key === workspace ? styles.activeNavItem : styles.navItem} ${styles.staggerChild}`}
+                        key={entry.key}
+                        onClick={() => { setWorkspace(entry.key); setWorkspaceTransitionKey((prev) => prev + 1); }}
+                        type="button"
+                      >
+                        <span className={styles.navIcon}>{entry.code}</span>
+                        <span className={styles.navCopy}>
+                          <span>{entry.label}</span>
+                          <small>{entry.note}</small>
+                        </span>
+                        <span className={styles.navTooltip}>{entry.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </nav>
         </div>
         <div className={styles.sidebarSection}>
@@ -6637,6 +7020,24 @@ export function PlatformStudio({
           <button type="button" className={styles.breadcrumbLink} onClick={() => setActiveTab(0)}>{activeWorkspace.label}</button>
           <span className={styles.breadcrumbSep}>/</span>
           <span className={styles.breadcrumbActive}>{WORKSPACE_TABS[workspace][activeTab]}</span>
+          {(() => {
+            const entityLabel =
+              workspace === "data-model" ? selectedObject?.label :
+              workspace === "pages" ? selectedPage?.title :
+              workspace === "forms" ? selectedForm?.title :
+              workspace === "workflows" ? selectedWorkflow?.name :
+              workspace === "agents" ? selectedAgent?.name :
+              null;
+            return entityLabel ? (
+              <>
+                <span className={styles.breadcrumbSep}>/</span>
+                <span className={styles.breadcrumbEntity}>{entityLabel}</span>
+              </>
+            ) : null;
+          })()}
+          <button type="button" className={styles.commandPaletteHint} onClick={() => { setCommandPaletteOpen(true); setCommandPaletteQuery(""); setCommandPaletteIndex(0); }} style={{ marginLeft: "auto" }}>
+            <kbd style={{ border: 0, background: "transparent", padding: 0, font: "inherit", color: "inherit" }}>⌘K</kbd> Jump to...
+          </button>
         </nav>
 
         <header className={styles.studioHeader}>
@@ -6668,23 +7069,39 @@ export function PlatformStudio({
           </div>
         </header>
 
-        {message ? <div className={styles.successBanner}>{message}</div> : null}
-        {error ? <div className={styles.errorBanner}>{error}</div> : null}
+        {message ? (
+          <div className={`${styles.successBanner} ${messageExiting ? styles.bannerExiting : ""}`}>
+            <div className={styles.bannerWrap}>
+              {message}
+              <button className={styles.bannerDismiss} onClick={() => { setMessage(null); setMessageExiting(false); }} type="button">Dismiss</button>
+            </div>
+          </div>
+        ) : null}
+        {error ? (
+          <div className={styles.errorBanner}>
+            <div className={styles.bannerWrap}>
+              {error}
+              <button className={styles.bannerDismiss} onClick={() => setError(null)} type="button">Dismiss</button>
+            </div>
+          </div>
+        ) : null}
 
         {renderTabBar()}
 
-        {workspace === "data-model" ? renderDataModelWorkspace() : null}
-        {workspace === "pages" ? renderPagesWorkspace() : null}
-        {workspace === "forms" ? renderFormsWorkspace() : null}
-        {workspace === "branding" ? renderBrandingWorkspace() : null}
-        {workspace === "profiles" ? renderProfilesWorkspace() : null}
-        {workspace === "navigation" ? renderNavigationWorkspace() : null}
-        {workspace === "workflows" ? renderWorkflowsWorkspace() : null}
-        {workspace === "agents" ? renderAgentsWorkspace() : null}
-        {workspace === "control-tower" ? renderControlTowerWorkspace() : null}
-        {workspace === "models" ? renderModelsWorkspace() : null}
-        {workspace === "security" ? renderSecurityWorkspace() : null}
-        {workspace === "audit" ? renderAuditWorkspace() : null}
+        <div className={styles.workspaceEnter} key={workspaceTransitionKey}>
+          {workspace === "data-model" ? renderDataModelWorkspace() : null}
+          {workspace === "pages" ? renderPagesWorkspace() : null}
+          {workspace === "forms" ? renderFormsWorkspace() : null}
+          {workspace === "branding" ? renderBrandingWorkspace() : null}
+          {workspace === "profiles" ? renderProfilesWorkspace() : null}
+          {workspace === "navigation" ? renderNavigationWorkspace() : null}
+          {workspace === "workflows" ? renderWorkflowsWorkspace() : null}
+          {workspace === "agents" ? renderAgentsWorkspace() : null}
+          {workspace === "control-tower" ? renderControlTowerWorkspace() : null}
+          {workspace === "models" ? renderModelsWorkspace() : null}
+          {workspace === "security" ? renderSecurityWorkspace() : null}
+          {workspace === "audit" ? renderAuditWorkspace() : null}
+        </div>
 
         {publishPreview ? (
           <section className={styles.publishPreviewStrip}>
@@ -6750,6 +7167,8 @@ export function PlatformStudio({
           </section>
         ) : null}
       </main>
+      {renderConfirmDialog()}
+      {renderCommandPalette()}
     </div>
   );
 }
