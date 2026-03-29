@@ -767,6 +767,8 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans
 
 /* ── PAGE BLOCK ── */
 .report-page {
+  --page-layout-scale: var(--page-scale);
+  --header-comp: calc(var(--page-scale) / var(--page-layout-scale));
   width: var(--page-layout-w);
   height: var(--page-layout-h);
   background: #fff;
@@ -776,16 +778,16 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--rule-l);
-  zoom: var(--page-scale);
+  zoom: var(--page-layout-scale);
 }
 .report-page.active { display: flex; }
 #p-network-map,
-#p-network-detail { zoom: 0.73; }
+#p-network-detail { --page-layout-scale: 0.73; }
 #p-summary .pb { padding-bottom: 24px; }
-#p-support-detail { zoom: 0.705; }
-#p-change { zoom: 0.74; }
-#p-gantt { zoom: 0.7; }
-#p-budget { zoom: 0.79; }
+#p-support-detail { --page-layout-scale: 0.705; }
+#p-change { --page-layout-scale: 0.74; }
+#p-gantt { --page-layout-scale: 0.72; }
+#p-budget { --page-layout-scale: 0.79; }
 #p-network-map .pb { padding-bottom: 18px; }
 #p-network-detail .pb { padding-bottom: 16px; }
 #p-network-detail .bh,
@@ -841,8 +843,11 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans
 /* ── PAGE HEADER ── */
 .ph {
   display: block;
-  min-height: 108px;
-  padding: 22px 36px 16px;
+  min-height: calc(108px * var(--header-comp));
+  padding:
+    calc(22px * var(--header-comp))
+    calc(36px * var(--header-comp))
+    calc(16px * var(--header-comp));
   border-bottom: 1px solid var(--rule);
 }
 .ph-brand {
@@ -864,6 +869,9 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans
 .ph-meta {
   display: block;
   padding: 0;
+  transform: scale(var(--header-comp));
+  transform-origin: top left;
+  width: calc(100% / var(--header-comp));
 }
 .ph-meta > div:last-child {
   display: flex;
