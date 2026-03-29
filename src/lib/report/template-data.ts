@@ -78,6 +78,141 @@ function yesNo(value: boolean): string {
   return value ? "Yes" : "No";
 }
 
+function sortRowsByMonth<T extends { Month: string }>(rows: T[]): T[] {
+  return rows.slice().sort((left, right) => left.Month.localeCompare(right.Month));
+}
+
+function ensureMonthRow<T extends { Month: string }>(rows: T[], activeMonth: string, createDefaultRow: (month: string) => T): T[] {
+  if (rows.some((row) => row.Month === activeMonth)) {
+    return rows;
+  }
+
+  return sortRowsByMonth([...rows, createDefaultRow(activeMonth)]);
+}
+
+type AssetTemplateRow = {
+  Month: string;
+  AssetType: string;
+  ActiveDevices: number;
+  AvgAgeMths: number;
+  PctWithin: string;
+  PctOutside: string;
+  StockOnHand: number;
+  RefreshSpend: number;
+  IncidentsLinked: number;
+};
+
+function ensureAssetRows(rows: AssetTemplateRow[], activeMonth: string): AssetTemplateRow[] {
+  const assetTypes = ["Laptop", "Mobile", "Monitor"];
+  const nextRows = [...rows];
+
+  for (const assetType of assetTypes) {
+    const hasRow = nextRows.some((row) => row.Month === activeMonth && row.AssetType === assetType);
+    if (!hasRow) {
+      nextRows.push({
+        Month: activeMonth,
+        AssetType: assetType,
+        ActiveDevices: 0,
+        AvgAgeMths: 0,
+        PctWithin: "0.0%",
+        PctOutside: "0.0%",
+        StockOnHand: 0,
+        RefreshSpend: 0,
+        IncidentsLinked: 0,
+      });
+    }
+  }
+
+  return sortRowsByMonth(nextRows);
+}
+
+function createDefaultSupportRow(month: string) {
+  return {
+    Month: month,
+    Opened: 0,
+    Closed: 0,
+    Backlog: 0,
+    AvgAgeOpen: 0,
+    AvgResolution: 0,
+    FirstResponseSLA: "95.0%",
+    ResolutionSLA: "95.0%",
+    ReopenRate: "0.0%",
+    MajorIncidents: 0,
+    CSAT: "0.0/5",
+    CSATRate: "0.0%",
+    TopCategory: "Awaiting input",
+    Commentary: "",
+  };
+}
+
+function createDefaultSecurityRow(month: string) {
+  return {
+    Month: month,
+    WkstationPatch: "0.0%",
+    ServerPatch: "0.0%",
+    CriticalPatch: "0.0%",
+    DevicesOutside: 0,
+    CritVulns: 0,
+    HighVulns: 0,
+    MedVulns: 0,
+    LowVulns: 0,
+    SecIncidents: 0,
+    MFACoverage: "0.0%",
+    EndpointCoverage: "0.0%",
+    OverdueRemediation: 0,
+    Commentary: "",
+  };
+}
+
+function createDefaultChangeRow(month: string) {
+  return {
+    Month: month,
+    TotalChanges: 0,
+    StandardChanges: 0,
+    NormalChanges: 0,
+    EmergencyChanges: 0,
+    SuccessfulChanges: 0,
+    FailedChanges: 0,
+    RolledBack: 0,
+    SuccessRate: "89.0%",
+    ChangesIncidents: 0,
+    ReleasesDeployed: 0,
+    Commentary: "",
+  };
+}
+
+function createDefaultDevRow(month: string) {
+  return {
+    Month: month,
+    Opened: 0,
+    Closed: 0,
+    BacklogEnd: 0,
+    AvgAge: 0,
+    OldestOpen: 0,
+    Blocked: 0,
+    Defects: 0,
+    Enhancements: 0,
+    TechDebt: 0,
+    BAU: 0,
+    CSAT: "0.0/5",
+    Commentary: "",
+  };
+}
+
+function createDefaultDerivedNetworkRow(month: string) {
+  return {
+    Month: month,
+    Availability: "0.0%",
+    OutageMins: 0,
+    MajorIncidents: 0,
+    PerfectOffices: 0,
+    Below99_9Offices: 0,
+    Below99Offices: 0,
+    WorstOffice: "",
+    WorstAvailability: "0.0%",
+  };
+}
+
 function buildBudgetMonthlyTotals(snapshot: NormalizedReportSnapshot) {
   return snapshot.availableMonths.map((month) => {
     const rows = snapshot.budgetCommercials.filter((row) => row.reportingMonth === month);
@@ -141,22 +276,26 @@ export function buildTemplateData(snapshot: NormalizedReportSnapshot, month: str
       updatedAt: summaryState.updatedAt,
       sourceReportId: summaryState.sourceReportId,
     },
-    support: snapshot.supportOperations.map((row) => ({
-      Month: row.reportingMonth,
-      Opened: row.ticketsOpened,
-      Closed: row.ticketsClosed,
-      Backlog: row.backlogEnd,
-      AvgAgeOpen: row.averageAgeOpenDays,
-      AvgResolution: row.averageResolutionDays,
-      FirstResponseSLA: formatPct(row.firstResponseSlaPct),
-      ResolutionSLA: formatPct(row.resolutionSlaPct),
-      ReopenRate: formatPct(row.reopenRatePct),
-      MajorIncidents: row.majorIncidents,
-      CSAT: formatScore(row.ticketCsatScore),
-      CSATRate: formatPct(row.csatResponseRatePct),
-      TopCategory: row.topCategory,
-      Commentary: row.commentary,
-    })),
+    support: ensureMonthRow(
+      snapshot.supportOperations.map((row) => ({
+        Month: row.reportingMonth,
+        Opened: row.ticketsOpened,
+        Closed: row.ticketsClosed,
+        Backlog: row.backlogEnd,
+        AvgAgeOpen: row.averageAgeOpenDays,
+        AvgResolution: row.averageResolutionDays,
+        FirstResponseSLA: formatPct(row.firstResponseSlaPct),
+        ResolutionSLA: formatPct(row.resolutionSlaPct),
+        ReopenRate: formatPct(row.reopenRatePct),
+        MajorIncidents: row.majorIncidents,
+        CSAT: formatScore(row.ticketCsatScore),
+        CSATRate: formatPct(row.csatResponseRatePct),
+        TopCategory: row.topCategory,
+        Commentary: row.commentary,
+      })),
+      month,
+      createDefaultSupportRow,
+    ),
     service: snapshot.serviceAvailability.map((row) => ({
       Month: row.reportingMonth,
       Service: row.serviceName,
@@ -167,62 +306,77 @@ export function buildTemplateData(snapshot: NormalizedReportSnapshot, month: str
       MajorIncidents: row.majorIncidents,
       Commentary: row.commentary,
     })),
-    security: snapshot.securityPatching.map((row) => ({
-      Month: row.reportingMonth,
-      WkstationPatch: formatPct(row.workstationPatchCompliancePct),
-      ServerPatch: formatPct(row.serverPatchCompliancePct),
-      CriticalPatch: formatPct(row.criticalPatchCompliancePct),
-      DevicesOutside: row.devicesOutsidePolicy,
-      CritVulns: row.criticalVulns,
-      HighVulns: row.highVulns,
-      MedVulns: row.mediumVulns,
-      LowVulns: row.lowVulns,
-      SecIncidents: row.securityIncidents,
-      MFACoverage: formatPct(row.mfaCoveragePct),
-      EndpointCoverage: formatPct(row.endpointCoveragePct),
-      OverdueRemediation: row.overdueRemediationItems,
-      Commentary: row.commentary,
-    })),
-    assets: snapshot.assetsLifecycle.map((row) => ({
-      Month: row.reportingMonth,
-      AssetType: row.assetType,
-      ActiveDevices: row.activeDevices,
-      AvgAgeMths: row.averageAgeMonths,
-      PctWithin: formatPct(row.withinLifecyclePct),
-      PctOutside: formatPct(row.outOfLifecyclePct),
-      StockOnHand: row.stockOnHand,
-      RefreshSpend: row.refreshSpend,
-      IncidentsLinked: row.incidentsLinkedToAgedKit,
-    })),
-    change: snapshot.changeRelease.map((row) => ({
-      Month: row.reportingMonth,
-      TotalChanges: row.totalChanges,
-      StandardChanges: row.standardChanges,
-      NormalChanges: row.normalChanges,
-      EmergencyChanges: row.emergencyChanges,
-      SuccessfulChanges: row.successfulChanges,
-      FailedChanges: row.failedChanges,
-      RolledBack: row.rolledBackChanges,
-      SuccessRate: formatPct(row.changeSuccessRatePct),
-      ChangesIncidents: row.changesCausingIncidents,
-      ReleasesDeployed: row.releasesDeployed,
-      Commentary: row.commentary,
-    })),
-    dev: snapshot.devDelivery.map((row) => ({
-      Month: row.reportingMonth,
-      Opened: row.devTasksOpened,
-      Closed: row.devTasksClosed,
-      BacklogEnd: row.devBacklogEnd,
-      AvgAge: row.averageDevTaskAgeDays,
-      OldestOpen: row.oldestOpenDevTaskDays,
-      Blocked: row.blockedItems,
-      Defects: row.defectsDelivered,
-      Enhancements: row.enhancementsDelivered,
-      TechDebt: row.techDebtDelivered,
-      BAU: row.bauDelivered,
-      CSAT: formatScore(row.devCsatScore),
-      Commentary: row.commentary,
-    })),
+    security: ensureMonthRow(
+      snapshot.securityPatching.map((row) => ({
+        Month: row.reportingMonth,
+        WkstationPatch: formatPct(row.workstationPatchCompliancePct),
+        ServerPatch: formatPct(row.serverPatchCompliancePct),
+        CriticalPatch: formatPct(row.criticalPatchCompliancePct),
+        DevicesOutside: row.devicesOutsidePolicy,
+        CritVulns: row.criticalVulns,
+        HighVulns: row.highVulns,
+        MedVulns: row.mediumVulns,
+        LowVulns: row.lowVulns,
+        SecIncidents: row.securityIncidents,
+        MFACoverage: formatPct(row.mfaCoveragePct),
+        EndpointCoverage: formatPct(row.endpointCoveragePct),
+        OverdueRemediation: row.overdueRemediationItems,
+        Commentary: row.commentary,
+      })),
+      month,
+      createDefaultSecurityRow,
+    ),
+    assets: ensureAssetRows(
+      snapshot.assetsLifecycle.map((row) => ({
+        Month: row.reportingMonth,
+        AssetType: row.assetType,
+        ActiveDevices: row.activeDevices,
+        AvgAgeMths: row.averageAgeMonths,
+        PctWithin: formatPct(row.withinLifecyclePct),
+        PctOutside: formatPct(row.outOfLifecyclePct),
+        StockOnHand: row.stockOnHand,
+        RefreshSpend: row.refreshSpend,
+        IncidentsLinked: row.incidentsLinkedToAgedKit,
+      })),
+      month,
+    ),
+    change: ensureMonthRow(
+      snapshot.changeRelease.map((row) => ({
+        Month: row.reportingMonth,
+        TotalChanges: row.totalChanges,
+        StandardChanges: row.standardChanges,
+        NormalChanges: row.normalChanges,
+        EmergencyChanges: row.emergencyChanges,
+        SuccessfulChanges: row.successfulChanges,
+        FailedChanges: row.failedChanges,
+        RolledBack: row.rolledBackChanges,
+        SuccessRate: formatPct(row.changeSuccessRatePct),
+        ChangesIncidents: row.changesCausingIncidents,
+        ReleasesDeployed: row.releasesDeployed,
+        Commentary: row.commentary,
+      })),
+      month,
+      createDefaultChangeRow,
+    ),
+    dev: ensureMonthRow(
+      snapshot.devDelivery.map((row) => ({
+        Month: row.reportingMonth,
+        Opened: row.devTasksOpened,
+        Closed: row.devTasksClosed,
+        BacklogEnd: row.devBacklogEnd,
+        AvgAge: row.averageDevTaskAgeDays,
+        OldestOpen: row.oldestOpenDevTaskDays,
+        Blocked: row.blockedItems,
+        Defects: row.defectsDelivered,
+        Enhancements: row.enhancementsDelivered,
+        TechDebt: row.techDebtDelivered,
+        BAU: row.bauDelivered,
+        CSAT: formatScore(row.devCsatScore),
+        Commentary: row.commentary,
+      })),
+      month,
+      createDefaultDevRow,
+    ),
     projects: snapshot.projectPortfolio.map((row) => ({
       Month: row.reportingMonth,
       ProjectName: row.projectName,
@@ -351,16 +505,20 @@ export function buildTemplateData(snapshot: NormalizedReportSnapshot, month: str
           Commentary: row.commentary,
         })),
     ),
-    derivedNetwork: snapshot.derivedNetworkMetrics.map((row) => ({
-      Month: row.reportingMonth,
-      Availability: formatPctSmart(row.availabilityPct),
-      OutageMins: row.outageMinutes,
-      MajorIncidents: row.majorIncidents,
-      PerfectOffices: row.perfectOffices,
-      Below99_9Offices: row.below99_9Offices,
-      Below99Offices: row.below99Offices,
-      WorstOffice: row.worstOffice ?? "",
-      WorstAvailability: row.worstAvailabilityPct === null ? "0.0%" : formatPctSmart(row.worstAvailabilityPct),
-    })),
+    derivedNetwork: ensureMonthRow(
+      snapshot.derivedNetworkMetrics.map((row) => ({
+        Month: row.reportingMonth,
+        Availability: formatPctSmart(row.availabilityPct),
+        OutageMins: row.outageMinutes,
+        MajorIncidents: row.majorIncidents,
+        PerfectOffices: row.perfectOffices,
+        Below99_9Offices: row.below99_9Offices,
+        Below99Offices: row.below99Offices,
+        WorstOffice: row.worstOffice ?? "",
+        WorstAvailability: row.worstAvailabilityPct === null ? "0.0%" : formatPctSmart(row.worstAvailabilityPct),
+      })),
+      month,
+      createDefaultDerivedNetworkRow,
+    ),
   };
 }

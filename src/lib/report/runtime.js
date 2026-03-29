@@ -99,6 +99,10 @@ export function initReportApp(root, options) {
     return resolvedTabId ? pageId + "-" + resolvedTabId : pageId;
   }
 
+  function isExportablePage(page) {
+    return page && page.getAttribute("data-export") !== "false";
+  }
+
   function getActiveTabId(pageId) {
     return resolveTabId(pageId, activeTabsByPage[pageId] || (pageId === INITIAL_PAGE_ID ? INITIAL_TAB_ID : null));
   }
@@ -598,21 +602,30 @@ export function initReportApp(root, options) {
     }
 
     var pages = Array.prototype.slice.call(document.querySelectorAll(".report-page"));
-    pages.forEach(function updateFooter(page, index) {
+    var exportablePages = pages.filter(isExportablePage);
+    exportablePages.forEach(function updateFooter(page, index) {
       var footer = page.querySelector(".pf-page");
       if (!footer) {
         return;
       }
 
       var prefix = String(footer.textContent || "").split("· PAGE")[0].trim();
-      footer.textContent = prefix + " · PAGE " + (index + 1) + " OF " + pages.length;
+      footer.textContent = prefix + " · PAGE " + (index + 1) + " OF " + exportablePages.length;
     });
 
     if (SHOW_ALL_PAGES) {
-      pages.forEach(function activatePage(page) {
+      exportablePages.forEach(function activatePage(page) {
         page.classList.add("active");
         page.style.display = "flex";
       });
+      pages
+        .filter(function filterNonExportable(page) {
+          return !isExportablePage(page);
+        })
+        .forEach(function hideNonExportable(page) {
+          page.classList.remove("active");
+          page.style.display = "none";
+        });
       document.querySelectorAll(".nav-link").forEach(function clearNav(link) {
         link.classList.remove("active");
       });

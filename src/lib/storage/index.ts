@@ -1,5 +1,6 @@
 import { getEnv } from "@/lib/env";
 import { LocalObjectStorage } from "@/lib/storage/local-storage";
+import { SharePointObjectStorage } from "@/lib/storage/sharepoint-storage";
 import { S3ObjectStorage } from "@/lib/storage/s3-storage";
 import type { ObjectStorage } from "@/lib/storage/types";
 
@@ -10,6 +11,11 @@ export function getObjectStorage(): ObjectStorage {
     return cachedStorage;
   }
 
-  cachedStorage = getEnv().STORAGE_MODE === "s3" ? new S3ObjectStorage() : new LocalObjectStorage();
+  cachedStorage =
+    getEnv().STORAGE_MODE === "s3"
+      ? new S3ObjectStorage()
+      : getEnv().STORAGE_MODE === "sharepoint"
+        ? new SharePointObjectStorage()
+        : new LocalObjectStorage();
   return cachedStorage;
 }

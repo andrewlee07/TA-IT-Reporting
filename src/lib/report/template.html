@@ -351,10 +351,28 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans
   color: var(--orange);
   font-weight: 700;
 }
+.sidebar-input {
+  width: 100%;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 6px;
+  background: rgba(255,255,255,0.06);
+  color: #fff;
+  font-size: 10px;
+}
 .sidebar-select:focus {
   outline: none;
   border-color: rgba(245,125,0,0.72);
   box-shadow: 0 0 0 2px rgba(245,125,0,0.18);
+}
+.sidebar-input:focus {
+  outline: none;
+  border-color: rgba(245,125,0,0.72);
+  box-shadow: 0 0 0 2px rgba(245,125,0,0.18);
+}
+.sidebar-input[type="month"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) sepia(1) saturate(0) brightness(1.4);
 }
 .sidebar-select option {
   color: var(--text);

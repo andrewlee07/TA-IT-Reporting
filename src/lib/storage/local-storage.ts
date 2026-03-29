@@ -1,12 +1,13 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import { getEnv } from "@/lib/env";
 import type { ObjectStorage, StoredObject } from "@/lib/storage/types";
 
 export class LocalObjectStorage implements ObjectStorage {
   private readonly rootDir: string;
 
-  constructor(rootDir = path.join(process.cwd(), ".storage")) {
+  constructor(rootDir = path.resolve(process.cwd(), getEnv().LOCAL_STORAGE_DIR)) {
     this.rootDir = rootDir;
   }
 

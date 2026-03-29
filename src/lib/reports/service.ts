@@ -8,6 +8,21 @@ import { getPrisma } from "@/lib/prisma";
 import { getObjectStorage } from "@/lib/storage";
 import { logger } from "@/lib/logger";
 import {
+  getCurrentDraftSnapshot,
+  getDraftManifest,
+  listDraftManifests,
+  upsertDraftManifest,
+  writeCurrentDraftSnapshot,
+  saveDraftRevision,
+  listDraftRevisions,
+  listDraftPresence,
+  upsertDraftPresence,
+} from "@/lib/drafts/store";
+import { EDITOR_SECTIONS, type ArtifactSyncStatus, type DraftManifest, type DraftUserRef, type EditableReportDraft, type EditorPresence, type ReportRevisionMeta, type SectionId } from "@/lib/drafts/types";
+import { applySectionPayload, type SectionPayloadMap } from "@/lib/editor/sections";
+import type { AppUser } from "@/lib/auth/app-user";
+import { createBlankSnapshot } from "@/lib/workbook/blank-snapshot";
+import {
   createLocalReport,
   findLocalCarryForwardExecSummary,
   getLocalExecSummary,
@@ -15,6 +30,7 @@ import {
   getLocalReport,
   listLocalReports,
   saveLocalExport,
+  upsertLocalReport,
   upsertLocalPrepState,
   upsertLocalExecSummary,
 } from "@/lib/reports/local-report-store";
@@ -31,6 +47,8 @@ import {
   type ReportPrepView,
 } from "@/lib/reports/prep-center";
 import { parseWorkbookBuffer } from "@/lib/workbook/parser";
+import { buildDerivedNetworkServiceRows, deriveNetworkMetrics, NETWORK_SERVICE_NAME } from "@/lib/workbook/derived-network";
+import { renderWorkbookFromSnapshot } from "@/lib/workbook/serialize-workbook";
 import type { NormalizedReportSnapshot } from "@/lib/workbook/types";
 
 export interface ReportListItem {
@@ -61,6 +79,21 @@ export interface StoredReport {
   workbookObjectKey: string;
 }
 
+interface StoredReportInput {
+  id: string;
+  title: string;
+  originalFilename: string;
+  reportSeriesKey: string;
+  templateKey: string;
+  templateVersion: number;
+  currentMonth: string;
+  availableMonths: string[];
+  createdAt: string;
+  updatedAt: string;
+  snapshot: NormalizedReportSnapshot;
+  workbookObjectKey: string;
+}
+
 function normalizeSnapshot(snapshot: unknown): NormalizedReportSnapshot {
   const rawSnapshot = snapshot as Partial<NormalizedReportSnapshot>;
 
@@ -78,6 +111,15 @@ function normalizeSnapshot(snapshot: unknown): NormalizedReportSnapshot {
 
 function sanitizeFilename(filename: string): string {
   return filename.replace(/[^a-zA-Z0-9._-]+/g, "-");
+}
+
+function slugifyLabel(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-{2,}/g, "-");
 }
 
 function toJsonValue(value: unknown): Prisma.InputJsonValue {
@@ -146,6 +188,379 @@ function toStoredReport(report: {
   };
 }
 
+function toStoredReportFromInput(report: StoredReportInput): StoredReport {
+  return {
+    id: report.id,
+    title: report.title,
+    originalFilename: report.originalFilename,
+    reportSeriesKey: report.reportSeriesKey,
+    templateKey: report.templateKey,
+    templateVersion: report.templateVersion,
+    currentMonth: report.currentMonth,
+    availableMonths: report.availableMonths,
+    snapshot: normalizeSnapshot(report.snapshot),
+    createdAt: new Date(report.createdAt),
+    updatedAt: new Date(report.updatedAt),
+    workbookObjectKey: report.workbookObjectKey,
+  };
+}
+
+function toReportListItemFromManifest(manifest: DraftManifest): ReportListItem {
+  return {
+    id: manifest.reportId,
+    title: manifest.title,
+    originalFilename: manifest.originalFilename,
+    reportSeriesKey: manifest.reportSeriesKey,
+    templateKey: manifest.templateKey,
+    templateVersion: manifest.templateVersion,
+    currentMonth: manifest.currentMonth,
+    availableMonths: manifest.availableMonths,
+    createdAt: new Date(manifest.createdAt),
+    updatedAt: new Date(manifest.updatedAt),
+  };
+}
+
+function toDraftUserRef(user: AppUser): DraftUserRef {
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+  };
+}
+
+function hydrateDerivedSnapshot(snapshot: NormalizedReportSnapshot): NormalizedReportSnapshot {
+  const derivedNetworkMetrics = deriveNetworkMetrics(snapshot);
+  const networkRows = buildDerivedNetworkServiceRows(derivedNetworkMetrics);
+
+  return {
+    ...snapshot,
+    derivedNetworkMetrics,
+    serviceAvailability: [
+      ...snapshot.serviceAvailability.filter((row) => row.serviceName !== NETWORK_SERVICE_NAME),
+      ...networkRows,
+    ].sort((left, right) => left.reportingMonth.localeCompare(right.reportingMonth)),
+  };
+}
+
+function createArtifactSyncStatus(workbookObjectKey: string | null): ArtifactSyncStatus {
+  return {
+    state: workbookObjectKey ? "current" : "pending",
+    revisionId: null,
+    updatedAt: null,
+    error: null,
+    workbookObjectKey,
+    jsonObjectKey: null,
+  };
+}
+
+async function getDraftStoredReport(id: string): Promise<StoredReport | null> {
+  const manifest = await getDraftManifest(id);
+  if (!manifest) {
+    return null;
+  }
+
+  const snapshot = await getCurrentDraftSnapshot(id);
+  if (!snapshot) {
+    return null;
+  }
+
+  return toStoredReportFromInput({
+    id: manifest.reportId,
+    title: manifest.title,
+    originalFilename: manifest.originalFilename,
+    reportSeriesKey: manifest.reportSeriesKey,
+    templateKey: manifest.templateKey,
+    templateVersion: manifest.templateVersion,
+    currentMonth: manifest.currentMonth,
+    availableMonths: manifest.availableMonths,
+    createdAt: manifest.createdAt,
+    updatedAt: manifest.updatedAt,
+    snapshot,
+    workbookObjectKey: manifest.workbookObjectKey,
+  });
+}
+
+async function upsertMirrorReportRecord(input: StoredReportInput): Promise<void> {
+  await withLocalFallback(
+    async () => {
+      const prisma = getPrisma();
+      await prisma.report.upsert({
+        where: { id: input.id },
+        update: {
+          title: input.title,
+          originalFilename: input.originalFilename,
+          templateKey: input.templateKey,
+          templateVersion: input.templateVersion,
+          currentMonth: input.currentMonth,
+          availableMonths: toJsonValue(input.availableMonths),
+          metadata: toJsonValue(input.snapshot.metadata),
+          snapshot: toJsonValue(input.snapshot),
+          workbookObjectKey: input.workbookObjectKey,
+        },
+        create: {
+          id: input.id,
+          title: input.title,
+          originalFilename: input.originalFilename,
+          templateKey: input.templateKey,
+          templateVersion: input.templateVersion,
+          validationStatus: "VALID",
+          workbookObjectKey: input.workbookObjectKey,
+          availableMonths: toJsonValue(input.availableMonths),
+          currentMonth: input.currentMonth,
+          metadata: toJsonValue(input.snapshot.metadata),
+          snapshot: toJsonValue(input.snapshot),
+        },
+      });
+    },
+    async () => {
+      await upsertLocalReport({
+        id: input.id,
+        title: input.title,
+        originalFilename: input.originalFilename,
+        reportSeriesKey: input.reportSeriesKey,
+        templateKey: input.templateKey,
+        templateVersion: input.templateVersion,
+        currentMonth: input.currentMonth,
+        availableMonths: input.availableMonths,
+        snapshot: input.snapshot,
+        workbookObjectKey: input.workbookObjectKey,
+      });
+    },
+  );
+}
+
+function normalizePresence(records: EditorPresence[]): EditorPresence[] {
+  const cutoff = Date.now() - 2 * 60 * 1000;
+  return records
+    .filter((record) => Date.parse(record.lastSeenAt) >= cutoff)
+    .sort((left, right) => Date.parse(right.lastSeenAt) - Date.parse(left.lastSeenAt));
+}
+
+function buildRevisionMeta(input: {
+  previousRevision: ReportRevisionMeta | null;
+  changedSections: SectionId[];
+  actor: DraftUserRef;
+}): ReportRevisionMeta {
+  return {
+    revisionId: nanoid(),
+    revisionNumber: (input.previousRevision?.revisionNumber ?? 0) + 1,
+    updatedAt: new Date().toISOString(),
+    updatedBy: input.actor,
+    changedSections: input.changedSections,
+  };
+}
+
+async function persistDraftSnapshot(input: {
+  reportId: string;
+  title: string;
+  originalFilename: string;
+  reportSeriesKey: string;
+  templateKey: string;
+  templateVersion: number;
+  snapshot: NormalizedReportSnapshot;
+  workbookObjectKey: string;
+  actor: DraftUserRef;
+  changedSections: SectionId[];
+  createdAt?: string;
+  artifactSyncStatus?: ArtifactSyncStatus;
+}): Promise<StoredReport> {
+  const previousManifest = await getDraftManifest(input.reportId);
+  const normalizedSnapshot = hydrateDerivedSnapshot(normalizeSnapshot(input.snapshot));
+  const revision = buildRevisionMeta({
+    previousRevision: previousManifest?.currentRevision ?? null,
+    changedSections: input.changedSections,
+    actor: input.actor,
+  });
+  const artifactSyncStatus: ArtifactSyncStatus = {
+    ...(input.artifactSyncStatus ?? previousManifest?.artifactSyncStatus ?? createArtifactSyncStatus(input.workbookObjectKey)),
+    state: "pending",
+    revisionId: revision.revisionId,
+    updatedAt: revision.updatedAt,
+    error: null,
+    workbookObjectKey: input.workbookObjectKey,
+  };
+
+  const manifest: DraftManifest = {
+    reportId: input.reportId,
+    title: input.title,
+    originalFilename: input.originalFilename,
+    reportSeriesKey: input.reportSeriesKey,
+    templateKey: input.templateKey,
+    templateVersion: input.templateVersion,
+    currentMonth: normalizedSnapshot.currentMonth,
+    availableMonths: normalizedSnapshot.availableMonths,
+    createdAt: previousManifest?.createdAt ?? input.createdAt ?? revision.updatedAt,
+    updatedAt: revision.updatedAt,
+    workbookObjectKey: input.workbookObjectKey,
+    artifactSyncStatus,
+    currentRevision: revision,
+  };
+
+  await Promise.all([
+    saveDraftRevision(input.reportId, {
+      meta: revision,
+      snapshot: normalizedSnapshot,
+    }),
+    writeCurrentDraftSnapshot(input.reportId, normalizedSnapshot),
+    upsertDraftManifest(manifest),
+    upsertMirrorReportRecord({
+      id: input.reportId,
+      title: input.title,
+      originalFilename: input.originalFilename,
+      reportSeriesKey: input.reportSeriesKey,
+      templateKey: input.templateKey,
+      templateVersion: input.templateVersion,
+      currentMonth: input.snapshot.currentMonth,
+      availableMonths: input.snapshot.availableMonths,
+      createdAt: previousManifest?.createdAt ?? input.createdAt ?? revision.updatedAt,
+      updatedAt: revision.updatedAt,
+      snapshot: normalizedSnapshot,
+      workbookObjectKey: input.workbookObjectKey,
+    }),
+  ]);
+
+  return toStoredReportFromInput({
+    id: input.reportId,
+    title: input.title,
+    originalFilename: input.originalFilename,
+    reportSeriesKey: input.reportSeriesKey,
+    templateKey: input.templateKey,
+    templateVersion: input.templateVersion,
+    currentMonth: input.snapshot.currentMonth,
+    availableMonths: input.snapshot.availableMonths,
+    createdAt: previousManifest?.createdAt ?? input.createdAt ?? revision.updatedAt,
+    updatedAt: revision.updatedAt,
+    snapshot: normalizedSnapshot,
+    workbookObjectKey: input.workbookObjectKey,
+  });
+}
+
+export async function createBlankReportDraft(input: {
+  title: string;
+  initialMonth: string;
+  actor?: AppUser;
+}): Promise<StoredReport> {
+  const reportId = nanoid();
+  const reportSeriesKey = slugifyLabel(input.title);
+  const snapshot = createBlankSnapshot(input.initialMonth, input.title);
+  const actor = toDraftUserRef(
+    input.actor ?? {
+      id: "system-blank-draft",
+      name: "Blank Draft",
+      email: null,
+    },
+  );
+  const originalFilename = `${reportSeriesKey || "report"}.xlsx`;
+  const workbookObjectKey = path.posix.join("workbooks", reportId, "current.xlsx");
+
+  const report = await persistDraftSnapshot({
+    reportId,
+    title: input.title,
+    originalFilename,
+    reportSeriesKey,
+    templateKey: snapshot.metadata.templateKey,
+    templateVersion: snapshot.metadata.templateVersion,
+    snapshot,
+    workbookObjectKey,
+    actor,
+    changedSections: [...EDITOR_SECTIONS],
+  });
+
+  void syncDraftArtifacts(report.id);
+  return report;
+}
+
+export async function getEditableReportDraft(reportId: string, reportingMonth: string): Promise<EditableReportDraft> {
+  const report = await getStoredReport(reportId);
+  if (!report) {
+    throw new Error("Report not found.");
+  }
+
+  if (!report.availableMonths.includes(reportingMonth)) {
+    throw new Error("Invalid month.");
+  }
+
+  const manifest = await getDraftManifest(reportId);
+  if (!manifest) {
+    throw new Error("Editable draft not found.");
+  }
+
+  return {
+    manifest,
+    snapshot: report.snapshot,
+    activePresence: normalizePresence(await listDraftPresence(reportId, reportingMonth)),
+  };
+}
+
+export async function updateEditorPresence(reportId: string, reportingMonth: string, actor: AppUser): Promise<EditorPresence[]> {
+  await upsertDraftPresence({
+    reportId,
+    reportingMonth,
+    user: toDraftUserRef(actor),
+    lastSeenAt: new Date().toISOString(),
+  });
+
+  return normalizePresence(await listDraftPresence(reportId, reportingMonth));
+}
+
+function getChangedSectionsSince(revisions: ReportRevisionMeta[], baseRevisionId: string | null): SectionId[] {
+  if (!baseRevisionId) {
+    return [];
+  }
+
+  const changed = new Set<SectionId>();
+  for (const revision of revisions) {
+    if (revision.revisionId === baseRevisionId) {
+      break;
+    }
+
+    revision.changedSections.forEach((sectionId) => changed.add(sectionId));
+  }
+
+  return [...changed];
+}
+
+export async function saveEditorSection<S extends SectionId>(input: {
+  reportId: string;
+  reportingMonth: string;
+  sectionId: S;
+  payload: SectionPayloadMap[S];
+  baseRevisionId: string | null;
+  actor: AppUser;
+}): Promise<EditableReportDraft> {
+  const current = await getEditableReportDraft(input.reportId, input.reportingMonth);
+  const revisions = await listDraftRevisions(input.reportId);
+  const changedSectionsSinceBase = getChangedSectionsSince(revisions, input.baseRevisionId);
+
+  if (input.baseRevisionId && changedSectionsSinceBase.includes(input.sectionId)) {
+    throw new Error(`Conflict:${changedSectionsSinceBase.join(",")}`);
+  }
+
+  const applied = applySectionPayload(current.snapshot, input.sectionId, input.payload);
+  const nextSnapshot = normalizeSnapshot(applied.snapshot);
+  const nextTitle = applied.title ?? current.manifest.title;
+  const nextReportSeriesKey = applied.reportSeriesKey ?? current.manifest.reportSeriesKey;
+
+  await persistDraftSnapshot({
+    reportId: input.reportId,
+    title: nextTitle,
+    originalFilename: current.manifest.originalFilename,
+    reportSeriesKey: nextReportSeriesKey,
+    templateKey: current.manifest.templateKey,
+    templateVersion: current.manifest.templateVersion,
+    snapshot: nextSnapshot,
+    workbookObjectKey: current.manifest.workbookObjectKey,
+    actor: toDraftUserRef(input.actor),
+    changedSections: [input.sectionId],
+    createdAt: current.manifest.createdAt,
+    artifactSyncStatus: current.manifest.artifactSyncStatus,
+  });
+
+  await updateEditorPresence(input.reportId, input.reportingMonth, input.actor);
+  void syncDraftArtifacts(input.reportId);
+  return getEditableReportDraft(input.reportId, input.reportingMonth);
+}
+
 function isPersistenceFallbackError(error: unknown): boolean {
   if (!(error instanceof Error)) {
     return false;
@@ -177,7 +592,8 @@ async function withLocalFallback<T>(action: () => Promise<T>, fallback: () => Pr
 }
 
 export async function listReports(): Promise<ReportListItem[]> {
-  return withLocalFallback(
+  const draftReports = (await listDraftManifests()).map(toReportListItemFromManifest);
+  const legacyReports = await withLocalFallback(
     async () => {
       const prisma = getPrisma();
       const reports = await prisma.report.findMany({
@@ -211,9 +627,17 @@ export async function listReports(): Promise<ReportListItem[]> {
         updatedAt: new Date(report.updatedAt),
       })),
   );
+
+  const merged = [...draftReports, ...legacyReports.filter((report) => !draftReports.some((draft) => draft.id === report.id))];
+  return merged.sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime());
 }
 
 export async function getStoredReport(id: string): Promise<StoredReport | null> {
+  const draftReport = await getDraftStoredReport(id);
+  if (draftReport) {
+    return draftReport;
+  }
+
   return withLocalFallback(
     async () => {
       const prisma = getPrisma();
@@ -258,7 +682,7 @@ export async function getStoredReport(id: string): Promise<StoredReport | null> 
   );
 }
 
-export async function createReportFromWorkbookUpload(filename: string, buffer: Buffer): Promise<StoredReport> {
+export async function createReportFromWorkbookUpload(filename: string, buffer: Buffer, actor?: AppUser): Promise<StoredReport> {
   const parsed = await parseWorkbookBuffer(buffer, filename);
   const storage = getObjectStorage();
   const key = path.posix.join("workbooks", nanoid(), sanitizeFilename(filename));
@@ -330,9 +754,137 @@ export async function createReportFromWorkbookUpload(filename: string, buffer: B
     },
   );
 
+  const draftActor = toDraftUserRef(
+    actor ?? {
+      id: "system-workbook-import",
+      name: "Workbook Import",
+      email: null,
+    },
+  );
+
+  await persistDraftSnapshot({
+    reportId: report.id,
+    title: report.title,
+    originalFilename: report.originalFilename,
+    reportSeriesKey: report.reportSeriesKey,
+    templateKey: report.templateKey,
+    templateVersion: report.templateVersion,
+    snapshot: report.snapshot,
+    workbookObjectKey: report.workbookObjectKey,
+    actor: draftActor,
+    changedSections: [...EDITOR_SECTIONS],
+    createdAt: report.createdAt.toISOString(),
+    artifactSyncStatus: {
+      state: "current",
+      revisionId: null,
+      updatedAt: report.updatedAt.toISOString(),
+      error: null,
+      workbookObjectKey: report.workbookObjectKey,
+      jsonObjectKey: null,
+    },
+  });
+
+  void syncDraftArtifacts(report.id);
   logger.info({ reportId: report.id, filename }, "Stored workbook report");
 
-  return report;
+  return (await getStoredReport(report.id)) ?? report;
+}
+
+async function updateDraftArtifactSyncStatus(
+  reportId: string,
+  updater: (status: ArtifactSyncStatus, manifest: DraftManifest) => ArtifactSyncStatus,
+): Promise<void> {
+  const manifest = await getDraftManifest(reportId);
+  if (!manifest) {
+    return;
+  }
+
+  await upsertDraftManifest({
+    ...manifest,
+    updatedAt: new Date().toISOString(),
+    artifactSyncStatus: updater(manifest.artifactSyncStatus, manifest),
+  });
+}
+
+export async function syncDraftArtifacts(reportId: string): Promise<void> {
+  const report = await getStoredReport(reportId);
+  const manifest = await getDraftManifest(reportId);
+  if (!report || !manifest) {
+    return;
+  }
+
+  try {
+    const storage = getObjectStorage();
+    const workbookBuffer = await renderWorkbookFromSnapshot(report.snapshot);
+    const jsonBuffer = Buffer.from(`${JSON.stringify(report.snapshot, null, 2)}\n`, "utf8");
+    const jsonObjectKey = path.posix.join("exports", reportId, "current.json");
+
+    await Promise.all([
+      storage.putBuffer(report.workbookObjectKey, workbookBuffer, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+      storage.putBuffer(jsonObjectKey, jsonBuffer, "application/json"),
+    ]);
+
+    await updateDraftArtifactSyncStatus(reportId, () => ({
+      state: "current",
+      revisionId: manifest.currentRevision.revisionId,
+      updatedAt: new Date().toISOString(),
+      error: null,
+      workbookObjectKey: report.workbookObjectKey,
+      jsonObjectKey,
+    }));
+  } catch (error) {
+    await updateDraftArtifactSyncStatus(reportId, (status) => ({
+      ...status,
+      state: "failed",
+      updatedAt: new Date().toISOString(),
+      error: error instanceof Error ? error.message : "Artifact sync failed.",
+    }));
+  }
+}
+
+export async function getCurrentDraftJsonArtifact(reportId: string): Promise<{ buffer: Buffer; filename: string }> {
+  const report = await getStoredReport(reportId);
+  if (!report) {
+    throw new Error("Report not found.");
+  }
+
+  const storage = getObjectStorage();
+  const manifest = await getDraftManifest(reportId);
+  const jsonObjectKey = manifest?.artifactSyncStatus.jsonObjectKey ?? path.posix.join("exports", reportId, "current.json");
+  if (!manifest || manifest.artifactSyncStatus.state !== "current" || manifest.artifactSyncStatus.revisionId !== manifest.currentRevision.revisionId) {
+    await syncDraftArtifacts(reportId);
+  }
+
+  const latestManifest = (await getDraftManifest(reportId)) ?? manifest;
+  const objectKey = latestManifest?.artifactSyncStatus.jsonObjectKey ?? jsonObjectKey;
+  const buffer = (await storage.exists(objectKey))
+    ? await storage.getBuffer(objectKey)
+    : Buffer.from(`${JSON.stringify(report.snapshot, null, 2)}\n`, "utf8");
+
+  return {
+    buffer,
+    filename: `${slugifyLabel(report.title)}-${report.currentMonth}-current.json`,
+  };
+}
+
+export async function getCurrentDraftWorkbookArtifact(reportId: string): Promise<{ buffer: Buffer; filename: string }> {
+  const report = await getStoredReport(reportId);
+  if (!report) {
+    throw new Error("Report not found.");
+  }
+
+  const manifest = await getDraftManifest(reportId);
+  if (!manifest || manifest.artifactSyncStatus.state !== "current" || manifest.artifactSyncStatus.revisionId !== manifest.currentRevision.revisionId) {
+    await syncDraftArtifacts(reportId);
+  }
+
+  const storage = getObjectStorage();
+  const buffer = await storage.getBuffer(report.workbookObjectKey);
+
+  return {
+    buffer,
+    filename: `${slugifyLabel(report.title)}-${report.currentMonth}.xlsx`,
+  };
 }
 
 export async function saveGeneratedExport(input: {

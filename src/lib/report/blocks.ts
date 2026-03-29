@@ -1,6 +1,7 @@
 export interface ReportPageDefinition {
   id: string;
   label: string;
+  exportable?: boolean;
 }
 
 export interface ReportPageTabDefinition {
@@ -38,6 +39,7 @@ export const REPORT_PAGES: ReportPageDefinition[] = [
   { id: "p-gantt", label: "Portfolio Gantt" },
   { id: "p-budget", label: "Budget & Commercials" },
   { id: "p-risks", label: "Risks & Decisions" },
+  { id: "p-data", label: "Data Entry", exportable: false },
 ];
 
 export const REPORT_PAGE_TABS: Record<string, ReportPageTabDefinition[]> = {
@@ -57,6 +59,16 @@ export const REPORT_PAGE_TABS: Record<string, ReportPageTabDefinition[]> = {
     { id: "overview", label: "Overview", slideLabel: "Support Operations · SLA Overview" },
     { id: "volumes", label: "Ticket Volumes", slideLabel: "Support Operations · Ticket Volumes" },
     { id: "detail", label: "Ticket Detail", slideLabel: "Support Operations · Ticket Detail" },
+  ],
+  "p-data": [
+    { id: "overview-setup", label: "Overview & Setup", slideLabel: "Data Entry · Overview & Setup" },
+    { id: "availability-network", label: "Availability & Network", slideLabel: "Data Entry · Availability & Network" },
+    { id: "support-operations", label: "Support Operations", slideLabel: "Data Entry · Support Operations" },
+    { id: "security-assets", label: "Security & Assets", slideLabel: "Data Entry · Security & Assets" },
+    { id: "change-delivery", label: "Change & Delivery", slideLabel: "Data Entry · Change & Delivery" },
+    { id: "projects-roadmap", label: "Projects & Roadmap", slideLabel: "Data Entry · Projects & Roadmap" },
+    { id: "finance-risks", label: "Finance & Risks", slideLabel: "Data Entry · Finance & Risks" },
+    { id: "notes-narrative", label: "Notes & Narrative", slideLabel: "Data Entry · Notes & Narrative" },
   ],
 };
 
@@ -186,6 +198,11 @@ export function getPageDefinition(pageId: string): ReportPageDefinition | undefi
   return REPORT_PAGES.find((page) => page.id === pageId);
 }
 
+export function isExportablePageId(pageId: string): boolean {
+  const page = getPageDefinition(pageId);
+  return Boolean(page && page.exportable !== false);
+}
+
 export function getPageTabs(pageId: string): ReportPageTabDefinition[] {
   return REPORT_PAGE_TABS[pageId] ?? [];
 }
@@ -236,7 +253,7 @@ export function getSlideDefinition(pageId: string, tabId?: string | null): Repor
 }
 
 export function getReportSlides(): ReportSlideDefinition[] {
-  return REPORT_PAGES.reduce<ReportSlideDefinition[]>((slides, page) => {
+  return REPORT_PAGES.filter((page) => page.exportable !== false).reduce<ReportSlideDefinition[]>((slides, page) => {
     const tabs = getPageTabs(page.id);
     if (tabs.length === 0) {
       slides.push({

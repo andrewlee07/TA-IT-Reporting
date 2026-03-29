@@ -11,7 +11,7 @@ function parseBoolean(value: string | undefined, fallback: boolean): boolean {
 const envSchema = z.object({
   DATABASE_URL: z.string().optional(),
   REDIS_URL: z.string().url().optional(),
-  STORAGE_MODE: z.enum(["local", "s3"]).default("local"),
+  STORAGE_MODE: z.enum(["local", "s3", "sharepoint"]).default("local"),
   LOCAL_STORAGE_DIR: z.string().default(".storage"),
   S3_BUCKET: z.string().optional(),
   S3_REGION: z.string().default("eu-west-1"),
@@ -21,6 +21,16 @@ const envSchema = z.object({
   SMTP_URL: z.string().optional(),
   SMTP_FROM: z.string().email().optional(),
   AZURE_OPENAI_API_VERSION: z.string().default("2024-10-21"),
+  AUTH_MODE: z.enum(["development", "easy-auth"]).default("development"),
+  DEV_USER_ID: z.string().default("local-dev-user"),
+  DEV_USER_NAME: z.string().default("Local Developer"),
+  GRAPH_AUTH_MODE: z.enum(["managed-identity", "client-credentials", "disabled"]).default("disabled"),
+  GRAPH_TENANT_ID: z.string().optional(),
+  GRAPH_CLIENT_ID: z.string().optional(),
+  GRAPH_CLIENT_SECRET: z.string().optional(),
+  SHAREPOINT_SITE_ID: z.string().optional(),
+  SHAREPOINT_DRIVE_ID: z.string().optional(),
+  SHAREPOINT_ROOT_PATH: z.string().default("TA-IT-Reporting"),
   APP_BASE_URL: z.string().url().default("http://localhost:3000"),
   PLAYWRIGHT_BROWSER_PATH: z.string().optional(),
   PLATFORM_WORKSPACE_ENABLED: z.boolean().default(true),
@@ -60,6 +70,16 @@ export function getEnv(): AppEnv {
     SMTP_URL: process.env.SMTP_URL,
     SMTP_FROM: process.env.SMTP_FROM,
     AZURE_OPENAI_API_VERSION: process.env.AZURE_OPENAI_API_VERSION,
+    AUTH_MODE: process.env.AUTH_MODE,
+    DEV_USER_ID: process.env.DEV_USER_ID,
+    DEV_USER_NAME: process.env.DEV_USER_NAME,
+    GRAPH_AUTH_MODE: process.env.GRAPH_AUTH_MODE,
+    GRAPH_TENANT_ID: process.env.GRAPH_TENANT_ID,
+    GRAPH_CLIENT_ID: process.env.GRAPH_CLIENT_ID,
+    GRAPH_CLIENT_SECRET: process.env.GRAPH_CLIENT_SECRET,
+    SHAREPOINT_SITE_ID: process.env.SHAREPOINT_SITE_ID,
+    SHAREPOINT_DRIVE_ID: process.env.SHAREPOINT_DRIVE_ID,
+    SHAREPOINT_ROOT_PATH: process.env.SHAREPOINT_ROOT_PATH,
     APP_BASE_URL: process.env.APP_BASE_URL,
     PLAYWRIGHT_BROWSER_PATH: process.env.PLAYWRIGHT_BROWSER_PATH,
     PLATFORM_WORKSPACE_ENABLED: parseBoolean(process.env.PLATFORM_WORKSPACE_ENABLED, true),
@@ -92,4 +112,40 @@ export function requireDatabaseUrl(): string {
 
 export function resetEnvCache(): void {
   cachedEnv = null;
+}
+
+export function requireGraphTenantId(): string {
+  const env = getEnv();
+  if (!env.GRAPH_TENANT_ID) {
+    throw new Error("GRAPH_TENANT_ID is required for Microsoft Graph client credentials.");
+  }
+
+  return env.GRAPH_TENANT_ID;
+}
+
+export function requireGraphClientId(): string {
+  const env = getEnv();
+  if (!env.GRAPH_CLIENT_ID) {
+    throw new Error("GRAPH_CLIENT_ID is required for Microsoft Graph access.");
+  }
+
+  return env.GRAPH_CLIENT_ID;
+}
+
+export function requireGraphClientSecret(): string {
+  const env = getEnv();
+  if (!env.GRAPH_CLIENT_SECRET) {
+    throw new Error("GRAPH_CLIENT_SECRET is required for Microsoft Graph client credentials.");
+  }
+
+  return env.GRAPH_CLIENT_SECRET;
+}
+
+export function requireSharePointDriveId(): string {
+  const env = getEnv();
+  if (!env.SHAREPOINT_DRIVE_ID) {
+    throw new Error("SHAREPOINT_DRIVE_ID is required for SharePoint-backed storage.");
+  }
+
+  return env.SHAREPOINT_DRIVE_ID;
 }

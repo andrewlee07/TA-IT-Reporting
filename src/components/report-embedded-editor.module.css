@@ -1,0 +1,291 @@
+.stack {
+  display: grid;
+  gap: 16px;
+}
+
+.statusBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid rgba(0, 82, 146, 0.08);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.statusPill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.55px;
+  text-transform: uppercase;
+}
+
+.statusPill[data-tone="idle"],
+.statusPill[data-tone="saved"] {
+  background: rgba(0, 82, 146, 0.1);
+  color: #005292;
+}
+
+.statusPill[data-tone="dirty"],
+.statusPill[data-tone="saving"] {
+  background: rgba(245, 125, 0, 0.12);
+  color: #b45309;
+}
+
+.statusPill[data-tone="conflict"],
+.statusPill[data-tone="error"] {
+  background: rgba(192, 57, 43, 0.12);
+  color: #c0392b;
+}
+
+.statusMeta,
+.presencePill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(249, 251, 253, 0.95);
+  color: #4b5563;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+
+.presencePill {
+  background: rgba(245, 125, 0, 0.1);
+  color: #b45309;
+}
+
+.metaGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.fieldGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+}
+
+.field > span,
+.checkboxField > span {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  min-height: 40px;
+  padding: 10px 12px;
+  border: 1px solid rgba(0, 82, 146, 0.12);
+  background: #fff;
+  color: #111827;
+  font-size: 14px;
+}
+
+.field textarea {
+  min-height: 112px;
+  resize: vertical;
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  outline: none;
+  border-color: rgba(245, 125, 0, 0.45);
+  box-shadow: 0 0 0 3px rgba(245, 125, 0, 0.12);
+}
+
+.checkboxField {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.checkboxField input {
+  width: 16px;
+  height: 16px;
+}
+
+.collectionBody {
+  display: grid;
+  gap: 16px;
+}
+
+.collectionToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.collectionToolbarTitle {
+  display: grid;
+  gap: 4px;
+}
+
+.collectionToolbarTitle h3 {
+  margin: 0;
+  font-family: "Arial Black", Arial, sans-serif;
+  font-size: 22px;
+  color: #1f2937;
+}
+
+.collectionToolbarTitle p {
+  margin: 0;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.actionButton,
+.inlineDanger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 82, 146, 0.12);
+  background: #fff;
+  color: #005292;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.actionButton:hover,
+.inlineDanger:hover {
+  border-color: rgba(245, 125, 0, 0.42);
+  color: #b45309;
+}
+
+.entryCardStack {
+  display: grid;
+  gap: 18px;
+}
+
+.entryCard,
+.readonlyCard {
+  padding: 18px;
+  border: 1px solid rgba(0, 82, 146, 0.08);
+  background: rgba(249, 251, 253, 0.92);
+}
+
+.entryCardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.entryCardTitle {
+  margin: 0;
+  font-family: "Arial Black", Arial, sans-serif;
+  font-size: 20px;
+  color: #1f2937;
+}
+
+.entryCardSub {
+  margin: 6px 0 0;
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.readonlyValueGrid {
+  display: grid;
+  gap: 18px;
+}
+
+.readonlyMetrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.readonlyMetric {
+  display: grid;
+  gap: 5px;
+  padding: 12px 14px;
+  border: 1px solid rgba(0, 82, 146, 0.08);
+  background: #fff;
+}
+
+.readonlyMetric span {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+
+.readonlyMetric strong {
+  color: #1f2937;
+  font-size: 15px;
+}
+
+.detailPanel,
+.readonlyPanel {
+  min-height: 100%;
+  padding: 18px;
+  border: 1px solid rgba(0, 82, 146, 0.08);
+  background: rgba(249, 251, 253, 0.92);
+}
+
+.detailPanel h4,
+.readonlyPanel h4 {
+  margin: 0;
+  font-family: "Arial Black", Arial, sans-serif;
+  font-size: 18px;
+  color: #1f2937;
+}
+
+.detailPanel p,
+.readonlyPanel p,
+.emptyCell {
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.detailPanelHeader {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.emptyCell {
+  padding: 16px 0;
+}
+
+@media (max-width: 1200px) {
+  .readonlyMetrics,
+  .metaGrid,
+  .fieldGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .entryCardHeader {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

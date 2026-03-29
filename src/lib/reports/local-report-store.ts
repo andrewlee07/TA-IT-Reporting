@@ -95,7 +95,9 @@ async function readJsonFile<T>(filePath: string, fallback: T): Promise<T> {
 
 async function writeJsonFile(filePath: string, value: unknown): Promise<void> {
   await ensureDir();
-  await fs.writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
+  await fs.writeFile(tempPath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  await fs.rename(tempPath, filePath);
 }
 
 export async function listLocalReports(): Promise<LocalReportRecord[]> {
@@ -114,6 +116,7 @@ export async function getLocalReport(id: string): Promise<LocalReportRecord | nu
 }
 
 export async function createLocalReport(input: {
+  id?: string;
   title: string;
   originalFilename: string;
   reportSeriesKey?: string;
@@ -128,7 +131,7 @@ export async function createLocalReport(input: {
   const now = new Date().toISOString();
 
   const report: LocalReportRecord = {
-    id: nanoid(),
+    id: input.id ?? nanoid(),
     title: input.title,
     originalFilename: input.originalFilename,
     reportSeriesKey: input.reportSeriesKey ?? deriveReportSeriesKey(input.originalFilename),
@@ -144,6 +147,42 @@ export async function createLocalReport(input: {
 
   await writeJsonFile(getReportsPath(), [report, ...reports]);
   return report;
+}
+
+export async function upsertLocalReport(input: {
+  id: string;
+  title: string;
+  originalFilename: string;
+  reportSeriesKey?: string;
+  templateKey: string;
+  templateVersion: number;
+  currentMonth: string;
+  availableMonths: string[];
+  snapshot: NormalizedReportSnapshot;
+  workbookObjectKey: string;
+}): Promise<LocalReportRecord> {
+  const reports = await listLocalReports();
+  const existing = reports.find((report) => report.id === input.id);
+  const now = new Date().toISOString();
+
+  const record: LocalReportRecord = {
+    id: input.id,
+    title: input.title,
+    originalFilename: input.originalFilename,
+    reportSeriesKey: input.reportSeriesKey ?? deriveReportSeriesKey(input.originalFilename),
+    templateKey: input.templateKey,
+    templateVersion: input.templateVersion,
+    currentMonth: input.currentMonth,
+    availableMonths: input.availableMonths,
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+    snapshot: input.snapshot,
+    workbookObjectKey: input.workbookObjectKey,
+  };
+
+  const filtered = reports.filter((report) => report.id !== input.id);
+  await writeJsonFile(getReportsPath(), [record, ...filtered]);
+  return record;
 }
 
 export async function listLocalExecSummaries(): Promise<LocalExecSummaryRecord[]> {

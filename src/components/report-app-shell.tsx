@@ -4,8 +4,12 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { createPortal } from "react-dom";
 import Chart from "chart.js/auto";
 
+import { ReportEmbeddedEditor } from "@/components/report-embedded-editor";
 import { ReportPrepDrawer } from "@/components/report-prep-drawer";
-import { REPORT_PAGES, getSlideId, hasPageTabs, isValidPageId, resolveTabId } from "@/lib/report/blocks";
+import type { EditableReportDraft, SectionId } from "@/lib/drafts/types";
+import { EDITOR_SECTIONS_CONFIG } from "@/lib/editor/config";
+import { getSectionPayload } from "@/lib/editor/sections";
+import { REPORT_PAGES, getSlideId, hasPageTabs, isExportablePageId, isValidPageId, resolveTabId } from "@/lib/report/blocks";
 import { buildTemplateData, formatMonthLabel } from "@/lib/report/template-data";
 import { initReportApp } from "@/lib/report/runtime";
 import type { ExecSummaryState } from "@/lib/reports/exec-summary";
@@ -46,6 +50,7 @@ interface PortalTargets {
   reports: Element | null;
   summaryControls: Element | null;
   summaryEditor: Element | null;
+  editorRoots: Partial<Record<SectionId, Element>>;
 }
 
 type ClientExportFormat = "png" | "jpeg";
@@ -72,6 +77,15 @@ interface PrepApiPayload {
   prep?: ReportPrepView;
   error?: string;
 }
+
+interface EditorApiPayload {
+  draft?: EditableReportDraft;
+  error?: string;
+}
+
+type EditorSaveState = "idle" | "dirty" | "saving" | "saved" | "conflict" | "error";
+
+const DATA_ENTRY_PAGE_ID = "p-data";
 
 function buildCanonicalUrl(reportId: string, month: string, pageId: string, tabId?: string | null): string {
   const params = new URLSearchParams();
@@ -105,6 +119,68 @@ function buildClientExportFilename(reportTitle: string, month: string, label: st
 function formatSidebarReportTitle(title: string, currentMonth: string): string {
   const monthSuffixPattern = new RegExp(`\\s*·\\s*${currentMonth.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`);
   return title.replace(monthSuffixPattern, "").trim();
+}
+
+function getCurrentMonthValue(): string {
+  const today = new Date();
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function buildDefaultBlankReportTitle(month: string): string {
+  return `TA IT Report ${month}`;
+}
+
+function buildEditorNavMarkup(): string {
+  return [
+    `<div class="nav-link" data-page-id="${DATA_ENTRY_PAGE_ID}" title="Data Entry" onclick="showPage('${DATA_ENTRY_PAGE_ID}',this)">`,
+    `<div class="nav-icon"><span class="nav-icon-label">DE</span><svg class="nav-icon-glyph" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3.5h9v9h-9z"></path><path d="M5.5 6h5"></path><path d="M5.5 8.5h5"></path><path d="M5.5 11h3"></path></svg></div>`,
+    `<span class="nav-text">Data Entry</span>`,
+    `<span class="nav-tooltip" role="tooltip">Data Entry</span>`,
+    `</div>`,
+  ].join("");
+}
+
+function buildEditorPageMarkup(section: { id: string; label: string; description: string }): string {
+  return [
+    `<div class="report-page" id="${DATA_ENTRY_PAGE_ID}-${section.id}" data-page-id="${DATA_ENTRY_PAGE_ID}" data-tab-id="${section.id}" data-export="false">`,
+    `<div class="ph">`,
+    `<div class="ph-brand"><div class="ph-mark">TA</div><div><div class="ph-org">TeacherActive</div><div class="ph-dept">Information Technology</div></div></div>`,
+    `<div class="ph-meta">`,
+    `<div><div class="ph-title">Data Entry</div><div class="ph-sub">Workbook-backed admin inputs in the same report shell</div></div>`,
+    `<div><div class="ph-period-label">Reporting Period</div><div class="ph-period-val">June 2026</div></div>`,
+    `</div>`,
+    `</div>`,
+    `<div class="pb">`,
+    `<div class="sl"><div class="sl-tag">Admin Workspace</div><div class="sl-title">${section.label}</div><div class="sl-sub">${section.description}</div></div>`,
+    `<div id="data-entry-root-${section.id}"></div>`,
+    `</div>`,
+    `<div class="pf"><div class="pf-source">Internal admin workspace · Not included in PDF/PPTX exports</div><div class="pf-page">DATA ENTRY · ${section.label}</div></div>`,
+    `</div>`,
+  ].join("");
+}
+
+function ensureEditorPages(shellRoot: HTMLElement): Partial<Record<SectionId, Element>> {
+  const sidebar = shellRoot.querySelector(".sidebar");
+  const main = shellRoot.querySelector(".main");
+  const utilitiesHeading = Array.from(shellRoot.querySelectorAll(".nav-section")).find((section) => section.textContent?.trim() === "App Utilities");
+
+  if (!sidebar || !main) {
+    return {};
+  }
+
+  if (!shellRoot.querySelector(`.nav-link[data-page-id="${DATA_ENTRY_PAGE_ID}"]`) && utilitiesHeading?.parentNode) {
+    utilitiesHeading.parentNode.insertBefore(document.createRange().createContextualFragment(buildEditorNavMarkup()), utilitiesHeading);
+  }
+
+  EDITOR_SECTIONS_CONFIG.forEach((section) => {
+    if (!shellRoot.querySelector(`#${DATA_ENTRY_PAGE_ID}-${section.id}`)) {
+      main.insertAdjacentHTML("beforeend", buildEditorPageMarkup(section));
+    }
+  });
+
+  return Object.fromEntries(
+    EDITOR_SECTIONS_CONFIG.map((section) => [section.id, shellRoot.querySelector(`#data-entry-root-${section.id}`)]),
+  ) as Partial<Record<SectionId, Element>>;
 }
 
 function toReportListEntry(report: AppReportRecord): ReportListEntry {
@@ -475,10 +551,15 @@ export function ReportAppShell({
     reports: null,
     summaryControls: null,
     summaryEditor: null,
+    editorRoots: {},
   });
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadIssues, setUploadIssues] = useState<string[]>([]);
+  const [isCreateBlankOpen, setIsCreateBlankOpen] = useState(false);
+  const [isCreatingBlank, setIsCreatingBlank] = useState(false);
+  const [blankReportMonth, setBlankReportMonth] = useState(initialMonth || getCurrentMonthValue());
+  const [blankReportTitle, setBlankReportTitle] = useState(buildDefaultBlankReportTitle(initialMonth || getCurrentMonthValue()));
   const [isUploading, setIsUploading] = useState(false);
   const [isSwitchingReport, setIsSwitchingReport] = useState(false);
   const [busyExport, setBusyExport] = useState<string | null>(null);
@@ -500,6 +581,13 @@ export function ReportAppShell({
   const [isPrepSaving, setIsPrepSaving] = useState(false);
   const [isPrepOpen, setIsPrepOpen] = useState(false);
   const [activePrepTab, setActivePrepTab] = useState<"readiness" | "rollover">("readiness");
+  const [editorDraft, setEditorDraft] = useState<EditableReportDraft | null>(null);
+  const [isEditorLoading, setIsEditorLoading] = useState(false);
+  const [editorSaveState, setEditorSaveState] = useState<EditorSaveState>("idle");
+  const [editorSaveMessage, setEditorSaveMessage] = useState("Ready");
+  const editorBaseRevisionIdRef = useRef<string | null>(null);
+  const editorDirtySectionRef = useRef<SectionId | null>(null);
+  const editorSaveTimerRef = useRef<number | null>(null);
 
   const templateData = useMemo(
     () => buildTemplateData(activeReport.snapshot, selectedMonth, execSummary),
@@ -523,6 +611,8 @@ export function ReportAppShell({
       ...saved.filter((report) => report.id !== "demo"),
     ];
   }, [reports]);
+  const selectedEditorSectionId = selectedPageId === DATA_ENTRY_PAGE_ID ? (selectedTabId as SectionId | null) : null;
+  const pageIsExportable = useMemo(() => isExportablePageId(selectedPageId), [selectedPageId]);
 
   useEffect(() => {
     activeReportRef.current = activeReport;
@@ -615,6 +705,94 @@ export function ReportAppShell({
     }
   }, []);
 
+  const syncReportFromDraft = useCallback((draft: EditableReportDraft) => {
+    const nextUpdatedAt = new Date().toISOString();
+
+    setActiveReport((current) => {
+      if (current.id !== draft.manifest.reportId) {
+        return current;
+      }
+
+      const nextReport: AppReportRecord = {
+        ...current,
+        title: draft.manifest.title,
+        reportSeriesKey: draft.manifest.reportSeriesKey,
+        currentMonth: draft.snapshot.currentMonth,
+        availableMonths: draft.snapshot.availableMonths,
+        snapshot: draft.snapshot,
+        updatedAt: nextUpdatedAt,
+      };
+
+      reportCacheRef.current.set(nextReport.id, nextReport);
+      activeReportRef.current = nextReport;
+      return nextReport;
+    });
+
+    setReports((current) =>
+      current.map((report) =>
+        report.id === draft.manifest.reportId
+          ? {
+              ...report,
+              title: draft.manifest.title,
+              reportSeriesKey: draft.manifest.reportSeriesKey,
+              currentMonth: draft.snapshot.currentMonth,
+              availableMonths: draft.snapshot.availableMonths,
+              updatedAt: nextUpdatedAt,
+            }
+          : report,
+      ),
+    );
+  }, []);
+
+  const loadEditorDraft = useCallback(
+    async (reportId: string, month: string) => {
+      if (reportId === "demo") {
+        setEditorDraft(null);
+        return;
+      }
+
+      setIsEditorLoading(true);
+      try {
+        const payload = await fetchJson<EditorApiPayload>(`/api/reports/${reportId}/editor?month=${encodeURIComponent(month)}`);
+        if (!payload.draft) {
+          throw new Error("Editor draft not available.");
+        }
+
+        setEditorDraft(payload.draft);
+        editorBaseRevisionIdRef.current = payload.draft.manifest.currentRevision.revisionId;
+        setEditorSaveState("idle");
+        setEditorSaveMessage("Ready");
+        syncReportFromDraft(payload.draft);
+      } catch (error) {
+        setUploadError(error instanceof Error ? error.message : "Failed to load data entry workspace.");
+      } finally {
+        setIsEditorLoading(false);
+      }
+    },
+    [syncReportFromDraft],
+  );
+
+  const updateEditorDraft = useCallback(
+    (updater: (current: EditableReportDraft) => EditableReportDraft) => {
+      setEditorDraft((current) => {
+        if (!current) {
+          return current;
+        }
+
+        const nextDraft = updater(current);
+        syncReportFromDraft(nextDraft);
+        return nextDraft;
+      });
+    },
+    [syncReportFromDraft],
+  );
+
+  const markEditorDirty = useCallback((sectionId: SectionId) => {
+    editorDirtySectionRef.current = sectionId;
+    setEditorSaveState("dirty");
+    setEditorSaveMessage("Unsaved changes");
+  }, []);
+
   useEffect(() => {
     setIsSummaryEditing(false);
     void loadExecSummary(activeReport.id, selectedMonth);
@@ -623,6 +801,153 @@ export function ReportAppShell({
   useEffect(() => {
     void loadPrep(activeReport.id, selectedMonth);
   }, [activeReport.id, loadPrep, selectedMonth]);
+
+  useEffect(() => {
+    if (selectedPageId !== DATA_ENTRY_PAGE_ID || activeReport.id === "demo") {
+      return;
+    }
+
+    if (editorDraft?.manifest.reportId === activeReport.id && editorDraft.snapshot.currentMonth === selectedMonth) {
+      return;
+    }
+
+    void loadEditorDraft(activeReport.id, selectedMonth);
+  }, [activeReport.id, editorDraft, loadEditorDraft, selectedMonth, selectedPageId]);
+
+  useEffect(() => {
+    if (selectedPageId !== DATA_ENTRY_PAGE_ID || !editorDraft || !selectedEditorSectionId) {
+      return;
+    }
+
+    if (editorSaveTimerRef.current) {
+      window.clearTimeout(editorSaveTimerRef.current);
+    }
+
+    if (editorSaveState !== "dirty" || !editorDirtySectionRef.current) {
+      return;
+    }
+
+    editorSaveTimerRef.current = window.setTimeout(async () => {
+      const dirtySection = editorDirtySectionRef.current;
+      if (!dirtySection || !editorDraft) {
+        return;
+      }
+
+      setEditorSaveState("saving");
+      setEditorSaveMessage("Saving changes...");
+
+      try {
+        const payload = getSectionPayload(
+          editorDraft.snapshot,
+          dirtySection,
+          editorDraft.manifest.title,
+          editorDraft.manifest.reportSeriesKey,
+        );
+        const response = await fetch(`/api/reports/${editorDraft.manifest.reportId}/editor/sections/${dirtySection}?month=${selectedMonth}`, {
+          method: "PUT",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            baseRevisionId: editorBaseRevisionIdRef.current,
+            payload,
+          }),
+        });
+
+        if (response.status === 409) {
+          const body = (await response.json()) as { changedSections?: string[] };
+          setEditorSaveState("conflict");
+          setEditorSaveMessage(`Someone else changed ${body.changedSections?.join(", ") ?? "this section"}. Refresh to continue.`);
+          return;
+        }
+
+        if (!response.ok) {
+          const body = (await response.json()) as { error?: string };
+          throw new Error(body.error ?? "Save failed.");
+        }
+
+        const body = (await response.json()) as EditorApiPayload;
+        if (!body.draft) {
+          throw new Error("Save succeeded but no updated draft was returned.");
+        }
+
+        editorDirtySectionRef.current = null;
+        editorBaseRevisionIdRef.current = body.draft.manifest.currentRevision.revisionId;
+        setEditorDraft(body.draft);
+        syncReportFromDraft(body.draft);
+        setEditorSaveState("saved");
+        setEditorSaveMessage(`Saved revision ${body.draft.manifest.currentRevision.revisionNumber}`);
+      } catch (error) {
+        setEditorSaveState("error");
+        setEditorSaveMessage(error instanceof Error ? error.message : "Save failed.");
+      }
+    }, 900);
+
+    return () => {
+      if (editorSaveTimerRef.current) {
+        window.clearTimeout(editorSaveTimerRef.current);
+      }
+    };
+  }, [editorDraft, editorSaveState, selectedEditorSectionId, selectedMonth, selectedPageId, syncReportFromDraft]);
+
+  useEffect(() => {
+    if (selectedPageId !== DATA_ENTRY_PAGE_ID || !editorDraft) {
+      return;
+    }
+
+    const reportId = editorDraft.manifest.reportId;
+    let cancelled = false;
+
+    async function heartbeat() {
+      try {
+        const response = await fetch(`/api/reports/${reportId}/presence?month=${selectedMonth}`, {
+          method: "PUT",
+        });
+
+        if (!response.ok || cancelled) {
+          return;
+        }
+
+        const body = (await response.json()) as { activePresence: EditableReportDraft["activePresence"] };
+        setEditorDraft((current) => (current ? { ...current, activePresence: body.activePresence } : current));
+      } catch {
+        // Presence is best-effort.
+      }
+    }
+
+    void heartbeat();
+    const interval = window.setInterval(heartbeat, 45000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [editorDraft, selectedMonth, selectedPageId]);
+
+  useEffect(() => {
+    if (selectedPageId !== DATA_ENTRY_PAGE_ID || !editorDraft || editorDraft.manifest.artifactSyncStatus.state !== "pending") {
+      return;
+    }
+
+    const interval = window.setInterval(async () => {
+      try {
+        const payload = await fetchJson<EditorApiPayload>(
+          `/api/reports/${editorDraft.manifest.reportId}/editor?month=${encodeURIComponent(selectedMonth)}`,
+        );
+
+        if (!payload.draft) {
+          return;
+        }
+
+        setEditorDraft(payload.draft);
+        syncReportFromDraft(payload.draft);
+      } catch {
+        // Polling is best-effort.
+      }
+    }, 5000);
+
+    return () => window.clearInterval(interval);
+  }, [editorDraft, selectedMonth, selectedPageId, syncReportFromDraft]);
 
   useEffect(() => {
     if (selectedPageId !== "p-summary") {
@@ -843,6 +1168,7 @@ export function ReportAppShell({
     }
 
     shellRoot.classList.add("app-embedded");
+    const editorRoots = ensureEditorPages(shellRoot as HTMLElement);
 
     setTargets({
       toggle: mountNode.querySelector("#sidebar-toggle-slot"),
@@ -851,6 +1177,7 @@ export function ReportAppShell({
       reports: mountNode.querySelector("#sidebar-report-list-slot"),
       summaryControls: mountNode.querySelector("#summary-controls-slot"),
       summaryEditor: mountNode.querySelector("#summary-editor-slot"),
+      editorRoots,
     });
 
     controllerRef.current = initReportApp(shellRoot, {
@@ -875,6 +1202,7 @@ export function ReportAppShell({
         reports: null,
         summaryControls: null,
         summaryEditor: null,
+        editorRoots: {},
       });
     };
   }, [handlePageChange, selectedMonth, templateBody, templateData]);
@@ -1248,7 +1576,7 @@ export function ReportAppShell({
         setSelectedMonth(payload.report.currentMonth);
         setSelectedPageId(nextPageId);
         setSelectedTabByPage({});
-        setStatusMessage(`Uploaded ${payload.report.originalFilename}`);
+        setStatusMessage(`Imported ${payload.report.originalFilename}. Open Edit data to continue in the admin workspace.`);
         syncUrl(payload.report.id, payload.report.currentMonth, nextPageId, null);
       } catch (error) {
         setUploadError(error instanceof Error ? error.message : "Upload failed.");
@@ -1269,7 +1597,85 @@ export function ReportAppShell({
     [handleUpload],
   );
 
-  const downloadExport = useCallback(async (exportType: "page-png" | "full-pdf" | "full-pptx" | "full-pptx-editable") => {
+  const openEditor = useCallback(() => {
+    if (activeReportRef.current.id === "demo") {
+      setUploadError("Create or import a saved report before opening the editor.");
+      return;
+    }
+
+    const nextTabId = resolveTabId(DATA_ENTRY_PAGE_ID, selectedTabByPageRef.current[DATA_ENTRY_PAGE_ID] ?? "overview-setup") ?? "overview-setup";
+    setSelectedPageId(DATA_ENTRY_PAGE_ID);
+    setSelectedTabByPage((current) => ({
+      ...current,
+      [DATA_ENTRY_PAGE_ID]: nextTabId,
+    }));
+    syncUrl(activeReportRef.current.id, selectedMonthRef.current, DATA_ENTRY_PAGE_ID, nextTabId);
+    setStatusMessage("Opened the data entry workspace.");
+  }, [syncUrl]);
+
+  const openBlankDraftForm = useCallback(() => {
+    const suggestedMonth = selectedMonthRef.current || getCurrentMonthValue();
+    setBlankReportMonth(suggestedMonth);
+    setBlankReportTitle(buildDefaultBlankReportTitle(suggestedMonth));
+    setIsCreateBlankOpen(true);
+    setUploadError(null);
+    setUploadIssues([]);
+    setStatusMessage(null);
+  }, []);
+
+  const createBlankReport = useCallback(async () => {
+    const trimmedTitle = blankReportTitle.trim();
+
+    if (!trimmedTitle) {
+      setUploadError("Blank reports need a title.");
+      return;
+    }
+
+    setIsCreatingBlank(true);
+    setUploadError(null);
+    setUploadIssues([]);
+    setStatusMessage(null);
+
+    try {
+      const response = await fetch("/api/reports", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          title: trimmedTitle,
+          initialMonth: blankReportMonth,
+        }),
+      });
+
+      const payload = (await response.json()) as ReportApiPayload;
+
+      if (!response.ok || !payload.report) {
+        setUploadError(payload.error ?? "Unable to create a blank report.");
+        setUploadIssues(payload.issues ?? []);
+        return;
+      }
+
+      reportCacheRef.current.set(payload.report.id, payload.report);
+      await refreshReportList(payload.report);
+      setIsCreateBlankOpen(false);
+      setActiveReport(payload.report);
+      setSelectedMonth(payload.report.currentMonth);
+      setSelectedPageId(DATA_ENTRY_PAGE_ID);
+      setSelectedTabByPage({
+        [DATA_ENTRY_PAGE_ID]: "overview-setup",
+      });
+      setEditorDraft(null);
+      setStatusMessage(`Created ${payload.report.title}. Data entry is ready.`);
+      syncUrl(payload.report.id, payload.report.currentMonth, DATA_ENTRY_PAGE_ID, "overview-setup");
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Unable to create a blank report.");
+    } finally {
+      setIsCreatingBlank(false);
+    }
+  }, [blankReportMonth, blankReportTitle, refreshReportList, syncUrl]);
+
+  const downloadExport = useCallback(async (exportType: "page-png" | "full-pdf" | "full-pptx" | "full-pptx-editable" | "full-xlsx" | "full-json") => {
     setBusyExport(exportType);
     setExportError(null);
 
@@ -1280,7 +1686,13 @@ export function ReportAppShell({
         month: selectedMonthRef.current,
       };
 
-      if (exportType !== "full-pdf" && exportType !== "full-pptx" && exportType !== "full-pptx-editable") {
+      if (
+        exportType !== "full-pdf" &&
+        exportType !== "full-pptx" &&
+        exportType !== "full-pptx-editable" &&
+        exportType !== "full-xlsx" &&
+        exportType !== "full-json"
+      ) {
         payload.pageId = selectedPageRef.current;
         if (activeTabId) {
           payload.tabId = activeTabId;
@@ -1552,6 +1964,73 @@ export function ReportAppShell({
         </div>
 
         <div className="sidebar-stack-tight">
+          <span className="sidebar-field-label">Data Entry</span>
+          <button
+            className={`sidebar-button ${activeReport.id === "demo" ? "secondary" : "primary"}`}
+            disabled={activeReport.id === "demo" || isUploading || isSwitchingReport || isCreatingBlank}
+            onClick={openEditor}
+            type="button"
+          >
+            {activeReport.id === "demo" ? "Import or Create First" : "Edit data"}
+          </button>
+          <div className="sidebar-meta">
+            Open the tabbed admin workspace with autosave, revision tracking, and workbook sync.
+          </div>
+        </div>
+
+        <div className="sidebar-stack-tight">
+          <span className="sidebar-field-label">Start or Import</span>
+          {isCreateBlankOpen ? (
+            <div className="sidebar-stack-tight">
+              <label className="sidebar-stack-tight">
+                <span className="sidebar-meta">Draft title</span>
+                <input
+                  className="sidebar-input"
+                  disabled={isCreatingBlank || isUploading || isSwitchingReport}
+                  onChange={(event) => setBlankReportTitle(event.target.value)}
+                  type="text"
+                  value={blankReportTitle}
+                />
+              </label>
+              <label className="sidebar-stack-tight">
+                <span className="sidebar-meta">Starting month</span>
+                <input
+                  className="sidebar-input"
+                  disabled={isCreatingBlank || isUploading || isSwitchingReport}
+                  onChange={(event) => setBlankReportMonth(event.target.value)}
+                  type="month"
+                  value={blankReportMonth}
+                />
+              </label>
+              <div className="sidebar-inline">
+                <button
+                  className="sidebar-button primary"
+                  disabled={isCreatingBlank || isUploading || isSwitchingReport}
+                  onClick={() => void createBlankReport()}
+                  type="button"
+                >
+                  {isCreatingBlank ? "Creating..." : "Create blank"}
+                </button>
+                <button
+                  className="sidebar-button secondary"
+                  disabled={isCreatingBlank || isUploading || isSwitchingReport}
+                  onClick={() => setIsCreateBlankOpen(false)}
+                  type="button"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              className="sidebar-button primary"
+              disabled={isCreatingBlank || isUploading || isSwitchingReport}
+              onClick={openBlankDraftForm}
+              type="button"
+            >
+              Create blank report
+            </button>
+          )}
           <span className="sidebar-field-label">Workbook Upload</span>
           <input
             accept=".xlsx"
@@ -1561,8 +2040,8 @@ export function ReportAppShell({
             type="file"
           />
           <button
-            className="sidebar-button primary"
-            disabled={isUploading || isSwitchingReport}
+            className="sidebar-button secondary"
+            disabled={isUploading || isSwitchingReport || isCreatingBlank}
             onClick={() => fileInputRef.current?.click()}
             type="button"
           >
@@ -1578,7 +2057,7 @@ export function ReportAppShell({
           <div className="sidebar-inline">
             <button
               className="sidebar-button secondary"
-              disabled={busyExport !== null || busyClientExport !== null}
+              disabled={busyExport !== null || busyClientExport !== null || !pageIsExportable}
               onClick={() => void downloadExport("page-png")}
               type="button"
             >
@@ -1591,6 +2070,24 @@ export function ReportAppShell({
               type="button"
             >
               {busyExport === "full-pdf" ? "Rendering..." : "Full PDF"}
+            </button>
+          </div>
+          <div className="sidebar-inline">
+            <button
+              className="sidebar-button secondary"
+              disabled={busyExport !== null || busyClientExport !== null}
+              onClick={() => void downloadExport("full-xlsx")}
+              type="button"
+            >
+              {busyExport === "full-xlsx" ? "Preparing..." : "Workbook"}
+            </button>
+            <button
+              className="sidebar-button secondary"
+              disabled={busyExport !== null || busyClientExport !== null}
+              onClick={() => void downloadExport("full-json")}
+              type="button"
+            >
+              {busyExport === "full-json" ? "Preparing..." : "JSON"}
             </button>
           </div>
           <div className="sidebar-inline">
@@ -1613,7 +2110,7 @@ export function ReportAppShell({
           </div>
           <button
             className={`sidebar-button ${exportMode ? "primary is-active" : "secondary"}`}
-            disabled={busyExport !== null || busyClientExport !== null || activeExportTargets.length === 0}
+            disabled={busyExport !== null || busyClientExport !== null || activeExportTargets.length === 0 || !pageIsExportable}
             onClick={toggleExportMode}
             type="button"
           >
@@ -1698,7 +2195,27 @@ export function ReportAppShell({
         </button>
 
         {reports.length === 0 ? (
-          <div className="sidebar-empty">No saved workbooks yet. Upload a workbook to create the first saved report.</div>
+          <div className="sidebar-stack-tight">
+            <div className="sidebar-empty">No saved reports yet. Start blank for direct UI entry, or import a workbook to seed the draft.</div>
+            <div className="sidebar-inline">
+              <button
+                className="sidebar-button primary"
+                disabled={isUploading || isSwitchingReport || isCreatingBlank}
+                onClick={openBlankDraftForm}
+                type="button"
+              >
+                Create blank
+              </button>
+              <button
+                className="sidebar-button secondary"
+                disabled={isUploading || isSwitchingReport || isCreatingBlank}
+                onClick={() => fileInputRef.current?.click()}
+                type="button"
+              >
+                Import workbook
+              </button>
+            </div>
+          </div>
         ) : (
           reports.map((report) => (
             <button
@@ -1760,6 +2277,50 @@ export function ReportAppShell({
       targets.summaryEditor,
     );
 
+  const activeEditorRoot = selectedEditorSectionId ? targets.editorRoots[selectedEditorSectionId] ?? null : null;
+  const editorPortal =
+    activeEditorRoot &&
+    createPortal(
+      activeReport.id === "demo" ? (
+        <div className="block">
+          <div className="bh">
+            <div>
+              <div className="bh-title">Data Entry</div>
+              <div className="bh-sub">Create or import a saved report to use the data-entry workspace.</div>
+            </div>
+          </div>
+          <div className="bb">
+            <div className="prep-empty-copy">The bundled demo stays read-only. Create a blank report or import a workbook to start editing.</div>
+          </div>
+        </div>
+      ) : isEditorLoading || !editorDraft || !selectedEditorSectionId ? (
+        <div className="block">
+          <div className="bh">
+            <div>
+              <div className="bh-title">Loading Data Entry</div>
+              <div className="bh-sub">Fetching the latest draft, revision metadata, and presence state for this report.</div>
+            </div>
+          </div>
+          <div className="bb">
+            <div className="prep-empty-copy">Loading the admin workspace…</div>
+          </div>
+        </div>
+      ) : (
+        <ReportEmbeddedEditor
+          draft={editorDraft}
+          key={selectedEditorSectionId}
+          onDraftChange={updateEditorDraft}
+          onMarkDirty={markEditorDirty}
+          onSelectedMonthChange={handleMonthChange}
+          saveMessage={editorSaveMessage}
+          saveState={editorSaveState}
+          sectionId={selectedEditorSectionId}
+          selectedMonth={selectedMonth}
+        />
+      ),
+      activeEditorRoot,
+    );
+
   return (
     <>
       <div ref={mountRef} />
@@ -1769,6 +2330,7 @@ export function ReportAppShell({
       {reportsPortal}
       {summaryControlsPortal}
       {summaryEditorPortal}
+      {editorPortal}
       <ReportPrepDrawer
         activeTab={activePrepTab}
         isLoading={isPrepLoading}

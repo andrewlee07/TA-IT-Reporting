@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { isValidBlockId, isValidPageId, resolveTabId } from "@/lib/report/blocks";
+import { isExportablePageId, isValidBlockId, isValidPageId, resolveTabId } from "@/lib/report/blocks";
 import { exportReportArtifact } from "@/lib/reports/export-service";
-import { getBundledDemoSnapshot, getExecSummaryState, getStoredReport } from "@/lib/reports/service";
+import { getBundledDemoSnapshot, getCurrentDraftJsonArtifact, getCurrentDraftWorkbookArtifact, getExecSummaryState, getStoredReport } from "@/lib/reports/service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const exportSchema = z.object({
-  exportType: z.enum(["page-png", "block-png", "full-pdf", "full-pptx", "full-pptx-editable"]),
+  exportType: z.enum(["page-png", "block-png", "full-pdf", "full-pptx", "full-pptx-editable", "full-xlsx", "full-json"]),
   month: z.string(),
   pageId: z.string().optional(),
   tabId: z.string().optional(),
@@ -38,8 +38,27 @@ export async function POST(request: Request, { params }: RouteProps) {
     }
 
     if (payload.exportType !== "full-pdf" && payload.exportType !== "full-pptx" && payload.exportType !== "full-pptx-editable") {
+      if (payload.exportType === "full-xlsx" || payload.exportType === "full-json") {
+        const artifact =
+          payload.exportType === "full-xlsx" ? await getCurrentDraftWorkbookArtifact(id) : await getCurrentDraftJsonArtifact(id);
+
+        return new NextResponse(new Uint8Array(artifact.buffer), {
+          headers: {
+            "content-type":
+              payload.exportType === "full-xlsx"
+                ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                : "application/json",
+            "content-disposition": `attachment; filename="${artifact.filename}"`,
+          },
+        });
+      }
+
       if (!payload.pageId || !isValidPageId(payload.pageId)) {
         return NextResponse.json({ error: "A valid pageId is required." }, { status: 400 });
+      }
+
+      if ((payload.exportType === "page-png" || payload.exportType === "block-png") && !isExportablePageId(payload.pageId)) {
+        return NextResponse.json({ error: "This page is not available for visual export." }, { status: 400 });
       }
     }
 
