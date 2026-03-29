@@ -4,12 +4,15 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { createPortal } from "react-dom";
 import Chart from "chart.js/auto";
 
+import { ReportAnnotationLayer } from "@/components/report-annotation-layer";
+import { ReportAnnotationToolbar } from "@/components/report-annotation-toolbar";
 import { ReportEmbeddedEditor } from "@/components/report-embedded-editor";
 import { ReportPrepDrawer } from "@/components/report-prep-drawer";
+import { DEFAULT_ANNOTATION_STYLE, createEmptyReportAnnotationsState, type ReportAnnotation, type ReportAnnotationsState, type ReportAnnotationTool } from "@/lib/annotations/types";
 import type { EditableReportDraft, SectionId } from "@/lib/drafts/types";
 import { EDITOR_SECTIONS_CONFIG } from "@/lib/editor/config";
 import { getSectionPayload } from "@/lib/editor/sections";
-import { REPORT_PAGES, getSlideId, hasPageTabs, isExportablePageId, isValidPageId, resolveTabId } from "@/lib/report/blocks";
+import { REPORT_PAGES, getReportSlides, getSlideId, hasPageTabs, isExportablePageId, isValidPageId, resolveTabId } from "@/lib/report/blocks";
 import { buildTemplateData, formatMonthLabel } from "@/lib/report/template-data";
 import { initReportApp } from "@/lib/report/runtime";
 import type { ExecSummaryState } from "@/lib/reports/exec-summary";
@@ -36,6 +39,7 @@ export interface AppReportRecord extends ReportListEntry {
 interface ReportAppShellProps {
   initialReport: AppReportRecord;
   initialReports: ReportListEntry[];
+  initialAnnotations: ReportAnnotationsState;
   initialExecSummary: ExecSummaryState;
   initialMonth: string;
   initialPageId: string;
@@ -50,6 +54,7 @@ interface PortalTargets {
   reports: Element | null;
   summaryControls: Element | null;
   summaryEditor: Element | null;
+  annotationRoots: Record<string, Element>;
   editorRoots: Partial<Record<SectionId, Element>>;
 }
 
@@ -83,7 +88,13 @@ interface EditorApiPayload {
   error?: string;
 }
 
+interface AnnotationApiPayload {
+  annotationState?: ReportAnnotationsState;
+  error?: string;
+}
+
 type EditorSaveState = "idle" | "dirty" | "saving" | "saved" | "conflict" | "error";
+type AnnotationSaveState = "idle" | "dirty" | "saving" | "saved" | "conflict" | "error";
 
 const DATA_ENTRY_PAGE_ID = "p-data";
 
@@ -236,6 +247,22 @@ interface MonthPickerProps {
   availableMonths: string[];
   selectedMonth: string;
   onChange: (month: string) => void;
+}
+
+function createClientAnnotationId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  return `annotation-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function stripAnnotationAuthoringChrome(root: ParentNode): void {
+  root
+    .querySelectorAll(
+      ".annotation-stage-capture, .annotation-drag-handle, .annotation-resize-handle, .annotation-tail-handle, .annotation-delete-pill, .annotation-toolbar-shell",
+    )
+    .forEach((node) => node.remove());
 }
 
 const MONTH_PICKER_LABEL_ID = "report-month-picker-label";
@@ -517,6 +544,7 @@ function ExecSummaryEditor({ initialHtml, isSaving, onCancel, onSave }: ExecSumm
 export function ReportAppShell({
   initialReport,
   initialReports,
+  initialAnnotations,
   initialExecSummary,
   initialMonth,
   initialPageId,
@@ -527,6 +555,7 @@ export function ReportAppShell({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const controllerRef = useRef<ReturnType<typeof initReportApp> | null>(null);
   const reportCacheRef = useRef(new Map<string, AppReportRecord>([[initialReport.id, initialReport]]));
+  const annotationCacheRef = useRef(new Map<string, ReportAnnotationsState>([[`${initialReport.id}:${initialMonth}`, initialAnnotations]]));
   const execSummaryCacheRef = useRef(new Map<string, ExecSummaryState>([[`${initialReport.id}:${initialMonth}`, initialExecSummary]]));
   const prepCacheRef = useRef(new Map<string, ReportPrepView>());
   const activeReportRef = useRef(initialReport);
@@ -551,6 +580,7 @@ export function ReportAppShell({
     reports: null,
     summaryControls: null,
     summaryEditor: null,
+    annotationRoots: {},
     editorRoots: {},
   });
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -571,6 +601,12 @@ export function ReportAppShell({
   const [activeExportTargets, setActiveExportTargets] = useState<ClientExportTarget[]>([]);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [collapsedNavStyle, setCollapsedNavStyle] = useState<CollapsedNavStyle>("icons");
+  const [annotationState, setAnnotationState] = useState<ReportAnnotationsState>(initialAnnotations);
+  const [isAnnotationsLoading, setIsAnnotationsLoading] = useState(false);
+  const [annotationSaveState, setAnnotationSaveState] = useState<AnnotationSaveState>("idle");
+  const [annotationSaveMessage, setAnnotationSaveMessage] = useState("Annotations ready");
+  const [annotationTool, setAnnotationTool] = useState<ReportAnnotationTool>("select");
+  const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
   const [execSummary, setExecSummary] = useState<ExecSummaryState>(initialExecSummary);
   const [isSummaryLoading, setIsSummaryLoading] = useState(false);
   const [isSummarySaving, setIsSummarySaving] = useState(false);
@@ -588,6 +624,8 @@ export function ReportAppShell({
   const editorBaseRevisionIdRef = useRef<string | null>(null);
   const editorDirtySectionRef = useRef<SectionId | null>(null);
   const editorSaveTimerRef = useRef<number | null>(null);
+  const annotationBaseRevisionIdRef = useRef<string | null>(initialAnnotations.revisionId);
+  const annotationSaveTimerRef = useRef<number | null>(null);
 
   const templateData = useMemo(
     () => buildTemplateData(activeReport.snapshot, selectedMonth, execSummary),
@@ -613,6 +651,12 @@ export function ReportAppShell({
   }, [reports]);
   const selectedEditorSectionId = selectedPageId === DATA_ENTRY_PAGE_ID ? (selectedTabId as SectionId | null) : null;
   const pageIsExportable = useMemo(() => isExportablePageId(selectedPageId), [selectedPageId]);
+  const activeSlideId = useMemo(() => getSlideId(selectedPageId, selectedTabId), [selectedPageId, selectedTabId]);
+  const selectedAnnotation = useMemo(
+    () => annotationState.annotations.find((annotation) => annotation.id === selectedAnnotationId) ?? null,
+    [annotationState.annotations, selectedAnnotationId],
+  );
+  const canEditAnnotations = activeReport.id !== "demo" && pageIsExportable && !exportMode && !isSwitchingReport;
 
   useEffect(() => {
     activeReportRef.current = activeReport;
@@ -705,6 +749,47 @@ export function ReportAppShell({
     }
   }, []);
 
+  const loadAnnotations = useCallback(async (reportId: string, month: string) => {
+    const cacheKey = `${reportId}:${month}`;
+    const cached = annotationCacheRef.current.get(cacheKey);
+
+    if (cached) {
+      annotationBaseRevisionIdRef.current = cached.revisionId;
+      setAnnotationState(cached);
+      setAnnotationSaveState("idle");
+      setAnnotationSaveMessage(cached.annotations.length === 0 ? "No annotations yet" : "Annotations ready");
+      setSelectedAnnotationId(null);
+      setAnnotationTool("select");
+      setIsAnnotationsLoading(false);
+      return;
+    }
+
+    setIsAnnotationsLoading(true);
+
+    try {
+      const payload = await fetchJson<AnnotationApiPayload>(`/api/reports/${reportId}/annotations?month=${encodeURIComponent(month)}`);
+      const nextState = payload.annotationState ?? createEmptyReportAnnotationsState(reportId, month);
+      annotationCacheRef.current.set(cacheKey, nextState);
+      annotationBaseRevisionIdRef.current = nextState.revisionId;
+      setAnnotationState(nextState);
+      setAnnotationSaveState("idle");
+      setAnnotationSaveMessage(nextState.annotations.length === 0 ? "No annotations yet" : "Annotations ready");
+      setSelectedAnnotationId(null);
+      setAnnotationTool("select");
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Failed to load annotations.");
+      const emptyState = createEmptyReportAnnotationsState(reportId, month);
+      annotationBaseRevisionIdRef.current = emptyState.revisionId;
+      setAnnotationState(emptyState);
+      setAnnotationSaveState("error");
+      setAnnotationSaveMessage("Unable to load annotations");
+      setSelectedAnnotationId(null);
+      setAnnotationTool("select");
+    } finally {
+      setIsAnnotationsLoading(false);
+    }
+  }, []);
+
   const syncReportFromDraft = useCallback((draft: EditableReportDraft) => {
     const nextUpdatedAt = new Date().toISOString();
 
@@ -793,14 +878,98 @@ export function ReportAppShell({
     setEditorSaveMessage("Unsaved changes");
   }, []);
 
+  const markAnnotationsDirty = useCallback(() => {
+    setAnnotationSaveState("dirty");
+    setAnnotationSaveMessage("Unsaved annotations");
+  }, []);
+
+  const updateAnnotations = useCallback(
+    (updater: (annotations: ReportAnnotation[]) => ReportAnnotation[]) => {
+      setAnnotationState((current) => ({
+        ...current,
+        annotations: updater(current.annotations),
+      }));
+      markAnnotationsDirty();
+    },
+    [markAnnotationsDirty],
+  );
+
+  const updateAnnotationById = useCallback(
+    (annotationId: string, updater: (annotation: ReportAnnotation) => ReportAnnotation) => {
+      updateAnnotations((annotations) => annotations.map((annotation) => (annotation.id === annotationId ? updater(annotation) : annotation)));
+    },
+    [updateAnnotations],
+  );
+
+  const handleCreateAnnotation = useCallback(
+    (slideId: string, type: "bubble" | "text", point: { x: number; y: number }) => {
+      const maxZIndex = annotationState.annotations.reduce((highest, annotation) => Math.max(highest, annotation.zIndex), 0);
+      const width = type === "bubble" ? 0.24 : 0.18;
+      const height = type === "bubble" ? 0.16 : 0.11;
+      const nextAnnotation: ReportAnnotation = {
+        id: createClientAnnotationId(),
+        slideId,
+        type,
+        x: Math.max(0, Math.min(point.x - width / 2, 1 - width)),
+        y: Math.max(0, Math.min(point.y - height / 2, 1 - height)),
+        width,
+        height,
+        text: "",
+        zIndex: maxZIndex + 1,
+        style: DEFAULT_ANNOTATION_STYLE,
+        tailAnchor:
+          type === "bubble"
+            ? {
+                x: Math.max(0, Math.min(point.x + 0.04, 1)),
+                y: Math.max(0, Math.min(point.y + 0.11, 1)),
+              }
+            : null,
+      };
+
+      setAnnotationState((current) => ({
+        ...current,
+        annotations: [...current.annotations, nextAnnotation],
+      }));
+      setSelectedAnnotationId(nextAnnotation.id);
+      setAnnotationTool("select");
+      markAnnotationsDirty();
+    },
+    [annotationState.annotations, markAnnotationsDirty],
+  );
+
+  const handleDeleteAnnotation = useCallback(
+    (annotationId: string) => {
+      updateAnnotations((annotations) => annotations.filter((annotation) => annotation.id !== annotationId));
+      setSelectedAnnotationId((current) => (current === annotationId ? null : current));
+    },
+    [updateAnnotations],
+  );
+
   useEffect(() => {
     setIsSummaryEditing(false);
     void loadExecSummary(activeReport.id, selectedMonth);
   }, [activeReport.id, loadExecSummary, selectedMonth]);
 
   useEffect(() => {
+    void loadAnnotations(activeReport.id, selectedMonth);
+  }, [activeReport.id, loadAnnotations, selectedMonth]);
+
+  useEffect(() => {
     void loadPrep(activeReport.id, selectedMonth);
   }, [activeReport.id, loadPrep, selectedMonth]);
+
+  useEffect(() => {
+    if (selectedAnnotationId && !annotationState.annotations.some((annotation) => annotation.id === selectedAnnotationId && annotation.slideId === activeSlideId)) {
+      setSelectedAnnotationId(null);
+    }
+  }, [activeSlideId, annotationState.annotations, selectedAnnotationId]);
+
+  useEffect(() => {
+    if (!pageIsExportable || exportMode) {
+      setAnnotationTool("select");
+      setSelectedAnnotationId(null);
+    }
+  }, [exportMode, pageIsExportable]);
 
   useEffect(() => {
     if (selectedPageId !== DATA_ENTRY_PAGE_ID || activeReport.id === "demo") {
@@ -889,6 +1058,73 @@ export function ReportAppShell({
       }
     };
   }, [editorDraft, editorSaveState, selectedEditorSectionId, selectedMonth, selectedPageId, syncReportFromDraft]);
+
+  useEffect(() => {
+    if (activeReport.id === "demo" || isAnnotationsLoading) {
+      return;
+    }
+
+    if (annotationSaveTimerRef.current) {
+      window.clearTimeout(annotationSaveTimerRef.current);
+    }
+
+    if (annotationSaveState !== "dirty") {
+      return;
+    }
+
+    const reportId = activeReport.id;
+    const reportingMonth = selectedMonth;
+    const annotations = annotationState.annotations;
+
+    annotationSaveTimerRef.current = window.setTimeout(async () => {
+      setAnnotationSaveState("saving");
+      setAnnotationSaveMessage("Saving annotations...");
+
+      try {
+        const response = await fetch(`/api/reports/${reportId}/annotations?month=${encodeURIComponent(reportingMonth)}`, {
+          method: "PUT",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            baseRevisionId: annotationBaseRevisionIdRef.current,
+            annotations,
+          }),
+        });
+
+        if (response.status === 409) {
+          setAnnotationSaveState("conflict");
+          setAnnotationSaveMessage("Annotations changed elsewhere. Reload to continue.");
+          return;
+        }
+
+        if (!response.ok) {
+          const body = (await response.json()) as { error?: string };
+          throw new Error(body.error ?? "Annotation save failed.");
+        }
+
+        const body = (await response.json()) as AnnotationApiPayload;
+        if (!body.annotationState) {
+          throw new Error("Save succeeded but no annotation state was returned.");
+        }
+
+        annotationBaseRevisionIdRef.current = body.annotationState.revisionId;
+        annotationCacheRef.current.set(`${reportId}:${reportingMonth}`, body.annotationState);
+        setAnnotationState(body.annotationState);
+        setAnnotationSaveState("saved");
+        setAnnotationSaveMessage("Annotations saved");
+      } catch (error) {
+        setAnnotationSaveState("error");
+        setAnnotationSaveMessage(error instanceof Error ? error.message : "Annotation save failed.");
+      }
+    }, 650);
+
+    return () => {
+      if (annotationSaveTimerRef.current) {
+        window.clearTimeout(annotationSaveTimerRef.current);
+      }
+    };
+  }, [activeReport.id, annotationSaveState, annotationState.annotations, isAnnotationsLoading, selectedMonth]);
 
   useEffect(() => {
     if (selectedPageId !== DATA_ENTRY_PAGE_ID || !editorDraft) {
@@ -1169,6 +1405,11 @@ export function ReportAppShell({
 
     shellRoot.classList.add("app-embedded");
     const editorRoots = ensureEditorPages(shellRoot as HTMLElement);
+    const annotationRoots = Object.fromEntries(
+      getReportSlides()
+        .map((slide) => [slide.id, mountNode.querySelector(`#${slide.id}`)])
+        .filter((entry): entry is [string, Element] => Boolean(entry[1])),
+    );
 
     setTargets({
       toggle: mountNode.querySelector("#sidebar-toggle-slot"),
@@ -1177,6 +1418,7 @@ export function ReportAppShell({
       reports: mountNode.querySelector("#sidebar-report-list-slot"),
       summaryControls: mountNode.querySelector("#summary-controls-slot"),
       summaryEditor: mountNode.querySelector("#summary-editor-slot"),
+      annotationRoots,
       editorRoots,
     });
 
@@ -1202,6 +1444,7 @@ export function ReportAppShell({
         reports: null,
         summaryControls: null,
         summaryEditor: null,
+        annotationRoots: {},
         editorRoots: {},
       });
     };
@@ -1258,8 +1501,10 @@ export function ReportAppShell({
       allowTaint: false,
       logging: false,
       imageTimeout: 0,
-      onclone: (_clonedDocument, clonedElement) => {
+      onclone: (clonedDocument, clonedElement) => {
         clonedElement.querySelectorAll?.(".export-icon").forEach((icon) => icon.remove());
+        stripAnnotationAuthoringChrome(clonedDocument);
+        stripAnnotationAuthoringChrome(clonedElement);
       },
     });
 
@@ -1390,6 +1635,7 @@ export function ReportAppShell({
         }
 
         clone.querySelectorAll(".export-icon").forEach((icon) => icon.remove());
+        stripAnnotationAuthoringChrome(clone);
         clone.classList.remove("exportable", "selected");
         clone.style.width = "100%";
         clone.style.position = "relative";
@@ -2108,6 +2354,7 @@ export function ReportAppShell({
               {busyExport === "full-pptx-editable" ? "Rendering..." : "Editable PPTX"}
             </button>
           </div>
+          <div className="sidebar-meta">Annotations are included in visual exports now. Editable PPTX support is phase 2.</div>
           <button
             className={`sidebar-button ${exportMode ? "primary is-active" : "secondary"}`}
             disabled={busyExport !== null || busyClientExport !== null || activeExportTargets.length === 0 || !pageIsExportable}
@@ -2321,9 +2568,47 @@ export function ReportAppShell({
       activeEditorRoot,
     );
 
+  const annotationPortals = Object.entries(targets.annotationRoots).map(([slideId, root]) =>
+    createPortal(
+      <ReportAnnotationLayer
+        activeTool={slideId === activeSlideId ? annotationTool : "select"}
+        annotations={annotationState.annotations}
+        canEdit={canEditAnnotations && slideId === activeSlideId && !isAnnotationsLoading}
+        onCreate={handleCreateAnnotation}
+        onDelete={handleDeleteAnnotation}
+        onSelect={setSelectedAnnotationId}
+        onUpdate={updateAnnotationById}
+        selectedAnnotationId={slideId === activeSlideId ? selectedAnnotationId : null}
+        slideId={slideId}
+      />,
+      root,
+      slideId,
+    ),
+  );
+
   return (
     <>
       <div ref={mountRef} />
+      {pageIsExportable ? (
+        <ReportAnnotationToolbar
+          activeTool={annotationTool}
+          canEdit={canEditAnnotations && !isAnnotationsLoading}
+          onDeleteSelected={() => {
+            if (selectedAnnotationId) {
+              handleDeleteAnnotation(selectedAnnotationId);
+            }
+          }}
+          onToolChange={setAnnotationTool}
+          onUpdateSelected={(updater) => {
+            if (selectedAnnotationId) {
+              updateAnnotationById(selectedAnnotationId, updater);
+            }
+          }}
+          saveMessage={isAnnotationsLoading ? "Loading annotations..." : annotationSaveMessage}
+          saveState={isAnnotationsLoading ? "idle" : annotationSaveState}
+          selectedAnnotation={selectedAnnotation?.slideId === activeSlideId ? selectedAnnotation : null}
+        />
+      ) : null}
       {togglePortal}
       {periodPortal}
       {utilitiesPortal}
@@ -2331,6 +2616,7 @@ export function ReportAppShell({
       {summaryControlsPortal}
       {summaryEditorPortal}
       {editorPortal}
+      {annotationPortals}
       <ReportPrepDrawer
         activeTab={activePrepTab}
         isLoading={isPrepLoading}

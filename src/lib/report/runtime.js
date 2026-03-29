@@ -65,6 +65,8 @@ export function initReportApp(root, options) {
   var CHARTS = Object.create(null);
   var PAGE_TABS = (D.meta && D.meta.pageTabs) || {};
   var activeTabsByPage = Object.create(null);
+  var ANNOTATION_STATE = options.annotations && typeof options.annotations === "object" ? options.annotations : null;
+  var ANNOTATIONS = Array.isArray(ANNOTATION_STATE && ANNOTATION_STATE.annotations) ? ANNOTATION_STATE.annotations.slice() : [];
 
   var orderedMonths = D.meta.availableMonths || [];
   var activeMonth = orderedMonths.indexOf(ACTIVE_MONTH) >= 0 ? ACTIVE_MONTH : D.meta.activeMonth;
@@ -480,6 +482,202 @@ export function initReportApp(root, options) {
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#39;");
+  }
+
+  function clampUnit(value) {
+    return Math.min(1, Math.max(0, Number(value) || 0));
+  }
+
+  function normalizeAnnotationStyle(style) {
+    return {
+      fontSize: [14, 16, 20, 24, 28].indexOf(Number(style && style.fontSize)) >= 0 ? Number(style.fontSize) : 16,
+      bold: Boolean(style && style.bold),
+      italic: Boolean(style && style.italic),
+      textColor: style && style.textColor ? String(style.textColor) : "#0f172a",
+      fillColor: style && style.fillColor ? String(style.fillColor) : "#ffffff",
+      borderColor: style && style.borderColor ? String(style.borderColor) : "#005292",
+    };
+  }
+
+  function getBubbleAttachPoint(annotation) {
+    if (!annotation.tailAnchor) {
+      return null;
+    }
+
+    var centerX = annotation.x + annotation.width / 2;
+    var centerY = annotation.y + annotation.height / 2;
+    var deltaX = annotation.tailAnchor.x - centerX;
+    var deltaY = annotation.tailAnchor.y - centerY;
+
+    if (deltaX === 0 && deltaY === 0) {
+      return {
+        x: centerX,
+        y: annotation.y + annotation.height,
+      };
+    }
+
+    var scaleX = deltaX === 0 ? Number.POSITIVE_INFINITY : (deltaX > 0 ? annotation.width / 2 : -annotation.width / 2) / deltaX;
+    var scaleY = deltaY === 0 ? Number.POSITIVE_INFINITY : (deltaY > 0 ? annotation.height / 2 : -annotation.height / 2) / deltaY;
+    var scale = Math.min(Math.abs(scaleX), Math.abs(scaleY));
+
+    return {
+      x: centerX + deltaX * scale,
+      y: centerY + deltaY * scale,
+    };
+  }
+
+  function getBubbleTailPolygon(annotation) {
+    if (annotation.type !== "bubble" || !annotation.tailAnchor) {
+      return null;
+    }
+
+    var attachPoint = getBubbleAttachPoint(annotation);
+    if (!attachPoint) {
+      return null;
+    }
+
+    var tolerance = 0.0005;
+    var onTopOrBottom =
+      Math.abs(attachPoint.y - annotation.y) < tolerance || Math.abs(attachPoint.y - (annotation.y + annotation.height)) < tolerance;
+    var baseOffset = onTopOrBottom
+      ? { x: Math.min(annotation.width * 0.12, 0.022), y: 0 }
+      : { x: 0, y: Math.min(annotation.height * 0.16, 0.022) };
+    var pointA = {
+      x: attachPoint.x - baseOffset.x,
+      y: attachPoint.y - baseOffset.y,
+    };
+    var pointB = {
+      x: attachPoint.x + baseOffset.x,
+      y: attachPoint.y + baseOffset.y,
+    };
+
+    return (
+      clampUnit(annotation.tailAnchor.x) * 100 +
+      "," +
+      clampUnit(annotation.tailAnchor.y) * 100 +
+      " " +
+      clampUnit(pointA.x) * 100 +
+      "," +
+      clampUnit(pointA.y) * 100 +
+      " " +
+      clampUnit(pointB.x) * 100 +
+      "," +
+      clampUnit(pointB.y) * 100
+    );
+  }
+
+  function renderAnnotationTextHtml(value) {
+    var safeText = escapeHtml(value || "");
+    return safeText ? safeText.replace(/\n/g, "<br />") : "&nbsp;";
+  }
+
+  function renderStaticAnnotations() {
+    document.querySelectorAll(".annotation-layer-static").forEach(function removeExisting(layer) {
+      layer.remove();
+    });
+
+    if (!ANNOTATIONS.length) {
+      return;
+    }
+
+    document.querySelectorAll(".report-page").forEach(function renderForPage(page) {
+      var slideAnnotations = ANNOTATIONS
+        .filter(function filterAnnotation(annotation) {
+          return annotation && annotation.slideId === page.id;
+        })
+        .sort(function sortAnnotations(left, right) {
+          return (left.zIndex || 0) - (right.zIndex || 0) || String(left.id).localeCompare(String(right.id));
+        });
+
+      if (!slideAnnotations.length) {
+        return;
+      }
+
+      var tailsHtml = slideAnnotations
+        .map(function renderTail(annotation) {
+          var normalizedAnnotation = {
+            type: annotation.type === "text" ? "text" : "bubble",
+            x: clampUnit(annotation.x),
+            y: clampUnit(annotation.y),
+            width: clampUnit(annotation.width),
+            height: clampUnit(annotation.height),
+            tailAnchor:
+              annotation.type === "bubble" && annotation.tailAnchor
+                ? {
+                    x: clampUnit(annotation.tailAnchor.x),
+                    y: clampUnit(annotation.tailAnchor.y),
+                  }
+                : null,
+          };
+          var style = normalizeAnnotationStyle(annotation.style || {});
+          var polygon = getBubbleTailPolygon(normalizedAnnotation);
+
+          if (!polygon) {
+            return "";
+          }
+
+          return (
+            '<polygon class="annotation-tail" points="' +
+            polygon +
+            '" style="fill:' +
+            escapeAttr(style.fillColor) +
+            ";stroke:" +
+            escapeAttr(style.borderColor) +
+            ';"></polygon>'
+          );
+        })
+        .join("");
+
+      var notesHtml = slideAnnotations
+        .map(function renderAnnotation(annotation) {
+          var style = normalizeAnnotationStyle(annotation.style || {});
+          var type = annotation.type === "text" ? "text" : "bubble";
+          var zIndex = 20 + Math.max(0, Number(annotation.zIndex) || 0);
+
+          return (
+            '<div class="annotation-note-shell" style="left:' +
+            clampUnit(annotation.x) * 100 +
+            "%;top:" +
+            clampUnit(annotation.y) * 100 +
+            "%;width:" +
+            clampUnit(annotation.width) * 100 +
+            "%;height:" +
+            clampUnit(annotation.height) * 100 +
+            "%;z-index:" +
+            zIndex +
+            ';">' +
+            '<div class="annotation-note annotation-note-' +
+            type +
+            '" style="color:' +
+            escapeAttr(style.textColor) +
+            ";background:" +
+            escapeAttr(style.fillColor) +
+            ";border-color:" +
+            escapeAttr(style.borderColor) +
+            ";font-size:" +
+            style.fontSize +
+            "px;font-weight:" +
+            (style.bold ? 700 : 500) +
+            ";font-style:" +
+            (style.italic ? "italic" : "normal") +
+            ';">' +
+            '<div class="annotation-note-content">' +
+            renderAnnotationTextHtml(annotation.text || "") +
+            "</div></div></div>"
+          );
+        })
+        .join("");
+
+      var layer = nativeDocument.createElement("div");
+      layer.className = "annotation-layer annotation-layer-static";
+      layer.setAttribute("aria-hidden", "true");
+      layer.innerHTML =
+        '<svg class="annotation-tail-stage" preserveAspectRatio="none" viewBox="0 0 100 100">' +
+        tailsHtml +
+        "</svg>" +
+        notesHtml;
+      page.appendChild(layer);
+    });
   }
 
   function exportAttrs(id, label) {
@@ -3078,6 +3276,7 @@ export function initReportApp(root, options) {
   buildGanttPage();
   buildBudgetPage();
   buildRisksPage();
+  renderStaticAnnotations();
 
   window.__REPORT_READY = true;
 
