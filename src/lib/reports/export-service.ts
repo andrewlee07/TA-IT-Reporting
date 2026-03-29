@@ -1,6 +1,7 @@
 import { chromium } from "playwright";
 import PptxGenJS from "pptxgenjs";
 
+import type { ReportAnnotationsState } from "@/lib/annotations/types";
 import { getEnv } from "@/lib/env";
 import { getReportSlides, getSlideId } from "@/lib/report/blocks";
 import { renderReportHtml } from "@/lib/report/render-report-html";
@@ -26,6 +27,7 @@ interface ExportArtifactInput {
   blockId?: string;
   persist?: boolean;
   execSummary?: ExecSummaryState;
+  annotations?: ReportAnnotationsState;
 }
 
 export interface ExportArtifactResult {
@@ -98,6 +100,7 @@ export async function exportReportArtifact(input: ExportArtifactInput): Promise<
     showAllPages: input.exportType === "full-pdf" || input.exportType === "full-pptx" || input.exportType === "full-pptx-editable",
     hideChrome: true,
     execSummary: input.execSummary,
+    annotations: input.annotations,
   });
 
   const browser = await chromium.launch({

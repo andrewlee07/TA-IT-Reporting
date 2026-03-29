@@ -4,6 +4,8 @@ import path from "node:path";
 import { nanoid } from "nanoid";
 import { Prisma } from "@/generated/prisma/client";
 
+import { createEmptyReportAnnotationsState, type ReportAnnotation, type ReportAnnotationsState } from "@/lib/annotations/types";
+import { normalizeReportAnnotations } from "@/lib/annotations/validation";
 import { getPrisma } from "@/lib/prisma";
 import { getObjectStorage } from "@/lib/storage";
 import { logger } from "@/lib/logger";
@@ -25,11 +27,13 @@ import { createBlankSnapshot } from "@/lib/workbook/blank-snapshot";
 import {
   createLocalReport,
   findLocalCarryForwardExecSummary,
+  getLocalAnnotationState,
   getLocalExecSummary,
   getLocalPrepState,
   getLocalReport,
   listLocalReports,
   saveLocalExport,
+  upsertLocalAnnotationState,
   upsertLocalReport,
   upsertLocalPrepState,
   upsertLocalExecSummary,
@@ -575,6 +579,9 @@ function isPersistenceFallbackError(error: unknown): boolean {
     "does not exist",
     "The table",
     "The column",
+    "Prisma delegate unavailable",
+    "Cannot read properties of undefined (reading 'findUnique')",
+    "Cannot read properties of undefined (reading 'upsert')",
   ].some((message) => error.message.includes(message));
 }
 
@@ -1188,6 +1195,175 @@ export async function saveExecSummary(reportId: string, reportingMonth: string, 
         excerpt,
         sourceReportId,
       }),
+  );
+}
+
+function toReportAnnotationsState(input: {
+  reportId: string;
+  reportingMonth: string;
+  revisionId: string | null;
+  annotations: unknown;
+  updatedAt: Date | string | null;
+}): ReportAnnotationsState {
+  return {
+    reportId: input.reportId,
+    reportingMonth: input.reportingMonth,
+    revisionId: input.revisionId,
+    annotations: normalizeReportAnnotations((input.annotations as ReportAnnotation[] | null) ?? []),
+    updatedAt:
+      input.updatedAt === null
+        ? null
+        : typeof input.updatedAt === "string"
+          ? input.updatedAt
+          : input.updatedAt.toISOString(),
+  };
+}
+
+export async function getReportAnnotationsState(reportId: string, reportingMonth: string): Promise<ReportAnnotationsState> {
+  if (reportId === "demo") {
+    return createEmptyReportAnnotationsState(reportId, reportingMonth);
+  }
+
+  const report = await getStoredReport(reportId);
+  if (!report) {
+    throw new Error("Report not found.");
+  }
+
+  if (!report.availableMonths.includes(reportingMonth)) {
+    throw new Error("Invalid month.");
+  }
+
+  return withLocalFallback(
+    async () => {
+      const prisma = getPrisma();
+      const state = await prisma.reportAnnotationState.findUnique({
+        where: {
+          reportId_reportingMonth: {
+            reportId,
+            reportingMonth,
+          },
+        },
+      });
+
+      if (!state) {
+        return createEmptyReportAnnotationsState(reportId, reportingMonth);
+      }
+
+      return toReportAnnotationsState({
+        reportId,
+        reportingMonth,
+        revisionId: state.revisionId,
+        annotations: state.annotations,
+        updatedAt: state.updatedAt,
+      });
+    },
+    async () => {
+      const state = await getLocalAnnotationState(reportId, reportingMonth);
+      if (!state) {
+        return createEmptyReportAnnotationsState(reportId, reportingMonth);
+      }
+
+      return toReportAnnotationsState({
+        reportId,
+        reportingMonth,
+        revisionId: state.revisionId,
+        annotations: state.annotations,
+        updatedAt: state.updatedAt,
+      });
+    },
+  );
+}
+
+export async function saveReportAnnotationsState(input: {
+  reportId: string;
+  reportingMonth: string;
+  baseRevisionId: string | null;
+  annotations: ReportAnnotation[];
+}): Promise<ReportAnnotationsState> {
+  if (input.reportId === "demo") {
+    throw new Error("The bundled demo annotations are read-only.");
+  }
+
+  const report = await getStoredReport(input.reportId);
+  if (!report) {
+    throw new Error("Report not found.");
+  }
+
+  if (!report.availableMonths.includes(input.reportingMonth)) {
+    throw new Error("Invalid month.");
+  }
+
+  const normalizedAnnotations = normalizeReportAnnotations(input.annotations);
+
+  return withLocalFallback(
+    async () => {
+      const prisma = getPrisma();
+      const existing = await prisma.reportAnnotationState.findUnique({
+        where: {
+          reportId_reportingMonth: {
+            reportId: input.reportId,
+            reportingMonth: input.reportingMonth,
+          },
+        },
+      });
+      const currentRevisionId = existing?.revisionId ?? null;
+
+      if (currentRevisionId !== input.baseRevisionId) {
+        throw new Error("Conflict:annotations");
+      }
+
+      const nextRevisionId = nanoid();
+      const state = await prisma.reportAnnotationState.upsert({
+        where: {
+          reportId_reportingMonth: {
+            reportId: input.reportId,
+            reportingMonth: input.reportingMonth,
+          },
+        },
+        update: {
+          revisionId: nextRevisionId,
+          annotations: toJsonValue(normalizedAnnotations),
+        },
+        create: {
+          reportId: input.reportId,
+          reportingMonth: input.reportingMonth,
+          revisionId: nextRevisionId,
+          annotations: toJsonValue(normalizedAnnotations),
+        },
+      });
+
+      return toReportAnnotationsState({
+        reportId: input.reportId,
+        reportingMonth: input.reportingMonth,
+        revisionId: state.revisionId,
+        annotations: state.annotations,
+        updatedAt: state.updatedAt,
+      });
+    },
+    async () => {
+      const existing = await getLocalAnnotationState(input.reportId, input.reportingMonth);
+      const currentRevisionId = existing?.revisionId ?? null;
+
+      if (currentRevisionId !== input.baseRevisionId) {
+        throw new Error("Conflict:annotations");
+      }
+
+      const nextRevisionId = nanoid();
+      const state = await upsertLocalAnnotationState({
+        reportId: input.reportId,
+        reportingMonth: input.reportingMonth,
+        revisionId: nextRevisionId,
+        annotations: normalizedAnnotations,
+      });
+
+      return toReportAnnotationsState({
+        reportId: input.reportId,
+        reportingMonth: input.reportingMonth,
+        revisionId: state.revisionId,
+        annotations: state.annotations,
+        updatedAt: state.updatedAt,
+      });
+    },
   );
 }
 

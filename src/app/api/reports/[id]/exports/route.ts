@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { isExportablePageId, isValidBlockId, isValidPageId, resolveTabId } from "@/lib/report/blocks";
 import { exportReportArtifact } from "@/lib/reports/export-service";
-import { getBundledDemoSnapshot, getCurrentDraftJsonArtifact, getCurrentDraftWorkbookArtifact, getExecSummaryState, getStoredReport } from "@/lib/reports/service";
+import { getBundledDemoSnapshot, getCurrentDraftJsonArtifact, getCurrentDraftWorkbookArtifact, getExecSummaryState, getReportAnnotationsState, getStoredReport } from "@/lib/reports/service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -84,6 +84,7 @@ export async function POST(request: Request, { params }: RouteProps) {
       tabId: resolvedTabId,
       blockId: payload.blockId,
       persist: id !== "demo",
+      annotations: await getReportAnnotationsState(id, payload.month),
       execSummary: await getExecSummaryState(id, payload.month),
     });
 

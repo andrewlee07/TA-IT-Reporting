@@ -1,5 +1,6 @@
 import path from "node:path";
 
+import type { ReportAnnotationsState } from "@/lib/annotations/types";
 import { resolveTabId } from "@/lib/report/blocks";
 import { buildTemplateData, formatMonthLabel } from "@/lib/report/template-data";
 import type { ExecSummaryState } from "@/lib/reports/exec-summary";
@@ -13,6 +14,7 @@ interface RenderReportHtmlOptions {
   showAllPages?: boolean;
   hideChrome?: boolean;
   execSummary?: ExecSummaryState;
+  annotations?: ReportAnnotationsState;
 }
 const runtimePath = path.resolve(process.cwd(), "src/lib/report/runtime.js");
 const officeMapPath = path.resolve(process.cwd(), "src/lib/report/office-map.js");
@@ -62,6 +64,12 @@ body { background: #ffffff !important; }
 .shell { display: block !important; min-height: 0 !important; background: #ffffff !important; }
 .sidebar { display: none !important; }
 .main { padding: 0 !important; width: 100% !important; display: block !important; }
+.annotation-toolbar-shell,
+.annotation-stage-capture,
+.annotation-drag-handle,
+.annotation-resize-handle,
+.annotation-tail-handle,
+.annotation-delete-pill { display: none !important; }
 .report-page {
   display: flex !important;
   box-shadow: none !important;
@@ -82,10 +90,12 @@ body { background: #ffffff !important; }
     : "";
 
   const safeData = JSON.stringify(templateData).replace(/</g, "\\u003c");
+  const safeAnnotations = JSON.stringify(options.annotations ?? null).replace(/</g, "\\u003c");
   const inlineOfficeMap = officeMap.replace(/^export\s+/gm, "");
   const inlineRuntime = runtime.replace(/^import\s+\{[^}]+\}\s+from\s+"\.\/office-map";\s*$/m, "");
 const runtimeBootstrap = `<script type="module">
 const D = ${safeData};
+const ANNOTATIONS = ${safeAnnotations};
 const ACTIVE_MONTH = '${month}';
 const INITIAL_PAGE_ID = '${initialPageId}';
 const INITIAL_TAB_ID = ${JSON.stringify(initialTabId)};
@@ -98,6 +108,7 @@ initReportApp(document.querySelector('.shell'), {
   initialPageId: INITIAL_PAGE_ID,
   initialTabId: INITIAL_TAB_ID,
   showAllPages: SHOW_ALL_PAGES,
+  annotations: ANNOTATIONS,
   attachGlobals: true,
 });
 </script>`;

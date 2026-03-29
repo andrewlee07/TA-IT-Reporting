@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { nanoid } from "nanoid";
 
+import type { ReportAnnotation } from "@/lib/annotations/types";
 import { getEnv } from "@/lib/env";
 import { deriveReportSeriesKey, type ExecSummaryState } from "@/lib/reports/exec-summary";
 import type { NormalizedReportSnapshot } from "@/lib/workbook/types";
@@ -56,6 +57,16 @@ interface LocalPrepStateRecord {
   updatedAt: string;
 }
 
+interface LocalAnnotationStateRecord {
+  id: string;
+  reportId: string;
+  reportingMonth: string;
+  revisionId: string;
+  annotations: ReportAnnotation[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 function getRootDir(): string {
   return path.resolve(process.cwd(), getEnv().LOCAL_STORAGE_DIR, "report-store");
 }
@@ -74,6 +85,10 @@ function getExecSummariesPath(): string {
 
 function getPrepStatesPath(): string {
   return path.join(getRootDir(), "prep-states.json");
+}
+
+function getAnnotationsPath(): string {
+  return path.join(getRootDir(), "annotations.json");
 }
 
 async function ensureDir(): Promise<void> {
@@ -287,6 +302,43 @@ export async function upsertLocalPrepState(input: {
 
   const filtered = states.filter((state) => !(state.reportId === input.reportId && state.reportingMonth === input.reportingMonth));
   await writeJsonFile(getPrepStatesPath(), [nextRecord, ...filtered]);
+  return nextRecord;
+}
+
+export async function getLocalAnnotationState(reportId: string, reportingMonth: string): Promise<LocalAnnotationStateRecord | null> {
+  const states = await readJsonFile<LocalAnnotationStateRecord[]>(getAnnotationsPath(), []);
+  return states.find((state) => state.reportId === reportId && state.reportingMonth === reportingMonth) ?? null;
+}
+
+export async function upsertLocalAnnotationState(input: {
+  reportId: string;
+  reportingMonth: string;
+  revisionId: string;
+  annotations: ReportAnnotation[];
+}): Promise<LocalAnnotationStateRecord> {
+  const states = await readJsonFile<LocalAnnotationStateRecord[]>(getAnnotationsPath(), []);
+  const existing = states.find((state) => state.reportId === input.reportId && state.reportingMonth === input.reportingMonth);
+  const now = new Date().toISOString();
+
+  const nextRecord: LocalAnnotationStateRecord = existing
+    ? {
+        ...existing,
+        revisionId: input.revisionId,
+        annotations: input.annotations,
+        updatedAt: now,
+      }
+    : {
+        id: nanoid(),
+        reportId: input.reportId,
+        reportingMonth: input.reportingMonth,
+        revisionId: input.revisionId,
+        annotations: input.annotations,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+  const filtered = states.filter((state) => !(state.reportId === input.reportId && state.reportingMonth === input.reportingMonth));
+  await writeJsonFile(getAnnotationsPath(), [nextRecord, ...filtered]);
   return nextRecord;
 }
 

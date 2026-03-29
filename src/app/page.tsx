@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { ReportAppShell, type AppReportRecord } from "@/components/report-app-shell";
 import { REPORT_PAGES, hasPageTabs, isValidPageId, resolveTabId } from "@/lib/report/blocks";
 import { loadTemplateBodyMarkup, loadTemplateStyles } from "@/lib/report/template-source";
-import { getBundledDemoSnapshot, getExecSummaryState, getStoredReport, listReports, type ReportListItem } from "@/lib/reports/service";
+import { getBundledDemoSnapshot, getExecSummaryState, getReportAnnotationsState, getStoredReport, listReports, type ReportListItem } from "@/lib/reports/service";
 import { getEnv } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
@@ -149,9 +149,10 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     redirect(buildCanonicalUrl(canonicalReportId, canonicalMonth, canonicalPageId, canonicalTabId));
   }
 
-  const [templateStyles, templateBody, initialExecSummary] = await Promise.all([
+  const [templateStyles, templateBody, initialAnnotations, initialExecSummary] = await Promise.all([
     loadTemplateStyles(),
     loadTemplateBodyMarkup(),
+    getReportAnnotationsState(canonicalReportId, canonicalMonth),
     getExecSummaryState(canonicalReportId, canonicalMonth),
   ]);
 
@@ -159,6 +160,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     <>
       <style dangerouslySetInnerHTML={{ __html: templateStyles }} />
       <ReportAppShell
+        initialAnnotations={initialAnnotations}
         initialMonth={canonicalMonth}
         initialPageId={canonicalPageId}
         initialTabId={canonicalTabId}
