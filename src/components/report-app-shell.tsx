@@ -260,9 +260,13 @@ function createClientAnnotationId(): string {
 function stripAnnotationAuthoringChrome(root: ParentNode): void {
   root
     .querySelectorAll(
-      ".annotation-stage-capture, .annotation-drag-handle, .annotation-resize-handle, .annotation-tail-handle, .annotation-delete-pill, .annotation-toolbar-shell",
+      ".annotation-stage-capture, .annotation-drag-handle, .annotation-resize-handle, .annotation-tail-handle, .annotation-delete-pill, .annotation-toolbar-shell, .summary-authoring-only, #summary-editor-slot",
     )
     .forEach((node) => node.remove());
+
+  root.querySelectorAll<HTMLElement>(".summary-layout").forEach((node) => {
+    node.style.gridTemplateColumns = "minmax(0, 1fr)";
+  });
 }
 
 const MONTH_PICKER_LABEL_ID = "report-month-picker-label";

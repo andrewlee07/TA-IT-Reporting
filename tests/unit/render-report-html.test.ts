@@ -63,4 +63,21 @@ describe("renderReportHtml", () => {
     expect(html).toContain("Exec Summary");
     expect(html).toContain("executive narrative");
   });
+
+  it("keeps exec summary guidance out of export renders", async () => {
+    const fixtureBuffer = await readFile(FIXTURE_PATH);
+    const { snapshot } = await parseWorkbookBuffer(fixtureBuffer, "fixture.xlsx");
+    const html = await renderReportHtml(snapshot, {
+      month: "2026-06",
+      initialPageId: "p-summary",
+      showAllPages: false,
+      hideChrome: true,
+      execSummary: createDemoExecSummary("2026-06"),
+    });
+
+    expect(html).toContain("summary-authoring-only");
+    expect(html).toContain(".summary-authoring-only,");
+    expect(html).toContain("#summary-editor-slot { display: none !important; }");
+    expect(html).toContain(".summary-layout { grid-template-columns: minmax(0, 1fr) !important; }");
+  });
 });

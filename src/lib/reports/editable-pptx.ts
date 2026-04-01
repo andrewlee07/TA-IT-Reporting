@@ -1849,19 +1849,6 @@ function buildExecSummarySlide(slide: PptxGenJS.Slide, data: TemplateData) {
     valign: "top",
   };
   slide.addText(lines.join("\n\n"), summaryTextOptions);
-
-  if (data.execSummary.updatedAt) {
-    slide.addText(`Last updated · ${fmtDate(data.execSummary.updatedAt.slice(0, 10))}`, {
-      x: CONTENT_X + 0.26,
-      y: 6.42,
-      w: 3.4,
-      h: 0.14,
-      fontFace: "Arial",
-      fontSize: 8,
-      color: COLORS.slate,
-      margin: 0,
-    });
-  }
 }
 
 async function buildSlideContent(slide: PptxGenJS.Slide, slideDef: ReportSlideDefinition, data: TemplateData, page: Page) {

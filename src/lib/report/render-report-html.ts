@@ -69,7 +69,10 @@ body { background: #ffffff !important; }
 .annotation-drag-handle,
 .annotation-resize-handle,
 .annotation-tail-handle,
-.annotation-delete-pill { display: none !important; }
+.annotation-delete-pill,
+.summary-authoring-only,
+#summary-editor-slot { display: none !important; }
+.summary-layout { grid-template-columns: minmax(0, 1fr) !important; }
 .report-page {
   display: flex !important;
   box-shadow: none !important;
