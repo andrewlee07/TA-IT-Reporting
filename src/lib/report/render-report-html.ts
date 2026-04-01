@@ -71,7 +71,10 @@ body { background: #ffffff !important; }
 .annotation-tail-handle,
 .annotation-delete-pill,
 .summary-authoring-only,
-#summary-editor-slot { display: none !important; }
+#summary-editor-slot,
+#summary-controls-slot,
+.summary-controls,
+.summary-action-btn { display: none !important; }
 .summary-layout { grid-template-columns: minmax(0, 1fr) !important; }
 .report-page {
   display: flex !important;

@@ -260,7 +260,7 @@ function createClientAnnotationId(): string {
 function stripAnnotationAuthoringChrome(root: ParentNode): void {
   root
     .querySelectorAll(
-      ".annotation-stage-capture, .annotation-drag-handle, .annotation-resize-handle, .annotation-tail-handle, .annotation-delete-pill, .annotation-toolbar-shell, .summary-authoring-only, #summary-editor-slot",
+      ".annotation-stage-capture, .annotation-drag-handle, .annotation-resize-handle, .annotation-tail-handle, .annotation-delete-pill, .annotation-toolbar-shell, .summary-authoring-only, #summary-editor-slot, #summary-controls-slot, .summary-controls, .summary-action-btn",
     )
     .forEach((node) => node.remove());
 
