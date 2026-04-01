@@ -25,6 +25,10 @@
   --page-layout-h: 900px;
   --page-scale: 0.8;
   --slide-tab-h: 44px;
+  --sidebar-collapsed-width: 72px;
+  --sidebar-rail-item-size: 42px;
+  --sidebar-rail-item-radius: 12px;
+  --sidebar-collapsed-inline-pad: calc((var(--sidebar-collapsed-width) - var(--sidebar-rail-item-size)) / 2);
 }
 body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #D8DDE3; color: var(--text); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
 ::selection { background: rgba(0, 82, 146, 0.15); color: inherit; }
@@ -48,16 +52,16 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans
   transition: width 0.24s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .sidebar-toggle-slot {
-  min-height: 44px;
+  min-height: 54px;
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  padding: 10px 14px 0;
+  padding: 10px 18px 0;
 }
 .sidebar-toggle-button {
-  width: 32px; height: 32px;
+  width: var(--sidebar-rail-item-size); height: var(--sidebar-rail-item-size);
   border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 999px;
+  border-radius: var(--sidebar-rail-item-radius);
   background: rgba(255,255,255,0.08);
   color: rgba(255,255,255,0.78);
   display: inline-flex; align-items: center; justify-content: center;
@@ -75,8 +79,8 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans
   transition-duration: 0.08s;
 }
 .sidebar-toggle-button svg {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   transition: transform 0.24s ease;
 }
 .sidebar-logo {
@@ -98,7 +102,7 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans
 }
 .sidebar-logo-icon {
   display: none;
-  width: 42px;
+  width: var(--sidebar-rail-item-size);
   filter: drop-shadow(0 8px 18px rgba(0,0,0,0.16));
 }
 .sidebar-sub  {
@@ -531,18 +535,18 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans
   background: rgba(255,255,255,0.08);
 }
 .shell.sidebar-collapsed .sidebar {
-  width: 72px;
+  width: var(--sidebar-collapsed-width);
   overflow-x: visible;
 }
 .shell.sidebar-collapsed .sidebar-toggle-slot {
   justify-content: center;
-  padding: 10px 0 0;
+  padding: 10px var(--sidebar-collapsed-inline-pad) 0;
 }
 .shell.sidebar-collapsed .sidebar-toggle-button svg {
   transform: rotate(180deg);
 }
 .shell.sidebar-collapsed .sidebar-logo {
-  padding: 10px 0 14px;
+  padding: 10px var(--sidebar-collapsed-inline-pad) 14px;
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -568,19 +572,33 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans
   position: relative;
   justify-content: center;
   gap: 0;
-  padding: 8px 0;
-  border-left-color: transparent;
-  border-right: 3px solid transparent;
+  padding: 6px var(--sidebar-collapsed-inline-pad);
+  border-left: 0;
+  border-right: 0;
+}
+.shell.sidebar-collapsed .nav-link::after {
+  content: "";
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  right: 0;
+  width: 3px;
+  border-radius: 999px 0 0 999px;
+  background: var(--orange);
+  opacity: 0;
+  transition: opacity 0.15s ease;
 }
 .shell.sidebar-collapsed .nav-link.active {
-  border-right-color: var(--orange);
-  border-left-color: transparent;
+  border-left: 0;
+}
+.shell.sidebar-collapsed .nav-link.active::after {
+  opacity: 1;
 }
 .shell.sidebar-collapsed .nav-icon {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  font-size: 10px;
+  width: var(--sidebar-rail-item-size);
+  height: var(--sidebar-rail-item-size);
+  border-radius: var(--sidebar-rail-item-radius);
+  font-size: 11px;
 }
 .shell.sidebar-collapsed .nav-text {
   display: none;
