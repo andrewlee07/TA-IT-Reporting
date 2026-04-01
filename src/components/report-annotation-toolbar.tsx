@@ -55,7 +55,7 @@ function getStoredToolbarPositionSnapshot() {
 
 function subscribeToToolbarPosition(onStoreChange: () => void) {
   function handleStorage(event: StorageEvent) {
-    if (event.key === TOOLBAR_POSITION_STORAGE_KEY) {
+    if (event.storageArea === window.localStorage && (event.key === TOOLBAR_POSITION_STORAGE_KEY || event.key == null)) {
       onStoreChange();
     }
   }
