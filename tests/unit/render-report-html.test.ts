@@ -76,8 +76,8 @@ describe("renderReportHtml", () => {
     });
 
     expect(html).toContain("summary-authoring-only");
-    expect(html).toContain(".summary-authoring-only,");
-    expect(html).toContain("#summary-editor-slot { display: none !important; }");
-    expect(html).toContain(".summary-layout { grid-template-columns: minmax(0, 1fr) !important; }");
+    expect(html).toMatch(/\.summary-authoring-only\s*,/);
+    expect(html).toMatch(/#summary-editor-slot\s*,\s*#summary-controls-slot\s*,\s*\.summary-controls\s*,\s*\.summary-action-btn\s*\{\s*display:\s*none\s*!important;\s*}/);
+    expect(html).toMatch(/\.summary-layout\s*\{\s*grid-template-columns:\s*minmax\(0,\s*1fr\)\s*!important;\s*}/);
   });
 });
