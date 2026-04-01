@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 
 import type { ReportAnnotation, ReportAnnotationTool } from "@/lib/annotations/types";
 import {
@@ -24,6 +24,45 @@ type ToolbarDragState = {
 };
 
 const TOOLBAR_POSITION_STORAGE_KEY = "ta-it-reporting-annotation-toolbar-position";
+
+function parseToolbarPosition(raw: string | null): ToolbarPosition | null {
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<ToolbarPosition>;
+    if (typeof parsed.left !== "number" || typeof parsed.top !== "number") {
+      return null;
+    }
+
+    return {
+      left: parsed.left,
+      top: parsed.top,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function getStoredToolbarPositionSnapshot() {
+  try {
+    return window.localStorage.getItem(TOOLBAR_POSITION_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function subscribeToToolbarPosition(onStoreChange: () => void) {
+  function handleStorage(event: StorageEvent) {
+    if (event.key === TOOLBAR_POSITION_STORAGE_KEY) {
+      onStoreChange();
+    }
+  }
+
+  window.addEventListener("storage", handleStorage);
+  return () => window.removeEventListener("storage", handleStorage);
+}
 
 interface ReportAnnotationToolbarProps {
   activeTool: ReportAnnotationTool;
@@ -90,30 +129,13 @@ export function ReportAnnotationToolbar({
 }: ReportAnnotationToolbarProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [openMenu, setOpenMenu] = useState<AnnotationMenuId | null>(null);
-  const [position, setPosition] = useState<ToolbarPosition | null>(() => {
-    if (typeof window === "undefined") {
-      return null;
-    }
-
-    try {
-      const raw = window.localStorage.getItem(TOOLBAR_POSITION_STORAGE_KEY);
-      if (!raw) {
-        return null;
-      }
-
-      const parsed = JSON.parse(raw) as Partial<ToolbarPosition>;
-      if (typeof parsed.left !== "number" || typeof parsed.top !== "number") {
-        return null;
-      }
-
-      return {
-        left: parsed.left,
-        top: parsed.top,
-      };
-    } catch {
-      return null;
-    }
-  });
+  const persistedPositionSnapshot = useSyncExternalStore(subscribeToToolbarPosition, getStoredToolbarPositionSnapshot, () => null);
+  const persistedPosition = useMemo(
+    () => parseToolbarPosition(persistedPositionSnapshot),
+    [persistedPositionSnapshot],
+  );
+  const [positionOverride, setPositionOverride] = useState<ToolbarPosition | null>(null);
+  const position = positionOverride ?? persistedPosition;
   const [dragState, setDragState] = useState<ToolbarDragState | null>(null);
 
   useEffect(() => {
@@ -128,16 +150,16 @@ export function ReportAnnotationToolbar({
   }, []);
 
   useEffect(() => {
-    if (!position) {
+    if (!positionOverride) {
       return;
     }
 
     try {
-      window.localStorage.setItem(TOOLBAR_POSITION_STORAGE_KEY, JSON.stringify(position));
+      window.localStorage.setItem(TOOLBAR_POSITION_STORAGE_KEY, JSON.stringify(positionOverride));
     } catch {
       // localStorage is optional
     }
-  }, [position]);
+  }, [positionOverride]);
 
   useEffect(() => {
     function clampToViewport() {
@@ -146,18 +168,19 @@ export function ReportAnnotationToolbar({
         return;
       }
 
-      setPosition((current) => {
-        if (!current) {
+      setPositionOverride((current) => {
+        const sourcePosition = current ?? persistedPosition;
+        if (!sourcePosition) {
           return current;
         }
 
         const rect = root.getBoundingClientRect();
         const maxLeft = Math.max(12, window.innerWidth - rect.width - 12);
         const maxTop = Math.max(12, window.innerHeight - rect.height - 12);
-        const nextLeft = Math.min(Math.max(12, current.left), maxLeft);
-        const nextTop = Math.min(Math.max(12, current.top), maxTop);
+        const nextLeft = Math.min(Math.max(12, sourcePosition.left), maxLeft);
+        const nextTop = Math.min(Math.max(12, sourcePosition.top), maxTop);
 
-        if (nextLeft === current.left && nextTop === current.top) {
+        if (nextLeft === sourcePosition.left && nextTop === sourcePosition.top) {
           return current;
         }
 
@@ -170,7 +193,7 @@ export function ReportAnnotationToolbar({
 
     window.addEventListener("resize", clampToViewport);
     return () => window.removeEventListener("resize", clampToViewport);
-  }, []);
+  }, [persistedPosition]);
 
   useEffect(() => {
     if (!dragState) {
@@ -185,7 +208,7 @@ export function ReportAnnotationToolbar({
       const maxLeft = Math.max(12, window.innerWidth - currentDragState.width - 12);
       const maxTop = Math.max(12, window.innerHeight - currentDragState.height - 12);
 
-      setPosition({
+      setPositionOverride({
         left: Math.min(Math.max(12, currentDragState.startLeft + deltaX), maxLeft),
         top: Math.min(Math.max(12, currentDragState.startTop + deltaY), maxTop),
       });

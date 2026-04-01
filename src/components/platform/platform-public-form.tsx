@@ -64,24 +64,30 @@ export function PlatformPublicForm({
       }
 
       try {
-        const saved = window.localStorage.getItem(storageKey);
-        if (!saved) {
-          return null;
-        }
-
-        const payload = JSON.parse(saved) as { draft?: Record<string, unknown>; currentStepIndex?: number };
-        return {
-          draft: payload.draft && typeof payload.draft === "object" ? payload.draft : {},
-          currentStepIndex: typeof payload.currentStepIndex === "number" ? payload.currentStepIndex : 0,
-        };
+        return window.localStorage.getItem(storageKey);
       } catch {
         return null;
       }
     },
     () => null,
   );
-  const effectiveDraft = useMemo(() => draft ?? resumeSnapshot?.draft ?? {}, [draft, resumeSnapshot]);
-  const effectiveStepIndex = currentStepIndex ?? resumeSnapshot?.currentStepIndex ?? 0;
+  const parsedResumeSnapshot = useMemo(() => {
+    if (!form.saveAndResume || !resumeSnapshot) {
+      return null;
+    }
+
+    try {
+      const payload = JSON.parse(resumeSnapshot) as { draft?: Record<string, unknown>; currentStepIndex?: number };
+      return {
+        draft: payload.draft && typeof payload.draft === "object" ? payload.draft : {},
+        currentStepIndex: typeof payload.currentStepIndex === "number" ? payload.currentStepIndex : 0,
+      };
+    } catch {
+      return null;
+    }
+  }, [form.saveAndResume, resumeSnapshot]);
+  const effectiveDraft = useMemo(() => draft ?? parsedResumeSnapshot?.draft ?? {}, [draft, parsedResumeSnapshot]);
+  const effectiveStepIndex = currentStepIndex ?? parsedResumeSnapshot?.currentStepIndex ?? 0;
   const visibleSteps = useMemo(
     () =>
       steps.filter((step) => {
