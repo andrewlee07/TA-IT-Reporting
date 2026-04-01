@@ -32,7 +32,12 @@ function parseToolbarPosition(raw: string | null): ToolbarPosition | null {
 
   try {
     const parsed = JSON.parse(raw) as Partial<ToolbarPosition>;
-    if (typeof parsed.left !== "number" || typeof parsed.top !== "number") {
+    if (
+      typeof parsed.left !== "number" ||
+      !Number.isFinite(parsed.left) ||
+      typeof parsed.top !== "number" ||
+      !Number.isFinite(parsed.top)
+    ) {
       return null;
     }
 

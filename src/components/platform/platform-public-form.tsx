@@ -79,8 +79,18 @@ export function PlatformPublicForm({
     try {
       const payload = JSON.parse(resumeSnapshot) as { draft?: Record<string, unknown>; currentStepIndex?: number };
       return {
-        draft: payload.draft && typeof payload.draft === "object" ? payload.draft : {},
-        currentStepIndex: typeof payload.currentStepIndex === "number" ? payload.currentStepIndex : 0,
+        draft:
+          payload.draft &&
+          typeof payload.draft === "object" &&
+          !Array.isArray(payload.draft)
+            ? payload.draft
+            : {},
+        currentStepIndex:
+          typeof payload.currentStepIndex === "number" &&
+          Number.isInteger(payload.currentStepIndex) &&
+          payload.currentStepIndex >= 0
+            ? payload.currentStepIndex
+            : 0,
       };
     } catch {
       return null;
